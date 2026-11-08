@@ -1,77 +1,97 @@
 {
   "atoms": {
     "conformance:workflow_acceptance_matrix_test.py": {
-      "samples": 28,
-      "seconds": 999.744,
+      "samples": 30,
+      "seconds": 1119.672,
       "tests": 1
     },
     "conformance:workflow_fingerprint_generalization_test.py": {
-      "samples": 28,
-      "seconds": 111.616,
+      "samples": 30,
+      "seconds": 116.556,
       "tests": 1
     },
     "conformance:workflow_fingerprint_test.py": {
-      "samples": 28,
-      "seconds": 8.168,
+      "samples": 30,
+      "seconds": 7.516,
       "tests": 1
     },
     "conformance:workflow_gate_policy_test.py": {
-      "samples": 21,
-      "seconds": 192.147,
+      "samples": 23,
+      "seconds": 231.91,
       "tests": 1
     },
     "conformance:workflow_integration_test.py": {
-      "samples": 28,
-      "seconds": 8.461,
+      "samples": 30,
+      "seconds": 9.238,
       "tests": 1
     },
     "conformance:workflow_protocol_test.py": {
-      "samples": 21,
-      "seconds": 434.809,
+      "samples": 23,
+      "seconds": 433.361,
       "tests": 1
     },
     "conformance:workflow_state_completion_obligations_test.py": {
-      "samples": 28,
-      "seconds": 19.695,
+      "samples": 30,
+      "seconds": 35.369,
       "tests": 1
     },
     "conformance:workflow_state_test.py": {
-      "samples": 28,
-      "seconds": 312.503,
+      "samples": 30,
+      "seconds": 345.911,
       "tests": 1
     },
     "conformance:workflow_test_harness_test.py": {
-      "samples": 28,
-      "seconds": 3.052,
+      "samples": 30,
+      "seconds": 2.684,
       "tests": 1
     },
+    "tests.test_backlog.DeclaredPageTests": {
+      "samples": 2,
+      "seconds": 0.04,
+      "tests": 3
+    },
+    "tests.test_backlog.InlineFixtureTests": {
+      "samples": 2,
+      "seconds": 0.001,
+      "tests": 4
+    },
+    "tests.test_backlog.LiveBacklogTests": {
+      "samples": 2,
+      "seconds": 0.296,
+      "tests": 13
+    },
+    "tests.test_backlog.ValidatorIsTheRealOneTests": {
+      "samples": 2,
+      "seconds": 0.036,
+      "tests": 2
+    },
     "tests.test_buildinfo.BuildHookTest": {
-      "samples": 28,
-      "seconds": 0.211,
+      "samples": 30,
+      "seconds": 0.19,
       "tests": 9
     },
     "tests.test_buildinfo.DynamicVersionBuildTest": {
-      "samples": 22,
-      "seconds": 0.148,
+      "samples": 24,
+      "seconds": 0.129,
       "tests": 6
     },
     "tests.test_buildinfo.EditableModeEarlyReturnTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.001,
       "tests": 1
     },
     "tests.test_buildinfo.PackageDigestTest": {
-      "samples": 28,
-      "seconds": 0.012,
+      "samples": 30,
+      "seconds": 0.008,
       "tests": 6
     },
     "tests.test_buildinfo.ValidateBuildInfoTest": {
-      "samples": 28,
-      "seconds": 0.002,
+      "samples": 30,
+      "seconds": 0.001,
       "tests": 12
     },
     "tests.test_buildinfo.VersionSourceTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.001,
       "tests": 4
     },
@@ -81,1053 +101,1778 @@
       "tests": 1
     },
     "tests.test_checklist_corrections.ChecklistFileExistsTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 1
     },
     "tests.test_checklist_corrections.ExplainExitCodeTest": {
-      "samples": 28,
-      "seconds": 0.032,
+      "samples": 30,
+      "seconds": 0.027,
       "tests": 2
     },
     "tests.test_checklist_corrections.FunctionalReviewPreconditionTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 1
     },
     "tests.test_checklist_corrections.InspectJsonPayloadTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 2
     },
     "tests.test_checklist_corrections.JsonPlacementTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.001,
       "tests": 2
     },
-    "tests.test_ci_reuse.CommandLineTest": {
+    "tests.test_ci_changes.ClassifyTests": {
       "samples": 2,
-      "seconds": 0.047,
+      "seconds": 0.001,
+      "tests": 6
+    },
+    "tests.test_ci_changes.DetectRepoTests": {
+      "samples": 2,
+      "seconds": 0.502,
+      "tests": 12
+    },
+    "tests.test_ci_changes.DocumentationSetGuardTests": {
+      "samples": 2,
+      "seconds": 48.004,
+      "tests": 7
+    },
+    "tests.test_ci_changes.FixtureRefusalTests": {
+      "samples": 2,
+      "seconds": 64.443,
+      "tests": 9
+    },
+    "tests.test_ci_changes.RequireTests": {
+      "samples": 2,
+      "seconds": 0.003,
+      "tests": 2
+    },
+    "tests.test_ci_changes.ScannerAcceptsTests": {
+      "samples": 2,
+      "seconds": 0.002,
+      "tests": 8
+    },
+    "tests.test_ci_changes.ScannerFlagsTests": {
+      "samples": 2,
+      "seconds": 0.005,
+      "tests": 15
+    },
+    "tests.test_ci_changes.StaleEntryTests": {
+      "samples": 2,
+      "seconds": 0.031,
+      "tests": 7
+    },
+    "tests.test_ci_changes.TopLevelGlobTests": {
+      "samples": 2,
+      "seconds": 2.101,
+      "tests": 10
+    },
+    "tests.test_ci_changes.TouchesSetTests": {
+      "samples": 2,
+      "seconds": 0.708,
+      "tests": 1
+    },
+    "tests.test_ci_reuse.CommandLineTest": {
+      "samples": 4,
+      "seconds": 0.042,
       "tests": 12
     },
     "tests.test_ci_reuse.CompareTest": {
-      "samples": 2,
-      "seconds": 0.005,
+      "samples": 4,
+      "seconds": 0.01,
       "tests": 7
     },
     "tests.test_ci_reuse.DecideTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.003,
       "tests": 5
     },
     "tests.test_ci_reuse.FindCandidateTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.001,
       "tests": 9
     },
     "tests.test_ci_reuse.ModeTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.0,
       "tests": 3
     },
     "tests.test_ci_workflows.AllJobsTest": {
-      "samples": 22,
-      "seconds": 0.007,
+      "samples": 24,
+      "seconds": 0.008,
       "tests": 12
     },
+    "tests.test_ci_workflows.ChangeDetectionTest": {
+      "samples": 2,
+      "seconds": 0.004,
+      "tests": 11
+    },
     "tests.test_ci_workflows.CiWorkflowTest": {
-      "samples": 29,
+      "samples": 31,
       "seconds": 0.0,
       "tests": 4
     },
     "tests.test_ci_workflows.CommittedFilesTest": {
-      "samples": 22,
-      "seconds": 0.108,
+      "samples": 24,
+      "seconds": 0.118,
       "tests": 9
     },
     "tests.test_ci_workflows.CoverageTest": {
-      "samples": 28,
-      "seconds": 0.091,
+      "samples": 30,
+      "seconds": 0.108,
       "tests": 7
     },
     "tests.test_ci_workflows.EmitterTest": {
-      "samples": 29,
+      "samples": 31,
       "seconds": 0.002,
       "tests": 9
     },
     "tests.test_ci_workflows.MainChecksTest": {
-      "samples": 1,
-      "seconds": 0.008,
+      "samples": 3,
+      "seconds": 0.006,
       "tests": 11
     },
     "tests.test_ci_workflows.MainWorkflowTest": {
-      "samples": 2,
-      "seconds": 0.011,
+      "samples": 4,
+      "seconds": 0.012,
       "tests": 16
     },
     "tests.test_ci_workflows.PrTitleWorkflowTest": {
-      "samples": 22,
-      "seconds": 0.006,
+      "samples": 24,
+      "seconds": 0.007,
       "tests": 5
     },
     "tests.test_ci_workflows.ReuseTest": {
-      "samples": 2,
-      "seconds": 0.008,
+      "samples": 4,
+      "seconds": 0.01,
       "tests": 12
     },
     "tests.test_ci_workflows.ValidatePlanTest": {
-      "samples": 10,
+      "samples": 12,
       "seconds": 0.002,
       "tests": 9
     },
+    "tests.test_claude_build.IdentityTests": {
+      "samples": 2,
+      "seconds": 0.001,
+      "tests": 4
+    },
+    "tests.test_claude_build.LaunchTests": {
+      "samples": 2,
+      "seconds": 1.006,
+      "tests": 5
+    },
+    "tests.test_claude_build.RecordTests": {
+      "samples": 2,
+      "seconds": 0.022,
+      "tests": 8
+    },
+    "tests.test_claude_build.VerifyBuildTests": {
+      "samples": 2,
+      "seconds": 7.276,
+      "tests": 16
+    },
+    "tests.test_claude_build.VerifyClaudeCommandTests": {
+      "samples": 2,
+      "seconds": 5.232,
+      "tests": 12
+    },
     "tests.test_cli.ApplyingReviewFeedbackCliTest": {
-      "samples": 28,
-      "seconds": 0.477,
+      "samples": 30,
+      "seconds": 0.479,
       "tests": 3
     },
     "tests.test_cli.ChildReapingCliTest": {
-      "samples": 22,
-      "seconds": 0.669,
+      "samples": 24,
+      "seconds": 0.68,
       "tests": 3
     },
     "tests.test_cli.ExitCodeTableTest": {
-      "samples": 22,
-      "seconds": 0.06,
+      "samples": 24,
+      "seconds": 0.074,
       "tests": 7
     },
     "tests.test_cli.ExplainCommandTest": {
-      "samples": 28,
-      "seconds": 0.319,
+      "samples": 30,
+      "seconds": 0.253,
       "tests": 8
     },
     "tests.test_cli.ExplainPendingJobsTest": {
-      "samples": 28,
-      "seconds": 0.38,
+      "samples": 30,
+      "seconds": 0.394,
       "tests": 2
     },
     "tests.test_cli.FollowAttributeReadTest": {
-      "samples": 28,
-      "seconds": 0.987,
+      "samples": 30,
+      "seconds": 0.961,
       "tests": 1
     },
     "tests.test_cli.FollowCommandTest": {
-      "samples": 1,
-      "seconds": 2.442,
+      "samples": 3,
+      "seconds": 2.177,
       "tests": 13
     },
     "tests.test_cli.FollowHintTest": {
-      "samples": 28,
-      "seconds": 0.211,
+      "samples": 30,
+      "seconds": 0.253,
       "tests": 2
     },
     "tests.test_cli.FollowSourceCheckoutTest": {
-      "samples": 28,
-      "seconds": 2.147,
+      "samples": 30,
+      "seconds": 1.961,
       "tests": 1
     },
     "tests.test_cli.InspectCommandTest": {
-      "samples": 22,
-      "seconds": 0.329,
+      "samples": 24,
+      "seconds": 0.304,
       "tests": 7
     },
     "tests.test_cli.JobActivitySurfacesTest": {
-      "samples": 28,
-      "seconds": 0.327,
+      "samples": 30,
+      "seconds": 0.648,
       "tests": 6
     },
     "tests.test_cli.LifecycleLockReportTest": {
-      "samples": 28,
-      "seconds": 0.101,
+      "samples": 30,
+      "seconds": 0.093,
       "tests": 1
     },
     "tests.test_cli.LockErrorCliTest": {
-      "samples": 28,
-      "seconds": 0.213,
+      "samples": 30,
+      "seconds": 0.191,
       "tests": 1
     },
     "tests.test_cli.NotificationsCommandTest": {
-      "samples": 10,
-      "seconds": 10.592,
+      "samples": 12,
+      "seconds": 10.58,
       "tests": 15
     },
     "tests.test_cli.ParserTest": {
-      "samples": 28,
-      "seconds": 0.039,
+      "samples": 30,
+      "seconds": 0.03,
       "tests": 9
     },
     "tests.test_cli.PartialApplyPlanReviewCliTest": {
-      "samples": 28,
-      "seconds": 0.399,
+      "samples": 30,
+      "seconds": 0.392,
       "tests": 1
     },
     "tests.test_cli.PermissionModePassThroughTest": {
-      "samples": 28,
-      "seconds": 0.404,
+      "samples": 30,
+      "seconds": 0.402,
       "tests": 4
     },
     "tests.test_cli.ReleaseChangedDuringRunTest": {
-      "samples": 22,
-      "seconds": 1.233,
+      "samples": 24,
+      "seconds": 1.322,
       "tests": 2
     },
     "tests.test_cli.ResumeCommandTest": {
-      "samples": 28,
-      "seconds": 0.752,
+      "samples": 30,
+      "seconds": 0.308,
       "tests": 7
     },
     "tests.test_cli.ResumeWithUnreadableManifestTest": {
-      "samples": 22,
-      "seconds": 1.624,
+      "samples": 24,
+      "seconds": 1.547,
       "tests": 1
     },
     "tests.test_cli.ResumeWorkerHoldExitTest": {
-      "samples": 28,
-      "seconds": 0.106,
+      "samples": 30,
+      "seconds": 0.092,
       "tests": 2
     },
     "tests.test_cli.RoutingOptionsParserTest": {
-      "samples": 28,
-      "seconds": 0.068,
-      "tests": 3
+      "samples": 2,
+      "seconds": 0.097,
+      "tests": 5
     },
     "tests.test_cli.RoutingOptionsPassThroughTest": {
-      "samples": 28,
-      "seconds": 0.693,
-      "tests": 4
+      "samples": 2,
+      "seconds": 0.793,
+      "tests": 5
     },
     "tests.test_cli.RunParentGuardTest": {
-      "samples": 10,
-      "seconds": 2.657,
+      "samples": 12,
+      "seconds": 2.809,
       "tests": 1
     },
     "tests.test_cli.RunRecordBestEffortTest": {
-      "samples": 28,
-      "seconds": 1.363,
+      "samples": 30,
+      "seconds": 1.291,
       "tests": 1
     },
     "tests.test_cli.RunRecordCtrlCTest": {
-      "samples": 28,
-      "seconds": 0.42,
+      "samples": 30,
+      "seconds": 0.421,
       "tests": 1
     },
     "tests.test_cli.RunRecordExitPathTest": {
-      "samples": 28,
-      "seconds": 0.502,
+      "samples": 30,
+      "seconds": 0.505,
       "tests": 3
     },
     "tests.test_cli.RunRecordJobTrackingTest": {
-      "samples": 28,
-      "seconds": 4.462,
+      "samples": 30,
+      "seconds": 3.956,
       "tests": 2
     },
     "tests.test_cli.SettingsWiringTest": {
       "samples": 2,
-      "seconds": 2.129,
-      "tests": 16
+      "seconds": 3.531,
+      "tests": 19
     },
     "tests.test_cli.StatusActiveSectionTest": {
-      "samples": 22,
-      "seconds": 0.048,
+      "samples": 24,
+      "seconds": 0.053,
       "tests": 3
     },
     "tests.test_cli.StatusFirstLineTest": {
-      "samples": 28,
-      "seconds": 1.273,
+      "samples": 30,
+      "seconds": 1.198,
       "tests": 1
     },
     "tests.test_cli.StatusJobsTest": {
-      "samples": 22,
-      "seconds": 0.074,
+      "samples": 24,
+      "seconds": 0.102,
       "tests": 4
     },
     "tests.test_cli.StepCommandTest": {
-      "samples": 28,
-      "seconds": 0.749,
+      "samples": 30,
+      "seconds": 0.763,
       "tests": 8
     },
     "tests.test_cli.StepFollowTest": {
-      "samples": 28,
-      "seconds": 1.289,
+      "samples": 30,
+      "seconds": 1.283,
       "tests": 1
     },
     "tests.test_cli.UnreadableJobFileCliTest": {
-      "samples": 28,
-      "seconds": 0.129,
+      "samples": 30,
+      "seconds": 0.128,
       "tests": 1
     },
     "tests.test_cli.VersionFlagTest": {
-      "samples": 28,
-      "seconds": 6.619,
+      "samples": 30,
+      "seconds": 5.656,
       "tests": 5
     },
+    "tests.test_codex_bridge.BoundTest": {
+      "samples": 2,
+      "seconds": 1.466,
+      "tests": 3
+    },
+    "tests.test_codex_bridge.KeptTest": {
+      "samples": 2,
+      "seconds": 0.09,
+      "tests": 1
+    },
+    "tests.test_codex_bridge.LayoutTest": {
+      "samples": 2,
+      "seconds": 0.693,
+      "tests": 7
+    },
+    "tests.test_codex_bridge.PromptTest": {
+      "samples": 2,
+      "seconds": 0.362,
+      "tests": 3
+    },
+    "tests.test_codex_bridge.RefusalTest": {
+      "samples": 2,
+      "seconds": 0.246,
+      "tests": 5
+    },
+    "tests.test_codex_build.BuildDigestTests": {
+      "samples": 2,
+      "seconds": 0.064,
+      "tests": 11
+    },
+    "tests.test_codex_build.IsVerifiedTests": {
+      "samples": 2,
+      "seconds": 0.028,
+      "tests": 5
+    },
+    "tests.test_codex_build.RecordTests": {
+      "samples": 2,
+      "seconds": 0.006,
+      "tests": 7
+    },
+    "tests.test_codex_review_role.ImplementationRoleTests": {
+      "samples": 2,
+      "seconds": 141.601,
+      "tests": 33
+    },
+    "tests.test_codex_review_role.ModuleTests": {
+      "samples": 2,
+      "seconds": 0.015,
+      "tests": 7
+    },
+    "tests.test_codex_review_role.PlanRoleTests": {
+      "samples": 2,
+      "seconds": 172.236,
+      "tests": 29
+    },
+    "tests.test_codex_review_role.RecoverTests": {
+      "samples": 2,
+      "seconds": 0.009,
+      "tests": 3
+    },
+    "tests.test_codex_sandbox.ArgvTest": {
+      "samples": 2,
+      "seconds": 0.005,
+      "tests": 2
+    },
+    "tests.test_codex_sandbox.BuildTest": {
+      "samples": 2,
+      "seconds": 0.063,
+      "tests": 3
+    },
+    "tests.test_codex_sandbox.CheckComposedTests": {
+      "samples": 2,
+      "seconds": 0.126,
+      "tests": 6
+    },
+    "tests.test_codex_sandbox.CheckEffectiveTests": {
+      "samples": 2,
+      "seconds": 0.221,
+      "tests": 17
+    },
+    "tests.test_codex_sandbox.CheckHomeTest": {
+      "samples": 2,
+      "seconds": 0.027,
+      "tests": 2
+    },
+    "tests.test_codex_sandbox.ComposeArgvTest": {
+      "samples": 2,
+      "seconds": 0.006,
+      "tests": 3
+    },
+    "tests.test_codex_sandbox.EnvironmentTest": {
+      "samples": 2,
+      "seconds": 0.003,
+      "tests": 2
+    },
+    "tests.test_codex_sandbox.JudgeTest": {
+      "samples": 2,
+      "seconds": 0.0,
+      "tests": 3
+    },
+    "tests.test_codex_sandbox.KnownLimitsTest": {
+      "samples": 2,
+      "seconds": 0.017,
+      "tests": 1
+    },
+    "tests.test_codex_sandbox.ListingControlsTest": {
+      "samples": 2,
+      "seconds": 0.118,
+      "tests": 4
+    },
+    "tests.test_codex_sandbox.OutsideLayerTest": {
+      "samples": 2,
+      "seconds": 0.022,
+      "tests": 2
+    },
+    "tests.test_codex_sandbox.ProbeCommandTest": {
+      "samples": 2,
+      "seconds": 0.001,
+      "tests": 2
+    },
+    "tests.test_codex_sandbox.ProfileTest": {
+      "samples": 2,
+      "seconds": 0.032,
+      "tests": 4
+    },
+    "tests.test_codex_sandbox.ReadableRootsTest": {
+      "samples": 2,
+      "seconds": 0.162,
+      "tests": 10
+    },
+    "tests.test_codex_sandbox.ReviewerUnchangedTest": {
+      "samples": 2,
+      "seconds": 0.0,
+      "tests": 1
+    },
+    "tests.test_codex_sandbox.SandboxProbeArgvTest": {
+      "samples": 2,
+      "seconds": 0.001,
+      "tests": 1
+    },
+    "tests.test_codex_sandbox_live.LiveSandboxTest": {
+      "samples": 2,
+      "seconds": 0.0,
+      "tests": 3
+    },
+    "tests.test_codex_tester.LaunchTest": {
+      "samples": 2,
+      "seconds": 0.797,
+      "tests": 7
+    },
+    "tests.test_codex_tester.OutcomeTest": {
+      "samples": 2,
+      "seconds": 3.026,
+      "tests": 7
+    },
+    "tests.test_codex_tester.SettleTest": {
+      "samples": 2,
+      "seconds": 3.293,
+      "tests": 7
+    },
+    "tests.test_codex_tester_launch.BreachTest": {
+      "samples": 2,
+      "seconds": 1.676,
+      "tests": 8
+    },
+    "tests.test_codex_tester_launch.GateTest": {
+      "samples": 2,
+      "seconds": 0.219,
+      "tests": 5
+    },
+    "tests.test_codex_tester_launch.RefusalTest": {
+      "samples": 2,
+      "seconds": 0.572,
+      "tests": 6
+    },
+    "tests.test_codex_tester_launch.RunTest": {
+      "samples": 2,
+      "seconds": 0.574,
+      "tests": 3
+    },
+    "tests.test_codex_tester_launch.SelectionErrorTest": {
+      "samples": 2,
+      "seconds": 0.241,
+      "tests": 5
+    },
+    "tests.test_codex_tester_launch.SettleRolloutsTest": {
+      "samples": 2,
+      "seconds": 0.064,
+      "tests": 2
+    },
+    "tests.test_codex_tester_live.LiveTesterRunTest": {
+      "samples": 2,
+      "seconds": 0.0,
+      "tests": 2
+    },
+    "tests.test_codex_verify.VerifyBuildTests": {
+      "samples": 2,
+      "seconds": 34.179,
+      "tests": 26
+    },
+    "tests.test_codex_verify_command.VerifyCodexCommandTests": {
+      "samples": 2,
+      "seconds": 31.339,
+      "tests": 14
+    },
+    "tests.test_codex_worker.BreachTest": {
+      "samples": 2,
+      "seconds": 2.384,
+      "tests": 5
+    },
+    "tests.test_codex_worker.CleanRunTest": {
+      "samples": 2,
+      "seconds": 2.395,
+      "tests": 4
+    },
+    "tests.test_codex_worker.ControlsTest": {
+      "samples": 2,
+      "seconds": 0.166,
+      "tests": 4
+    },
+    "tests.test_codex_worker.LauncherTest": {
+      "samples": 2,
+      "seconds": 0.062,
+      "tests": 4
+    },
+    "tests.test_codex_worker.OrderTest": {
+      "samples": 2,
+      "seconds": 0.177,
+      "tests": 8
+    },
+    "tests.test_codex_worker.OutcomeTest": {
+      "samples": 2,
+      "seconds": 2.61,
+      "tests": 10
+    },
+    "tests.test_codex_worker.SettlingTest": {
+      "samples": 2,
+      "seconds": 0.414,
+      "tests": 5
+    },
+    "tests.test_codex_worker_clone_live.LiveCloneLandingTest": {
+      "samples": 2,
+      "seconds": 0.0,
+      "tests": 1
+    },
+    "tests.test_codex_worker_clone_live.LiveCommandRendersTest": {
+      "samples": 2,
+      "seconds": 0.001,
+      "tests": 1
+    },
+    "tests.test_codex_worker_job.LaunchOptionsTest": {
+      "samples": 2,
+      "seconds": 0.0,
+      "tests": 4
+    },
+    "tests.test_codex_worker_job.LimitFactTest": {
+      "samples": 2,
+      "seconds": 0.0,
+      "tests": 5
+    },
+    "tests.test_codex_worker_job.ModuleShapeTest": {
+      "samples": 2,
+      "seconds": 0.001,
+      "tests": 1
+    },
+    "tests.test_codex_worker_job.StreamTextsTest": {
+      "samples": 2,
+      "seconds": 0.0,
+      "tests": 2
+    },
+    "tests.test_codex_worker_job.UsageBuilderTest": {
+      "samples": 2,
+      "seconds": 0.0,
+      "tests": 5
+    },
+    "tests.test_codex_worker_job_live.LiveCommandRendersTest": {
+      "samples": 2,
+      "seconds": 0.0,
+      "tests": 1
+    },
+    "tests.test_codex_worker_job_live.LiveJobRecordTest": {
+      "samples": 2,
+      "seconds": 0.0,
+      "tests": 1
+    },
+    "tests.test_codex_worker_landing.AfterMergeTest": {
+      "samples": 2,
+      "seconds": 0.648,
+      "tests": 6
+    },
+    "tests.test_codex_worker_landing.CheckRefusalTest": {
+      "samples": 2,
+      "seconds": 1.364,
+      "tests": 13
+    },
+    "tests.test_codex_worker_landing.DecideTest": {
+      "samples": 2,
+      "seconds": 0.861,
+      "tests": 11
+    },
+    "tests.test_codex_worker_landing.FetchAndMergeRefusalTest": {
+      "samples": 2,
+      "seconds": 1.733,
+      "tests": 15
+    },
+    "tests.test_codex_worker_landing.HardeningTest": {
+      "samples": 2,
+      "seconds": 1.084,
+      "tests": 7
+    },
+    "tests.test_codex_worker_landing.LandedTest": {
+      "samples": 2,
+      "seconds": 0.481,
+      "tests": 5
+    },
+    "tests.test_codex_worker_landing.RangeRefusalTest": {
+      "samples": 2,
+      "seconds": 2.02,
+      "tests": 9
+    },
+    "tests.test_codex_worker_live.LiveCommandRendersTest": {
+      "samples": 2,
+      "seconds": 0.001,
+      "tests": 1
+    },
+    "tests.test_codex_worker_live.LiveWorkerLaunchTest": {
+      "samples": 2,
+      "seconds": 0.0,
+      "tests": 1
+    },
+    "tests.test_codex_worker_ownership_live.ChildLiveController": {
+      "samples": 2,
+      "seconds": 0.0,
+      "tests": 1
+    },
+    "tests.test_codex_worker_ownership_live.LiveCommandRendersTest": {
+      "samples": 2,
+      "seconds": 0.001,
+      "tests": 1
+    },
+    "tests.test_codex_worker_ownership_live.LiveOwnershipTest": {
+      "samples": 2,
+      "seconds": 0.0,
+      "tests": 1
+    },
+    "tests.test_codex_worker_sandbox.ArgvTest": {
+      "samples": 2,
+      "seconds": 0.009,
+      "tests": 4
+    },
+    "tests.test_codex_worker_sandbox.BuildTest": {
+      "samples": 2,
+      "seconds": 0.066,
+      "tests": 4
+    },
+    "tests.test_codex_worker_sandbox.CheckComposedTests": {
+      "samples": 2,
+      "seconds": 0.136,
+      "tests": 6
+    },
+    "tests.test_codex_worker_sandbox.CheckEffectiveTests": {
+      "samples": 2,
+      "seconds": 0.197,
+      "tests": 17
+    },
+    "tests.test_codex_worker_sandbox.CheckHomeTest": {
+      "samples": 2,
+      "seconds": 0.042,
+      "tests": 2
+    },
+    "tests.test_codex_worker_sandbox.CheckLaunchTest": {
+      "samples": 2,
+      "seconds": 0.224,
+      "tests": 6
+    },
+    "tests.test_codex_worker_sandbox.CheckWorktreeTest": {
+      "samples": 2,
+      "seconds": 0.044,
+      "tests": 4
+    },
+    "tests.test_codex_worker_sandbox.ComposeArgvTest": {
+      "samples": 2,
+      "seconds": 0.007,
+      "tests": 3
+    },
+    "tests.test_codex_worker_sandbox.EnvironmentTest": {
+      "samples": 2,
+      "seconds": 0.006,
+      "tests": 3
+    },
+    "tests.test_codex_worker_sandbox.GuardDigestTest": {
+      "samples": 2,
+      "seconds": 0.648,
+      "tests": 10
+    },
+    "tests.test_codex_worker_sandbox.GuardGitEntryTest": {
+      "samples": 2,
+      "seconds": 0.037,
+      "tests": 1
+    },
+    "tests.test_codex_worker_sandbox.GuardRedirectionTest": {
+      "samples": 2,
+      "seconds": 0.159,
+      "tests": 3
+    },
+    "tests.test_codex_worker_sandbox.JudgeTest": {
+      "samples": 2,
+      "seconds": 0.0,
+      "tests": 3
+    },
+    "tests.test_codex_worker_sandbox.LayoutTest": {
+      "samples": 2,
+      "seconds": 0.001,
+      "tests": 1
+    },
+    "tests.test_codex_worker_sandbox.NestedGitTest": {
+      "samples": 2,
+      "seconds": 0.051,
+      "tests": 4
+    },
+    "tests.test_codex_worker_sandbox.ProbeCommandTest": {
+      "samples": 2,
+      "seconds": 0.349,
+      "tests": 5
+    },
+    "tests.test_codex_worker_sandbox.ProfileTest": {
+      "samples": 2,
+      "seconds": 0.077,
+      "tests": 4
+    },
+    "tests.test_codex_worker_sandbox.ReadableRootsTest": {
+      "samples": 2,
+      "seconds": 0.153,
+      "tests": 4
+    },
+    "tests.test_codex_worker_sandbox.SandboxProbeArgvTest": {
+      "samples": 2,
+      "seconds": 0.002,
+      "tests": 1
+    },
+    "tests.test_codex_worker_sandbox.WorkerTesterOverlapTest": {
+      "samples": 2,
+      "seconds": 0.02,
+      "tests": 2
+    },
+    "tests.test_codex_worker_sandbox_live.LiveWorkerSandboxTest": {
+      "samples": 2,
+      "seconds": 0.0,
+      "tests": 2
+    },
+    "tests.test_codex_worker_tree.CloneShapeTest": {
+      "samples": 2,
+      "seconds": 0.248,
+      "tests": 4
+    },
+    "tests.test_codex_worker_tree.NothingRunsTest": {
+      "samples": 2,
+      "seconds": 0.052,
+      "tests": 1
+    },
+    "tests.test_codex_worker_tree.RefusalTest": {
+      "samples": 2,
+      "seconds": 1.161,
+      "tests": 17
+    },
+    "tests.test_codex_worker_usage_live.LiveCommandRendersTest": {
+      "samples": 2,
+      "seconds": 0.001,
+      "tests": 1
+    },
+    "tests.test_codex_worker_usage_live.LiveUsageTest": {
+      "samples": 2,
+      "seconds": 0.0,
+      "tests": 1
+    },
+    "tests.test_command_files.FrontmatterTest": {
+      "samples": 2,
+      "seconds": 0.005,
+      "tests": 5
+    },
+    "tests.test_command_files.NamesTest": {
+      "samples": 2,
+      "seconds": 0.001,
+      "tests": 4
+    },
+    "tests.test_command_files.RealDirectoryTest": {
+      "samples": 2,
+      "seconds": 0.216,
+      "tests": 5
+    },
+    "tests.test_command_files.SubstitutionTest": {
+      "samples": 2,
+      "seconds": 0.002,
+      "tests": 7
+    },
+    "tests.test_command_files.UserOnlySpellingTest": {
+      "samples": 2,
+      "seconds": 1.78,
+      "tests": 3
+    },
+    "tests.test_command_files.UserOnlyTest": {
+      "samples": 2,
+      "seconds": 0.004,
+      "tests": 7
+    },
+    "tests.test_command_files.WiringTest": {
+      "samples": 2,
+      "seconds": 0.717,
+      "tests": 2
+    },
     "tests.test_conventional_commit.BumpTest": {
-      "samples": 22,
+      "samples": 24,
       "seconds": 0.001,
       "tests": 6
     },
     "tests.test_conventional_commit.GrammarTest": {
-      "samples": 22,
+      "samples": 24,
       "seconds": 0.0,
       "tests": 2
     },
     "tests.test_decision.AutomaticTriplesTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.004,
       "tests": 4
     },
     "tests.test_decision.CommandFilePartitionTest": {
-      "samples": 28,
-      "seconds": 0.03,
+      "samples": 30,
+      "seconds": 0.026,
       "tests": 6
     },
     "tests.test_decision.DecideNeverReturnsUserOnlyCommandTest": {
-      "samples": 28,
-      "seconds": 0.005,
+      "samples": 30,
+      "seconds": 0.004,
       "tests": 1
     },
     "tests.test_decision.DecideNoWorkItemTest": {
-      "samples": 22,
-      "seconds": 0.003,
+      "samples": 24,
+      "seconds": 0.002,
       "tests": 5
     },
     "tests.test_decision.DispatchRuleTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.003,
       "tests": 5
     },
     "tests.test_decision.HumanGateShapeTest": {
-      "samples": 28,
-      "seconds": 0.01,
+      "samples": 30,
+      "seconds": 0.007,
       "tests": 3
     },
     "tests.test_decision.ImplementingDispatchTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.009,
       "tests": 4
     },
     "tests.test_decision.InterimSetRemovalTest": {
-      "samples": 28,
-      "seconds": 0.042,
+      "samples": 30,
+      "seconds": 0.039,
       "tests": 2
     },
     "tests.test_decision.KnownPhaseSetTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 2
     },
     "tests.test_decision.NoMilestonePlanAtPlanReviewReadyPhaseTest": {
-      "samples": 22,
-      "seconds": 4.137,
+      "samples": 24,
+      "seconds": 3.95,
       "tests": 4
     },
     "tests.test_decision.PerPhaseSetRemovalTest": {
-      "samples": 28,
-      "seconds": 0.04,
+      "samples": 30,
+      "seconds": 0.039,
       "tests": 2
     },
     "tests.test_decision.PhaseWireRoundTripTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 6
     },
     "tests.test_decision.ProtocolTwoTwoCompatibilityParityTest": {
-      "samples": 28,
-      "seconds": 0.012,
+      "samples": 30,
+      "seconds": 0.009,
       "tests": 3
     },
     "tests.test_decision.Revision64PhaseWideningTest": {
-      "samples": 28,
-      "seconds": 0.062,
+      "samples": 30,
+      "seconds": 0.079,
       "tests": 4
     },
     "tests.test_decision.ScopeAssertionTest": {
-      "samples": 28,
-      "seconds": 0.015,
+      "samples": 30,
+      "seconds": 0.014,
       "tests": 4
     },
     "tests.test_decision.TableDrivenPhaseDecisionTest": {
-      "samples": 28,
-      "seconds": 0.02,
+      "samples": 30,
+      "seconds": 0.023,
       "tests": 7
     },
     "tests.test_decision.TwoShapeAssertionTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.005,
       "tests": 1
     },
     "tests.test_decision.UserOnlyDenylistTest": {
-      "samples": 28,
-      "seconds": 0.033,
+      "samples": 30,
+      "seconds": 0.03,
       "tests": 7
     },
     "tests.test_docs.CommandRuleTest": {
-      "samples": 22,
-      "seconds": 0.028,
+      "samples": 24,
+      "seconds": 0.025,
       "tests": 6
     },
     "tests.test_docs.DigestRuleTest": {
-      "samples": 22,
-      "seconds": 0.004,
+      "samples": 24,
+      "seconds": 0.002,
       "tests": 2
     },
     "tests.test_docs.ExitCodeRuleTest": {
-      "samples": 22,
-      "seconds": 0.004,
+      "samples": 24,
+      "seconds": 0.003,
       "tests": 6
     },
+    "tests.test_docs.HarnessTableRuleTest": {
+      "samples": 2,
+      "seconds": 0.073,
+      "tests": 4
+    },
     "tests.test_docs.LinkRuleTest": {
-      "samples": 22,
-      "seconds": 1.245,
-      "tests": 19
+      "samples": 2,
+      "seconds": 1.188,
+      "tests": 20
     },
     "tests.test_docs.LiveRepositoryTest": {
-      "samples": 22,
-      "seconds": 1.371,
+      "samples": 24,
+      "seconds": 2.986,
       "tests": 4
     },
     "tests.test_docs.PageRuleTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.008,
       "tests": 11
     },
     "tests.test_docs.SlugTest": {
-      "samples": 22,
+      "samples": 24,
       "seconds": 0.001,
       "tests": 5
     },
     "tests.test_docs.StubRuleTest": {
-      "samples": 22,
-      "seconds": 0.002,
+      "samples": 24,
+      "seconds": 0.006,
       "tests": 2
     },
     "tests.test_evidence.ApplyImplementationReviewAdmissibilityTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 5
     },
     "tests.test_evidence.ApplyingReviewFeedbackAutomaticPathTest": {
-      "samples": 28,
-      "seconds": 0.548,
+      "samples": 30,
+      "seconds": 0.611,
       "tests": 10
     },
     "tests.test_evidence.ApplyingReviewFeedbackCorrectedGateTest": {
-      "samples": 28,
-      "seconds": 0.174,
+      "samples": 30,
+      "seconds": 0.157,
       "tests": 4
     },
     "tests.test_evidence.AwaitingExternalImplementationReviewTest": {
-      "samples": 28,
-      "seconds": 0.101,
-      "tests": 4
-    },
-    "tests.test_evidence.AwaitingExternalImplementationReviewTwoStageTest": {
-      "samples": 28,
-      "seconds": 0.584,
-      "tests": 14
-    },
-    "tests.test_evidence.AwaitingExternalPlanReviewV1Test": {
-      "samples": 28,
-      "seconds": 0.121,
-      "tests": 5
-    },
-    "tests.test_evidence.AwaitingFunctionalReviewTest": {
-      "samples": 28,
-      "seconds": 0.228,
-      "tests": 5
-    },
-    "tests.test_evidence.AwaitingLocalImplementationReviewTest": {
-      "samples": 28,
-      "seconds": 0.504,
-      "tests": 10
-    },
-    "tests.test_evidence.AwaitingLocalPlanReviewTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.095,
       "tests": 4
     },
+    "tests.test_evidence.AwaitingExternalImplementationReviewTwoStageTest": {
+      "samples": 30,
+      "seconds": 0.473,
+      "tests": 14
+    },
+    "tests.test_evidence.AwaitingExternalPlanReviewV1Test": {
+      "samples": 30,
+      "seconds": 0.11,
+      "tests": 5
+    },
+    "tests.test_evidence.AwaitingFunctionalReviewTest": {
+      "samples": 30,
+      "seconds": 0.197,
+      "tests": 5
+    },
+    "tests.test_evidence.AwaitingLocalImplementationReviewTest": {
+      "samples": 30,
+      "seconds": 0.48,
+      "tests": 10
+    },
+    "tests.test_evidence.AwaitingLocalPlanReviewTest": {
+      "samples": 30,
+      "seconds": 0.085,
+      "tests": 4
+    },
     "tests.test_evidence.AwaitingManualExternalImplementationReviewTest": {
-      "samples": 28,
-      "seconds": 0.444,
+      "samples": 30,
+      "seconds": 0.358,
       "tests": 13
     },
     "tests.test_evidence.AwaitingManualExternalPlanReviewTest": {
-      "samples": 28,
-      "seconds": 0.253,
+      "samples": 30,
+      "seconds": 0.237,
       "tests": 10
     },
     "tests.test_evidence.BundleDirResolutionTest": {
-      "samples": 28,
-      "seconds": 0.06,
+      "samples": 30,
+      "seconds": 0.063,
       "tests": 3
     },
     "tests.test_evidence.BundleGenerationRecordRoleTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 3
     },
     "tests.test_evidence.CommittedStateReadTest": {
-      "samples": 28,
-      "seconds": 0.248,
+      "samples": 30,
+      "seconds": 0.218,
       "tests": 6
     },
     "tests.test_evidence.ContentDriftedRealTest": {
-      "samples": 22,
-      "seconds": 9.938,
+      "samples": 24,
+      "seconds": 7.741,
       "tests": 2
     },
     "tests.test_evidence.ContentDriftedSeamTest": {
-      "samples": 22,
-      "seconds": 0.02,
+      "samples": 24,
+      "seconds": 0.018,
       "tests": 1
     },
     "tests.test_evidence.DecideWithdrawnBundleTest": {
-      "samples": 28,
-      "seconds": 0.073,
+      "samples": 30,
+      "seconds": 0.06,
       "tests": 3
     },
     "tests.test_evidence.ExternalImplementationReviewGoldenTest": {
-      "samples": 28,
-      "seconds": 0.463,
+      "samples": 30,
+      "seconds": 0.419,
       "tests": 4
     },
     "tests.test_evidence.FeedbackDirResolutionTest": {
-      "samples": 28,
-      "seconds": 0.055,
+      "samples": 30,
+      "seconds": 0.047,
       "tests": 3
     },
     "tests.test_evidence.GenerationRecordViewTest": {
-      "samples": 28,
-      "seconds": 0.625,
+      "samples": 30,
+      "seconds": 0.522,
       "tests": 10
     },
     "tests.test_evidence.ImplementationBundleCoherenceTest": {
-      "samples": 28,
-      "seconds": 0.668,
+      "samples": 30,
+      "seconds": 0.486,
       "tests": 19
     },
     "tests.test_evidence.ImplementationBundleRecoveryGateTest": {
-      "samples": 28,
-      "seconds": 1.206,
+      "samples": 30,
+      "seconds": 1.161,
       "tests": 8
     },
     "tests.test_evidence.ImplementationGeneratorStageTest": {
-      "samples": 28,
-      "seconds": 0.303,
+      "samples": 30,
+      "seconds": 0.248,
       "tests": 5
     },
     "tests.test_evidence.ImplementationRejectedMarkerGateTest": {
-      "samples": 28,
-      "seconds": 0.251,
+      "samples": 30,
+      "seconds": 0.226,
       "tests": 6
     },
     "tests.test_evidence.ImplementationStageManifestLabelsTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 2
     },
     "tests.test_evidence.ManualExternalImplementationLedgerIncoherentTest": {
-      "samples": 22,
-      "seconds": 0.122,
+      "samples": 24,
+      "seconds": 0.107,
       "tests": 4
     },
     "tests.test_evidence.ManualExternalPlanLedgerIncoherentTest": {
-      "samples": 22,
-      "seconds": 0.113,
+      "samples": 24,
+      "seconds": 0.105,
       "tests": 5
     },
     "tests.test_evidence.ManualImplementationStageAdmissibilityTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.001,
       "tests": 8
     },
     "tests.test_evidence.PendingReviewStageWriteAddendumTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 3
     },
     "tests.test_evidence.PlanBundleCoherenceTest": {
-      "samples": 28,
-      "seconds": 0.008,
+      "samples": 30,
+      "seconds": 0.006,
       "tests": 11
     },
     "tests.test_evidence.ProvenanceBlockTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 3
     },
     "tests.test_evidence.PublicationQueryFailureRealTest": {
-      "samples": 22,
-      "seconds": 2.509,
+      "samples": 24,
+      "seconds": 2.426,
       "tests": 1
     },
     "tests.test_evidence.PublicationStatusCellsTest": {
-      "samples": 22,
-      "seconds": 0.286,
+      "samples": 24,
+      "seconds": 0.262,
       "tests": 3
     },
     "tests.test_evidence.PublicationStatusNonReadyPhaseRealTest": {
-      "samples": 22,
-      "seconds": 9.494,
+      "samples": 24,
+      "seconds": 9.304,
       "tests": 7
     },
     "tests.test_evidence.PublicationStatusReadyPhaseRealTest": {
-      "samples": 22,
-      "seconds": 28.449,
+      "samples": 24,
+      "seconds": 23.4,
       "tests": 9
     },
     "tests.test_evidence.ReadFeedbackFieldsRealArtifactShapeTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 1
     },
     "tests.test_evidence.ReadImplementationReviewLedgerTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.001,
       "tests": 4
     },
     "tests.test_evidence.ReadManifestFieldsTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.001,
       "tests": 3
     },
     "tests.test_evidence.ReadReviewRequestFieldsTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.003,
       "tests": 4
     },
     "tests.test_evidence.RejectedMarkerQueryContractTest": {
-      "samples": 22,
-      "seconds": 0.05,
+      "samples": 24,
+      "seconds": 0.051,
       "tests": 2
     },
     "tests.test_evidence.RejectedMarkerTest": {
-      "samples": 28,
-      "seconds": 0.059,
+      "samples": 30,
+      "seconds": 0.048,
       "tests": 3
     },
     "tests.test_evidence.StalePlanBundleGateTest": {
-      "samples": 28,
-      "seconds": 0.392,
+      "samples": 30,
+      "seconds": 0.348,
       "tests": 15
     },
     "tests.test_evidence.UncommittedImplementationStateGateTest": {
-      "samples": 28,
-      "seconds": 0.3,
+      "samples": 30,
+      "seconds": 0.269,
       "tests": 8
     },
     "tests.test_evidence.WorkflowQueryFeedbackPathTest": {
-      "samples": 22,
-      "seconds": 1.124,
+      "samples": 24,
+      "seconds": 1.106,
       "tests": 7
     },
     "tests.test_evidence.WorkflowQueryGoldenTest": {
-      "samples": 22,
-      "seconds": 6.947,
+      "samples": 24,
+      "seconds": 7.185,
       "tests": 5
     },
     "tests.test_fake_claude_contract.ChildControllerLifetimeTest": {
-      "samples": 2,
-      "seconds": 6.032,
+      "samples": 4,
+      "seconds": 5.941,
       "tests": 10
     },
     "tests.test_fake_claude_contract.FakeStreamingModeTest": {
-      "samples": 22,
-      "seconds": 10.305,
+      "samples": 24,
+      "seconds": 10.252,
       "tests": 17
     },
     "tests.test_fake_claude_contract.FixtureDigestTest": {
-      "samples": 28,
-      "seconds": 0.004,
+      "samples": 30,
+      "seconds": 0.003,
       "tests": 1
     },
     "tests.test_fake_claude_contract.FixtureReplayTest": {
-      "samples": 28,
-      "seconds": 4.061,
+      "samples": 30,
+      "seconds": 4.01,
       "tests": 3
     },
-    "tests.test_fake_claude_contract.OrphanWatchdogTest": {
+    "tests.test_fake_claude_contract.HangChildPidFileTest": {
       "samples": 2,
-      "seconds": 32.438,
+      "seconds": 0.147,
+      "tests": 2
+    },
+    "tests.test_fake_claude_contract.OrphanWatchdogTest": {
+      "samples": 4,
+      "seconds": 32.464,
       "tests": 20
     },
     "tests.test_fake_claude_contract.P12AdmissionTest": {
-      "samples": 28,
-      "seconds": 0.04,
+      "samples": 30,
+      "seconds": 0.041,
       "tests": 36
     },
     "tests.test_fake_claude_contract.P12FixtureTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.002,
       "tests": 2
     },
     "tests.test_fake_claude_contract.ReapRecordedWorkersTest": {
-      "samples": 28,
-      "seconds": 0.013,
+      "samples": 30,
+      "seconds": 0.011,
       "tests": 2
     },
     "tests.test_fake_claude_contract.RecogniserEvidenceTest": {
-      "samples": 28,
-      "seconds": 0.022,
+      "samples": 30,
+      "seconds": 0.018,
       "tests": 7
     },
     "tests.test_fake_codex_contract.FakeCodexContractTest": {
-      "samples": 2,
-      "seconds": 2.892,
+      "samples": 4,
+      "seconds": 2.865,
       "tests": 20
     },
     "tests.test_fixtures_git_hygiene.GuardSelfTest": {
-      "samples": 22,
-      "seconds": 0.004,
+      "samples": 24,
+      "seconds": 0.003,
       "tests": 4
     },
     "tests.test_fixtures_git_hygiene.QuietMaintenanceReadBackTest": {
-      "samples": 22,
-      "seconds": 0.041,
+      "samples": 24,
+      "seconds": 0.035,
       "tests": 1
     },
     "tests.test_fixtures_git_hygiene.RepositoryCreationGuardTest": {
-      "samples": 22,
-      "seconds": 3.681,
+      "samples": 24,
+      "seconds": 4.656,
       "tests": 2
     },
     "tests.test_forge": {
-      "samples": 22,
-      "seconds": 14.085,
+      "samples": 24,
+      "seconds": 12.196,
       "tests": 41
     },
     "tests.test_forge_adapter.ContextForgeTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.001,
       "tests": 3
     },
     "tests.test_forge_adapter.ForgeRegistryTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.001,
       "tests": 4
     },
-    "tests.test_functional_enforcement.JudgeTests": {
+    "tests.test_functional_codex_route.CodexRouteTest": {
+      "samples": 2,
+      "seconds": 65.888,
+      "tests": 7
+    },
+    "tests.test_functional_codex_route.ReconcileTest": {
       "samples": 2,
       "seconds": 0.004,
-      "tests": 6
+      "tests": 3
+    },
+    "tests.test_functional_codex_route.UsageAndTelemetryTest": {
+      "samples": 2,
+      "seconds": 93.509,
+      "tests": 5
+    },
+    "tests.test_functional_enforcement.ExcludeLinesTests": {
+      "samples": 2,
+      "seconds": 0.002,
+      "tests": 1
+    },
+    "tests.test_functional_enforcement.FakeSandboxEmulationTests": {
+      "samples": 2,
+      "seconds": 0.035,
+      "tests": 8
+    },
+    "tests.test_functional_enforcement.JudgeTests": {
+      "samples": 2,
+      "seconds": 0.007,
+      "tests": 7
     },
     "tests.test_functional_enforcement.LiveEnforcementTests": {
       "samples": 2,
       "seconds": 0.0,
-      "tests": 4
+      "tests": 6
     },
     "tests.test_functional_enforcement.SettingsTests": {
       "samples": 2,
-      "seconds": 0.001,
-      "tests": 5
+      "seconds": 0.016,
+      "tests": 12
     },
     "tests.test_functional_enforcement.StaticProbeTests": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.003,
       "tests": 15
     },
     "tests.test_functional_lifecycle.CycleClosesTest": {
-      "samples": 2,
-      "seconds": 221.933,
+      "samples": 4,
+      "seconds": 169.572,
       "tests": 1
     },
     "tests.test_functional_lifecycle.IsolationTest": {
-      "samples": 2,
-      "seconds": 268.539,
+      "samples": 4,
+      "seconds": 225.791,
       "tests": 1
     },
     "tests.test_functional_lifecycle.NoRunTest": {
-      "samples": 2,
-      "seconds": 113.977,
+      "samples": 4,
+      "seconds": 122.105,
       "tests": 1
     },
     "tests.test_functional_lifecycle.PersonStopsTest": {
-      "samples": 2,
-      "seconds": 225.068,
+      "samples": 4,
+      "seconds": 186.614,
       "tests": 1
     },
-    "tests.test_functional_review.CommittedChecklistsTest": {
+    "tests.test_functional_review.BoldFlowHeaderTest": {
       "samples": 2,
-      "seconds": 0.003,
+      "seconds": 0.039,
+      "tests": 23
+    },
+    "tests.test_functional_review.CommittedChecklistsTest": {
+      "samples": 4,
+      "seconds": 0.004,
       "tests": 5
     },
-    "tests.test_functional_review.ConstantsTest": {
+    "tests.test_functional_review.CompletenessTest": {
       "samples": 2,
+      "seconds": 0.002,
+      "tests": 6
+    },
+    "tests.test_functional_review.ConstantsTest": {
+      "samples": 4,
       "seconds": 0.0,
       "tests": 2
     },
-    "tests.test_functional_review.EvidenceInputTest": {
+    "tests.test_functional_review.CrossShapeTest": {
       "samples": 2,
+      "seconds": 0.007,
+      "tests": 10
+    },
+    "tests.test_functional_review.DroppedRowsTest": {
+      "samples": 2,
+      "seconds": 0.001,
+      "tests": 1
+    },
+    "tests.test_functional_review.EvidenceInputTest": {
+      "samples": 4,
       "seconds": 0.002,
       "tests": 3
     },
     "tests.test_functional_review.FindingsTextTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.005,
       "tests": 7
     },
-    "tests.test_functional_review.FlowShapesTest": {
+    "tests.test_functional_review.FlowEndsTest": {
       "samples": 2,
-      "seconds": 0.003,
+      "seconds": 0.004,
+      "tests": 17
+    },
+    "tests.test_functional_review.FlowShapesTest": {
+      "samples": 4,
+      "seconds": 0.002,
       "tests": 11
+    },
+    "tests.test_functional_review.LabelGrammarTest": {
+      "samples": 2,
+      "seconds": 0.004,
+      "tests": 8
     },
     "tests.test_functional_review.LinkedChecklistTest": {
       "samples": 2,
-      "seconds": 0.001,
-      "tests": 3
+      "seconds": 0.098,
+      "tests": 9
+    },
+    "tests.test_functional_review.MissingSectionTest": {
+      "samples": 2,
+      "seconds": 0.0,
+      "tests": 2
     },
     "tests.test_functional_review.NotRunTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.001,
       "tests": 4
     },
     "tests.test_functional_review.PromptTest": {
       "samples": 2,
       "seconds": 0.0,
-      "tests": 4
+      "tests": 6
     },
     "tests.test_functional_review.SectionTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.0,
       "tests": 3
     },
-    "tests.test_functional_review.ValidatorTest": {
+    "tests.test_functional_review.ShapeChoiceTest": {
       "samples": 2,
-      "seconds": 0.013,
+      "seconds": 0.004,
+      "tests": 8
+    },
+    "tests.test_functional_review.SummaryBoundTest": {
+      "samples": 2,
+      "seconds": 0.015,
+      "tests": 13
+    },
+    "tests.test_functional_review.ValidatorTest": {
+      "samples": 4,
+      "seconds": 0.011,
       "tests": 8
     },
     "tests.test_functional_review.WritableLocationsTest": {
-      "samples": 2,
-      "seconds": 0.004,
+      "samples": 4,
+      "seconds": 0.005,
       "tests": 5
     },
     "tests.test_functional_sandbox.ArgvAndSettingsTest": {
       "samples": 2,
-      "seconds": 0.303,
-      "tests": 4
+      "seconds": 0.897,
+      "tests": 8
     },
     "tests.test_functional_sandbox.BindingTest": {
       "samples": 2,
-      "seconds": 1.537,
-      "tests": 11
+      "seconds": 2.933,
+      "tests": 15
     },
     "tests.test_functional_sandbox.CandidateTest": {
-      "samples": 2,
-      "seconds": 0.248,
+      "samples": 4,
+      "seconds": 0.226,
       "tests": 4
     },
     "tests.test_functional_sandbox.LayoutTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.0,
       "tests": 3
     },
     "tests.test_functional_sandbox.OriginTest": {
       "samples": 2,
-      "seconds": 0.244,
-      "tests": 2
+      "seconds": 0.68,
+      "tests": 7
     },
     "tests.test_functional_sandbox.RunTest": {
       "samples": 2,
-      "seconds": 7.767,
-      "tests": 21
+      "seconds": 6.929,
+      "tests": 22
     },
     "tests.test_functional_sandbox.SandboxBuildTest": {
       "samples": 2,
-      "seconds": 3.013,
-      "tests": 17
+      "seconds": 3.197,
+      "tests": 21
+    },
+    "tests.test_functional_sandbox.SandboxPathTest": {
+      "samples": 2,
+      "seconds": 0.005,
+      "tests": 3
+    },
+    "tests.test_functional_sandbox.SelectionErrorTest": {
+      "samples": 2,
+      "seconds": 0.203,
+      "tests": 6
     },
     "tests.test_functional_sandbox.UnavailableTest": {
-      "samples": 2,
-      "seconds": 0.471,
+      "samples": 4,
+      "seconds": 0.368,
       "tests": 5
     },
+    "tests.test_functional_select.IndependenceTest": {
+      "samples": 2,
+      "seconds": 0.001,
+      "tests": 2
+    },
+    "tests.test_functional_select.SelectionTest": {
+      "samples": 2,
+      "seconds": 130.785,
+      "tests": 18
+    },
     "tests.test_gitrepo.BranchTest": {
-      "samples": 28,
-      "seconds": 0.205,
+      "samples": 30,
+      "seconds": 0.21,
       "tests": 3
     },
     "tests.test_gitrepo.FetchTest": {
-      "samples": 28,
-      "seconds": 0.283,
+      "samples": 30,
+      "seconds": 0.226,
       "tests": 3
     },
+    "tests.test_gitrepo.LandingWritesTest": {
+      "samples": 2,
+      "seconds": 0.525,
+      "tests": 8
+    },
     "tests.test_gitrepo.MergeTrunkTest": {
-      "samples": 22,
-      "seconds": 0.43,
+      "samples": 24,
+      "seconds": 0.392,
       "tests": 4
     },
     "tests.test_gitrepo.PushBranchTest": {
-      "samples": 28,
-      "seconds": 0.274,
+      "samples": 30,
+      "seconds": 0.247,
       "tests": 2
     },
     "tests.test_gitrepo.ReadTest": {
-      "samples": 22,
-      "seconds": 0.667,
-      "tests": 10
+      "samples": 2,
+      "seconds": 0.784,
+      "tests": 15
     },
     "tests.test_gitrepo.RunnerTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 2
     },
     "tests.test_gitrepo.SquashReadTest": {
-      "samples": 22,
-      "seconds": 0.29,
+      "samples": 24,
+      "seconds": 0.273,
       "tests": 4
     },
     "tests.test_gitrepo.TagTest": {
-      "samples": 22,
-      "seconds": 0.456,
+      "samples": 24,
+      "seconds": 0.544,
       "tests": 5
     },
     "tests.test_gitrepo.TrackedChangeDigestsTest": {
-      "samples": 2,
-      "seconds": 0.763,
+      "samples": 4,
+      "seconds": 0.803,
       "tests": 11
     },
     "tests.test_golden_plan_stage_decisions.NormaliseTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 5
     },
     "tests.test_golden_plan_stage_decisions.PlanStageDecisionGoldenTest": {
-      "samples": 28,
-      "seconds": 0.875,
+      "samples": 30,
+      "seconds": 0.753,
       "tests": 6
     },
     "tests.test_handoff.ClassifyJobsTest": {
-      "samples": 28,
-      "seconds": 0.006,
+      "samples": 30,
+      "seconds": 0.005,
       "tests": 2
     },
     "tests.test_handoff.DetectTest": {
-      "samples": 28,
-      "seconds": 0.667,
+      "samples": 30,
+      "seconds": 0.757,
       "tests": 9
     },
     "tests.test_handoff.EndToEndHandoffSubprocessTest": {
-      "samples": 28,
-      "seconds": 6.088,
+      "samples": 30,
+      "seconds": 5.351,
       "tests": 1
     },
     "tests.test_handoff.EqualGenerationRunLoopContinuesTest": {
-      "samples": 28,
-      "seconds": 0.106,
+      "samples": 30,
+      "seconds": 0.102,
       "tests": 1
     },
     "tests.test_handoff.PackageHandoffTest": {
-      "samples": 28,
-      "seconds": 0.1,
+      "samples": 30,
+      "seconds": 0.106,
       "tests": 2
     },
     "tests.test_handoff.PauseFileGatingTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.202,
       "tests": 4
     },
     "tests.test_handoff.RunLoopExitCodeTest": {
-      "samples": 28,
-      "seconds": 0.907,
+      "samples": 30,
+      "seconds": 0.814,
       "tests": 9
     },
     "tests.test_handoff.WriteHandoffRecordTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.002,
       "tests": 1
     },
-    "tests.test_harness.DeclaredFactsTest": {
+    "tests.test_harness.BuildVerificationTest": {
       "samples": 2,
+      "seconds": 0.996,
+      "tests": 4
+    },
+    "tests.test_harness.DeclaredFactsTest": {
+      "samples": 4,
       "seconds": 0.0,
       "tests": 4
     },
-    "tests.test_harness.DerivedValuesTest": {
+    "tests.test_harness.DeclaredModelsAndEffortsTest": {
       "samples": 2,
+      "seconds": 0.0,
+      "tests": 3
+    },
+    "tests.test_harness.DerivedValuesTest": {
+      "samples": 4,
       "seconds": 0.0,
       "tests": 1
     },
     "tests.test_harness.ImportSetTest": {
-      "samples": 2,
-      "seconds": 0.776,
+      "samples": 4,
+      "seconds": 0.667,
       "tests": 2
     },
     "tests.test_harness.LookupTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.0,
       "tests": 4
     },
     "tests.test_harness.PinnedDeclarationsTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.0,
       "tests": 4
     },
+    "tests.test_harness_table.CheckWordingTest": {
+      "samples": 2,
+      "seconds": 0.001,
+      "tests": 1
+    },
+    "tests.test_harness_table.CliTest": {
+      "samples": 2,
+      "seconds": 0.004,
+      "tests": 4
+    },
+    "tests.test_harness_table.RenderTest": {
+      "samples": 2,
+      "seconds": 0.002,
+      "tests": 12
+    },
+    "tests.test_harness_table.WriteTest": {
+      "samples": 2,
+      "seconds": 0.0,
+      "tests": 2
+    },
     "tests.test_hints_parse.HintsParseTest": {
-      "samples": 22,
-      "seconds": 1.208,
+      "samples": 24,
+      "seconds": 1.412,
       "tests": 5
     },
     "tests.test_identity.DecoyAndRealRouteTest": {
-      "samples": 28,
-      "seconds": 11.414,
+      "samples": 30,
+      "seconds": 11.441,
       "tests": 2
     },
     "tests.test_identity.DirectoryCreationOrderingTest": {
-      "samples": 28,
-      "seconds": 0.108,
+      "samples": 30,
+      "seconds": 0.104,
       "tests": 2
     },
     "tests.test_identity.GenerationSourceRuleTest": {
-      "samples": 28,
-      "seconds": 0.327,
+      "samples": 30,
+      "seconds": 0.31,
       "tests": 3
     },
     "tests.test_identity.GuardTest": {
-      "samples": 28,
-      "seconds": 0.704,
+      "samples": 30,
+      "seconds": 0.666,
       "tests": 3
     },
     "tests.test_identity.MaterialiseCleanTreeTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.382,
       "tests": 3
     },
     "tests.test_identity.MaterialiseDirtyTreeTest": {
-      "samples": 28,
-      "seconds": 0.206,
+      "samples": 30,
+      "seconds": 0.205,
       "tests": 2
     },
     "tests.test_identity.MaterialisePackageTest": {
-      "samples": 28,
-      "seconds": 0.538,
+      "samples": 30,
+      "seconds": 0.47,
       "tests": 8
     },
     "tests.test_identity.MaterialiseReuseTest": {
-      "samples": 28,
-      "seconds": 1.129,
+      "samples": 30,
+      "seconds": 1.101,
       "tests": 3
     },
     "tests.test_identity.PinCachingTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.01,
       "tests": 1
     },
     "tests.test_identity.ResolveRuntimeTest": {
-      "samples": 28,
-      "seconds": 2.261,
+      "samples": 30,
+      "seconds": 2.276,
       "tests": 10
     },
     "tests.test_identity.RuntimeRecordTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 1
     },
     "tests.test_identity.TamperedSnapshotRefusalTest": {
-      "samples": 28,
-      "seconds": 0.978,
+      "samples": 30,
+      "seconds": 0.882,
       "tests": 3
     },
     "tests.test_identity.UnpinnedIdentityByKindTest": {
-      "samples": 28,
-      "seconds": 0.206,
+      "samples": 30,
+      "seconds": 0.205,
       "tests": 4
     },
     "tests.test_integration_disposable_repo.ControllerSourceTreeDigestVerificationTest": {
@@ -1171,802 +1916,1012 @@
       "tests": 1
     },
     "tests.test_job.ApplyingReviewFeedbackExecuteTest": {
-      "samples": 22,
-      "seconds": 2.353,
+      "samples": 24,
+      "seconds": 2.345,
       "tests": 10
     },
     "tests.test_job.BaseVersionPlannedRecordTest": {
-      "samples": 28,
-      "seconds": 0.055,
+      "samples": 30,
+      "seconds": 0.046,
       "tests": 1
     },
     "tests.test_job.BootstrapRowSevenTest": {
-      "samples": 28,
-      "seconds": 1.004,
+      "samples": 30,
+      "seconds": 0.975,
       "tests": 5
     },
     "tests.test_job.BundleManifestBundleIdCaptureTest": {
-      "samples": 28,
-      "seconds": 0.617,
+      "samples": 30,
+      "seconds": 0.553,
       "tests": 3
     },
     "tests.test_job.CtrlCTest": {
-      "samples": 28,
-      "seconds": 0.118,
+      "samples": 30,
+      "seconds": 0.142,
       "tests": 3
     },
     "tests.test_job.DecisionTimeWorkflowQueryTest": {
-      "samples": 22,
-      "seconds": 0.662,
+      "samples": 24,
+      "seconds": 0.618,
       "tests": 3
     },
     "tests.test_job.DefaultPermissionModeTest": {
-      "samples": 28,
-      "seconds": 0.517,
+      "samples": 30,
+      "seconds": 0.486,
       "tests": 3
     },
     "tests.test_job.DispatchRuleDeclineTest": {
-      "samples": 28,
-      "seconds": 0.555,
+      "samples": 30,
+      "seconds": 0.607,
       "tests": 3
     },
     "tests.test_job.DrainDetachJobTest": {
-      "samples": 28,
-      "seconds": 3.416,
+      "samples": 30,
+      "seconds": 3.35,
       "tests": 2
     },
     "tests.test_job.InProcessConcurrencyTest": {
-      "samples": 22,
-      "seconds": 1.858,
+      "samples": 24,
+      "seconds": 1.82,
       "tests": 3
     },
     "tests.test_job.JobEventLogPathTest": {
-      "samples": 28,
-      "seconds": 0.621,
+      "samples": 30,
+      "seconds": 0.671,
       "tests": 7
     },
     "tests.test_job.JobEventLogVerifiedPathTest": {
-      "samples": 28,
-      "seconds": 0.532,
+      "samples": 30,
+      "seconds": 0.506,
       "tests": 2
     },
     "tests.test_job.LastLaunchedApplyJobViewTest": {
-      "samples": 22,
-      "seconds": 0.01,
+      "samples": 24,
+      "seconds": 0.009,
       "tests": 9
     },
     "tests.test_job.LaunchPathTest": {
-      "samples": 28,
-      "seconds": 2.073,
+      "samples": 30,
+      "seconds": 1.912,
       "tests": 9
     },
     "tests.test_job.MissingGoverningVersionRowRegressionTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 1
     },
     "tests.test_job.NoActionClassTest": {
-      "samples": 28,
-      "seconds": 0.072,
+      "samples": 30,
+      "seconds": 0.055,
       "tests": 2
     },
     "tests.test_job.NoLaunchRecordTest": {
-      "samples": 28,
-      "seconds": 0.135,
+      "samples": 30,
+      "seconds": 0.12,
       "tests": 4
     },
     "tests.test_job.PartialApplyPlanReviewExecuteTest": {
-      "samples": 28,
-      "seconds": 0.99,
+      "samples": 30,
+      "seconds": 0.954,
       "tests": 4
     },
     "tests.test_job.PendingJobReconciliationRefusalTest": {
-      "samples": 28,
-      "seconds": 0.392,
+      "samples": 30,
+      "seconds": 0.345,
       "tests": 7
     },
     "tests.test_job.PredicateRow3RoleNormalizationTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 1
     },
     "tests.test_job.ProseOverStateTest": {
-      "samples": 28,
-      "seconds": 1.035,
+      "samples": 30,
+      "seconds": 1.246,
       "tests": 2
     },
     "tests.test_job.ReattachTelemetryTest": {
-      "samples": 22,
-      "seconds": 0.015,
+      "samples": 24,
+      "seconds": 0.013,
       "tests": 3
     },
     "tests.test_job.ReleaseChangedRefusalTextTest": {
-      "samples": 22,
-      "seconds": 0.003,
+      "samples": 24,
+      "seconds": 0.002,
       "tests": 3
     },
     "tests.test_job.ReleaseRecheckBeforeDecisionTest": {
-      "samples": 22,
-      "seconds": 2.653,
+      "samples": 24,
+      "seconds": 2.12,
       "tests": 2
     },
     "tests.test_job.SpawnFlushFailureTest": {
-      "samples": 28,
-      "seconds": 0.06,
+      "samples": 30,
+      "seconds": 0.062,
       "tests": 1
     },
     "tests.test_job.StreamingJobTest": {
-      "samples": 28,
-      "seconds": 10.486,
+      "samples": 30,
+      "seconds": 10.544,
       "tests": 7
     },
     "tests.test_job.TelemetryCompletionTest": {
-      "samples": 22,
-      "seconds": 2.097,
+      "samples": 24,
+      "seconds": 2.018,
       "tests": 4
     },
     "tests.test_job.UnboundedDefaultTimeoutTest": {
-      "samples": 28,
-      "seconds": 1.217,
+      "samples": 30,
+      "seconds": 1.192,
       "tests": 1
     },
     "tests.test_job.UsageLimitLegacyTest": {
-      "samples": 2,
-      "seconds": 4.676,
+      "samples": 4,
+      "seconds": 4.454,
       "tests": 12
     },
     "tests.test_job.WorkerEventBestEffortTest": {
-      "samples": 28,
-      "seconds": 4.43,
+      "samples": 30,
+      "seconds": 4.345,
       "tests": 3
     },
     "tests.test_job.WorkerNotStartedTest": {
-      "samples": 28,
-      "seconds": 0.498,
+      "samples": 30,
+      "seconds": 0.464,
       "tests": 2
     },
     "tests.test_job.WorkerRouteTest": {
-      "samples": 28,
-      "seconds": 3.916,
+      "samples": 30,
+      "seconds": 3.872,
       "tests": 4
     },
     "tests.test_job.WorkerStatePersistenceTest": {
-      "samples": 28,
-      "seconds": 1.462,
+      "samples": 30,
+      "seconds": 1.438,
       "tests": 3
     },
     "tests.test_job.WorkerTaskTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 2
     },
+    "tests.test_job_codex_worker.CleanRunTest": {
+      "samples": 2,
+      "seconds": 0.55,
+      "tests": 5
+    },
+    "tests.test_job_codex_worker.CodexHomeTest": {
+      "samples": 2,
+      "seconds": 0.001,
+      "tests": 1
+    },
+    "tests.test_job_codex_worker.OutcomeTest": {
+      "samples": 2,
+      "seconds": 2.532,
+      "tests": 3
+    },
+    "tests.test_job_codex_worker.ProtocolDecisionTest": {
+      "samples": 2,
+      "seconds": 5.113,
+      "tests": 2
+    },
+    "tests.test_job_codex_worker.RefusalTest": {
+      "samples": 2,
+      "seconds": 0.588,
+      "tests": 9
+    },
+    "tests.test_job_codex_worker.UnchangedClaudePathTest": {
+      "samples": 2,
+      "seconds": 0.0,
+      "tests": 2
+    },
+    "tests.test_job_codex_worker.UnexpectedPathsTest": {
+      "samples": 2,
+      "seconds": 0.228,
+      "tests": 4
+    },
+    "tests.test_job_codex_worker.UsageGateTest": {
+      "samples": 2,
+      "seconds": 0.232,
+      "tests": 2
+    },
+    "tests.test_job_codex_worker_interrupt.BeforeTheSpawnTest": {
+      "samples": 2,
+      "seconds": 0.119,
+      "tests": 2
+    },
+    "tests.test_job_codex_worker_interrupt.ChildController": {
+      "samples": 2,
+      "seconds": 0.035,
+      "tests": 1
+    },
+    "tests.test_job_codex_worker_interrupt.KilledControllerTest": {
+      "samples": 2,
+      "seconds": 1.171,
+      "tests": 2
+    },
+    "tests.test_job_codex_worker_landing.CloneNamedLiveTest": {
+      "samples": 2,
+      "seconds": 1.383,
+      "tests": 8
+    },
+    "tests.test_job_codex_worker_landing.DirectoryTest": {
+      "samples": 2,
+      "seconds": 0.378,
+      "tests": 3
+    },
+    "tests.test_job_codex_worker_landing.LandedTest": {
+      "samples": 2,
+      "seconds": 1.489,
+      "tests": 6
+    },
+    "tests.test_job_codex_worker_landing.ProtocolLandingTest": {
+      "samples": 2,
+      "seconds": 12.423,
+      "tests": 3
+    },
+    "tests.test_job_codex_worker_landing.RefusedTest": {
+      "samples": 2,
+      "seconds": 4.579,
+      "tests": 8
+    },
+    "tests.test_job_codex_worker_limit.LimitedJobTest": {
+      "samples": 2,
+      "seconds": 0.78,
+      "tests": 5
+    },
+    "tests.test_job_codex_worker_limit.MidJobHoldProviderTest": {
+      "samples": 2,
+      "seconds": 0.0,
+      "tests": 3
+    },
+    "tests.test_job_codex_worker_limit.RunAndStepTest": {
+      "samples": 2,
+      "seconds": 0.173,
+      "tests": 2
+    },
+    "tests.test_job_codex_worker_resume.AbandonLandingTest": {
+      "samples": 2,
+      "seconds": 1.836,
+      "tests": 9
+    },
+    "tests.test_job_codex_worker_resume.AbandonTest": {
+      "samples": 2,
+      "seconds": 0.75,
+      "tests": 6
+    },
+    "tests.test_job_codex_worker_resume.DriftedTest": {
+      "samples": 2,
+      "seconds": 0.089,
+      "tests": 1
+    },
+    "tests.test_job_codex_worker_resume.JobIdTest": {
+      "samples": 2,
+      "seconds": 0.004,
+      "tests": 3
+    },
+    "tests.test_job_codex_worker_resume.LaunchedLandingTest": {
+      "samples": 2,
+      "seconds": 1.173,
+      "tests": 8
+    },
+    "tests.test_job_codex_worker_resume.ProtocolCodexTest": {
+      "samples": 2,
+      "seconds": 15.318,
+      "tests": 5
+    },
+    "tests.test_job_codex_worker_resume.ProtocolKilledLandingTest": {
+      "samples": 2,
+      "seconds": 19.322,
+      "tests": 6
+    },
+    "tests.test_job_codex_worker_resume.ProtocolMergedDriftTest": {
+      "samples": 2,
+      "seconds": 7.331,
+      "tests": 2
+    },
+    "tests.test_job_codex_worker_resume.RecordTest": {
+      "samples": 2,
+      "seconds": 0.459,
+      "tests": 4
+    },
+    "tests.test_job_codex_worker_resume.RemovedCloneTest": {
+      "samples": 2,
+      "seconds": 0.916,
+      "tests": 5
+    },
+    "tests.test_job_codex_worker_resume.UnchangedTest": {
+      "samples": 2,
+      "seconds": 0.0,
+      "tests": 1
+    },
+    "tests.test_job_codex_worker_resume.UnreadableTest": {
+      "samples": 2,
+      "seconds": 1.212,
+      "tests": 5
+    },
+    "tests.test_job_codex_worker_resume.VerdictRowsTest": {
+      "samples": 2,
+      "seconds": 11.454,
+      "tests": 10
+    },
+    "tests.test_job_codex_worker_resume.WindowsTest": {
+      "samples": 2,
+      "seconds": 3.081,
+      "tests": 12
+    },
+    "tests.test_job_codex_worker_usage.AccountingTest": {
+      "samples": 2,
+      "seconds": 0.847,
+      "tests": 7
+    },
+    "tests.test_job_codex_worker_usage.AdmissionTest": {
+      "samples": 2,
+      "seconds": 0.277,
+      "tests": 3
+    },
+    "tests.test_job_codex_worker_usage.ResumeSettlesTest": {
+      "samples": 2,
+      "seconds": 0.188,
+      "tests": 1
+    },
     "tests.test_job_validation.ApplyImplementationReviewRowExecuteTest": {
-      "samples": 28,
-      "seconds": 1.955,
+      "samples": 30,
+      "seconds": 1.836,
       "tests": 7
     },
     "tests.test_job_validation.ArgumentBearingBootstrapTest": {
-      "samples": 22,
+      "samples": 24,
       "seconds": 0.001,
       "tests": 1
     },
     "tests.test_job_validation.BootstrapRowSevenVerificationTest": {
-      "samples": 28,
-      "seconds": 0.72,
+      "samples": 30,
+      "seconds": 0.643,
       "tests": 3
     },
     "tests.test_job_validation.CheckpointPredicateUnitTest": {
-      "samples": 28,
-      "seconds": 0.164,
+      "samples": 30,
+      "seconds": 0.143,
       "tests": 5
     },
     "tests.test_job_validation.CheckpointProgressDetailUnitTest": {
-      "samples": 28,
-      "seconds": 0.087,
+      "samples": 30,
+      "seconds": 0.072,
       "tests": 2
     },
     "tests.test_job_validation.CheckpointRowsExecuteTest": {
-      "samples": 28,
-      "seconds": 4.124,
+      "samples": 30,
+      "seconds": 4.504,
       "tests": 8
     },
     "tests.test_job_validation.DeclarationAgainstArtifactTest": {
-      "samples": 28,
-      "seconds": 0.011,
+      "samples": 30,
+      "seconds": 0.008,
       "tests": 14
     },
     "tests.test_job_validation.ExpectedOutcomesTableStructureTest": {
-      "samples": 28,
-      "seconds": 0.002,
+      "samples": 30,
+      "seconds": 0.001,
       "tests": 24
     },
     "tests.test_job_validation.GenerationRowsExecuteTest": {
-      "samples": 28,
-      "seconds": 3.384,
+      "samples": 30,
+      "seconds": 3.028,
       "tests": 3
     },
     "tests.test_job_validation.IncompleteEffectPhaseTest": {
-      "samples": 28,
-      "seconds": 0.258,
+      "samples": 30,
+      "seconds": 0.223,
       "tests": 2
     },
     "tests.test_job_validation.LocalImplementationReviewRowExecuteTest": {
-      "samples": 28,
-      "seconds": 5.168,
+      "samples": 30,
+      "seconds": 4.577,
       "tests": 7
     },
     "tests.test_job_validation.ManualImplementationReviewRowExecuteTest": {
-      "samples": 28,
-      "seconds": 2.63,
+      "samples": 30,
+      "seconds": 2.583,
       "tests": 6
     },
     "tests.test_job_validation.PairKeyedReachabilityTest": {
-      "samples": 28,
-      "seconds": 0.233,
+      "samples": 30,
+      "seconds": 0.245,
       "tests": 10
     },
     "tests.test_job_validation.PerReleaseWriterDeclarationTest": {
-      "samples": 22,
-      "seconds": 0.01,
+      "samples": 24,
+      "seconds": 0.008,
       "tests": 6
     },
     "tests.test_job_validation.PlanBundlePostconditionExecuteTest": {
-      "samples": 28,
-      "seconds": 3.218,
+      "samples": 30,
+      "seconds": 3.426,
       "tests": 3
     },
     "tests.test_job_validation.PlanBundlePostconditionRowSevenTest": {
-      "samples": 28,
-      "seconds": 0.595,
+      "samples": 30,
+      "seconds": 0.589,
       "tests": 5
     },
     "tests.test_job_validation.PlanStagePostconditionQueryContractTest": {
-      "samples": 22,
-      "seconds": 0.074,
+      "samples": 24,
+      "seconds": 0.278,
       "tests": 6
     },
     "tests.test_job_validation.Row3BlockPredicateBundleIdRegressionTest": {
-      "samples": 28,
-      "seconds": 1.435,
+      "samples": 30,
+      "seconds": 1.502,
       "tests": 5
     },
     "tests.test_job_validation.SamePhaseDurableProgressExecuteTest": {
-      "samples": 28,
-      "seconds": 3.042,
+      "samples": 30,
+      "seconds": 2.714,
       "tests": 6
     },
     "tests.test_job_validation.SelfLoopPredicateSingleSiteTest": {
-      "samples": 28,
-      "seconds": 0.176,
+      "samples": 30,
+      "seconds": 0.166,
       "tests": 6
     },
     "tests.test_job_validation.TransitionVerificationTest": {
-      "samples": 28,
-      "seconds": 1.924,
+      "samples": 30,
+      "seconds": 1.699,
       "tests": 9
     },
     "tests.test_job_validation.TwoPointTwoPlanReviewTransitionTest": {
-      "samples": 28,
-      "seconds": 1.744,
+      "samples": 30,
+      "seconds": 1.694,
       "tests": 7
     },
     "tests.test_job_validation.WorkerStateValidationTest": {
-      "samples": 28,
-      "seconds": 0.27,
+      "samples": 30,
+      "seconds": 0.348,
       "tests": 10
     },
     "tests.test_lifecycle_orchestration.AbandonedApplyRelaunchBoundTest": {
-      "samples": 22,
-      "seconds": 0.44,
+      "samples": 24,
+      "seconds": 0.443,
       "tests": 1
     },
     "tests.test_lifecycle_orchestration.ApplyRelaunchBoundTest": {
-      "samples": 28,
-      "seconds": 0.454,
+      "samples": 30,
+      "seconds": 0.407,
       "tests": 1
     },
     "tests.test_lifecycle_orchestration.FailClosedArtifactTest": {
-      "samples": 28,
-      "seconds": 9.649,
+      "samples": 30,
+      "seconds": 8.117,
       "tests": 2
     },
     "tests.test_lifecycle_orchestration.FullLifecycleRunTest": {
-      "samples": 28,
-      "seconds": 1.807,
+      "samples": 30,
+      "seconds": 1.723,
       "tests": 1
     },
     "tests.test_lifecycle_orchestration.GatesLaunchNothingTest": {
-      "samples": 28,
-      "seconds": 1.51,
+      "samples": 30,
+      "seconds": 1.208,
       "tests": 1
     },
     "tests.test_lifecycle_orchestration.LifecycleLockLifetimeTest": {
-      "samples": 28,
-      "seconds": 0.412,
+      "samples": 30,
+      "seconds": 0.473,
       "tests": 1
     },
     "tests.test_lifecycle_orchestration.LiteralApplyWorkerTest": {
-      "samples": 28,
-      "seconds": 0.832,
+      "samples": 30,
+      "seconds": 0.811,
       "tests": 2
     },
     "tests.test_lifecycle_orchestration.ManualVerdictTest": {
-      "samples": 28,
-      "seconds": 6.22,
+      "samples": 30,
+      "seconds": 5.378,
       "tests": 3
     },
     "tests.test_lifecycle_orchestration.NextActionWaitsForOwnedWorkTest": {
-      "samples": 28,
-      "seconds": 3.609,
+      "samples": 30,
+      "seconds": 3.406,
       "tests": 2
     },
     "tests.test_lifecycle_orchestration.NoCheckpointPartialRunTest": {
-      "samples": 28,
-      "seconds": 0.997,
+      "samples": 30,
+      "seconds": 0.999,
       "tests": 1
     },
     "tests.test_lifecycle_orchestration.PlanStageUnchangedTest": {
-      "samples": 28,
-      "seconds": 2.428,
+      "samples": 30,
+      "seconds": 2.696,
       "tests": 1
     },
     "tests.test_lifecycle_orchestration.ResumeReconciliationTest": {
-      "samples": 28,
-      "seconds": 5.05,
+      "samples": 30,
+      "seconds": 4.643,
       "tests": 3
     },
     "tests.test_lifecycle_orchestration.ResumingWorkerTest": {
-      "samples": 28,
-      "seconds": 7.067,
+      "samples": 30,
+      "seconds": 7.088,
       "tests": 4
     },
     "tests.test_lifecycle_orchestration.SameContentGeneratorFailureTest": {
-      "samples": 28,
-      "seconds": 0.605,
+      "samples": 30,
+      "seconds": 0.478,
       "tests": 1
     },
     "tests.test_lifecycle_orchestration.ScriptedWorkerTest": {
-      "samples": 28,
-      "seconds": 0.312,
+      "samples": 30,
+      "seconds": 0.286,
       "tests": 2
     },
     "tests.test_lifecycle_orchestration.UncommittedImplementationStateTest": {
-      "samples": 28,
-      "seconds": 2.297,
+      "samples": 30,
+      "seconds": 2.007,
       "tests": 1
     },
     "tests.test_lifecycle_orchestration.WaitingWorkerRegressionTest": {
-      "samples": 28,
-      "seconds": 6.715,
+      "samples": 30,
+      "seconds": 6.662,
       "tests": 2
     },
     "tests.test_lifecycle_orchestration.WrongWakeupMatchTest": {
-      "samples": 28,
-      "seconds": 14.887,
+      "samples": 30,
+      "seconds": 14.942,
       "tests": 3
     },
     "tests.test_lock.AcquireContentionTest": {
-      "samples": 28,
-      "seconds": 0.707,
+      "samples": 30,
+      "seconds": 0.67,
       "tests": 4
     },
     "tests.test_lock.GitDirectoryUnresolvableTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.014,
       "tests": 2
     },
     "tests.test_lock.InheritedDescriptorTest": {
-      "samples": 22,
-      "seconds": 1.229,
+      "samples": 24,
+      "seconds": 1.058,
       "tests": 5
     },
     "tests.test_lock.LifecycleLockErrorTest": {
-      "samples": 28,
-      "seconds": 0.034,
+      "samples": 30,
+      "seconds": 0.045,
       "tests": 4
     },
     "tests.test_lock.ProbeChildPidNamespaceTest": {
-      "samples": 28,
-      "seconds": 0.285,
+      "samples": 30,
+      "seconds": 0.307,
       "tests": 1
     },
     "tests.test_lock.ProbePatchedProcTest": {
-      "samples": 28,
-      "seconds": 0.217,
+      "samples": 30,
+      "seconds": 0.191,
       "tests": 17
     },
     "tests.test_lock.ProbeRealFilesystemTest": {
-      "samples": 28,
-      "seconds": 1.82,
+      "samples": 30,
+      "seconds": 1.847,
       "tests": 3
     },
     "tests.test_managed_repo.CleanManagedRepositoryTest": {
-      "samples": 28,
-      "seconds": 0.019,
+      "samples": 30,
+      "seconds": 0.015,
       "tests": 2
     },
     "tests.test_managed_repo.DriftedInstallationTest": {
-      "samples": 28,
-      "seconds": 0.038,
+      "samples": 30,
+      "seconds": 0.036,
       "tests": 2
     },
     "tests.test_managed_repo.InstallProfilePairTest": {
-      "samples": 28,
-      "seconds": 0.057,
+      "samples": 30,
+      "seconds": 0.047,
       "tests": 4
     },
     "tests.test_managed_repo.InstalledWorkflowVersionTest": {
-      "samples": 22,
-      "seconds": 0.001,
+      "samples": 24,
+      "seconds": 0.002,
       "tests": 3
     },
     "tests.test_managed_repo.MalformedManifestTest": {
-      "samples": 28,
-      "seconds": 0.08,
+      "samples": 30,
+      "seconds": 0.062,
       "tests": 5
     },
     "tests.test_managed_repo.ProtocolAdmissionTest": {
-      "samples": 22,
-      "seconds": 5.34,
+      "samples": 24,
+      "seconds": 6.33,
       "tests": 10
     },
     "tests.test_managed_repo.ProtocolIdentityTest": {
-      "samples": 22,
-      "seconds": 1.334,
+      "samples": 24,
+      "seconds": 1.396,
       "tests": 2
     },
     "tests.test_managed_repo.UnmanagedRepositoryTest": {
-      "samples": 28,
-      "seconds": 0.027,
+      "samples": 30,
+      "seconds": 0.016,
       "tests": 2
     },
     "tests.test_managed_repo.UnsupportedWorkflowVersionTest": {
-      "samples": 22,
-      "seconds": 0.291,
+      "samples": 24,
+      "seconds": 0.222,
       "tests": 10
     },
     "tests.test_managed_repo.WorkflowManagerUnavailableTest": {
-      "samples": 28,
-      "seconds": 0.034,
+      "samples": 30,
+      "seconds": 0.031,
       "tests": 2
     },
     "tests.test_milestone_branch.AcceptanceCommitTest": {
-      "samples": 28,
-      "seconds": 0.365,
+      "samples": 30,
+      "seconds": 0.408,
       "tests": 2
     },
     "tests.test_milestone_branch.AcknowledgeTest": {
-      "samples": 28,
-      "seconds": 3.394,
+      "samples": 30,
+      "seconds": 2.994,
       "tests": 6
     },
     "tests.test_milestone_branch.AdoptTest": {
-      "samples": 28,
-      "seconds": 3.124,
+      "samples": 30,
+      "seconds": 2.925,
       "tests": 6
     },
     "tests.test_milestone_branch.BindTest": {
-      "samples": 28,
-      "seconds": 1.165,
+      "samples": 30,
+      "seconds": 0.915,
       "tests": 7
     },
     "tests.test_milestone_branch.CrashTest": {
-      "samples": 28,
-      "seconds": 1.502,
+      "samples": 30,
+      "seconds": 1.475,
       "tests": 6
     },
     "tests.test_milestone_branch.DiscardedPlanTest": {
-      "samples": 28,
-      "seconds": 2.936,
+      "samples": 30,
+      "seconds": 2.799,
       "tests": 9
     },
     "tests.test_milestone_branch.InactiveTest": {
-      "samples": 28,
-      "seconds": 0.206,
+      "samples": 30,
+      "seconds": 0.202,
       "tests": 2
     },
     "tests.test_milestone_branch.LaterPreflightTest": {
-      "samples": 28,
-      "seconds": 3.007,
+      "samples": 30,
+      "seconds": 2.701,
       "tests": 8
     },
     "tests.test_milestone_branch.PlannedExitsTest": {
-      "samples": 28,
-      "seconds": 2.316,
+      "samples": 30,
+      "seconds": 1.911,
       "tests": 6
     },
     "tests.test_milestone_branch.StateModelTest": {
-      "samples": 28,
-      "seconds": 1.097,
+      "samples": 30,
+      "seconds": 0.828,
       "tests": 5
     },
     "tests.test_milestone_branch.TrunkBlockTest": {
-      "samples": 28,
-      "seconds": 2.073,
+      "samples": 30,
+      "seconds": 1.841,
       "tests": 3
     },
     "tests.test_milestone_branch.TrunkStartTest": {
-      "samples": 28,
-      "seconds": 0.697,
+      "samples": 30,
+      "seconds": 0.762,
       "tests": 4
     },
     "tests.test_no_rewrite_invariants.ControllerScanTest": {
-      "samples": 22,
-      "seconds": 1.548,
+      "samples": 24,
+      "seconds": 2.167,
+      "tests": 4
+    },
+    "tests.test_no_rewrite_invariants.LandingDeleteTest": {
+      "samples": 2,
+      "seconds": 0.017,
       "tests": 4
     },
     "tests.test_no_rewrite_invariants.MergeShapeTest": {
-      "samples": 22,
-      "seconds": 0.006,
+      "samples": 24,
+      "seconds": 0.004,
       "tests": 7
     },
     "tests.test_no_rewrite_invariants.PlantedFixtureTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.001,
       "tests": 2
     },
     "tests.test_notifications_wiring.BranchGateIdentityTest": {
-      "samples": 10,
+      "samples": 12,
       "seconds": 0.001,
       "tests": 7
     },
     "tests.test_notifications_wiring.BranchWiringTest": {
-      "samples": 10,
-      "seconds": 31.682,
-      "tests": 13
+      "samples": 2,
+      "seconds": 37.663,
+      "tests": 14
+    },
+    "tests.test_notifications_wiring.ChecksWaitUpgradeTest": {
+      "samples": 2,
+      "seconds": 2.01,
+      "tests": 4
     },
     "tests.test_notifications_wiring.DeriveJobEventTest": {
-      "samples": 2,
-      "seconds": 0.002,
+      "samples": 4,
+      "seconds": 0.001,
       "tests": 9
     },
     "tests.test_notifications_wiring.FinishedJobWiringTest": {
-      "samples": 10,
-      "seconds": 3.07,
+      "samples": 12,
+      "seconds": 2.961,
       "tests": 4
     },
     "tests.test_notifications_wiring.GateClassificationTest": {
-      "samples": 10,
-      "seconds": 0.0,
-      "tests": 4
+      "samples": 2,
+      "seconds": 0.001,
+      "tests": 7
     },
     "tests.test_notifications_wiring.GateStreakTest": {
-      "samples": 10,
-      "seconds": 0.016,
+      "samples": 12,
+      "seconds": 0.011,
       "tests": 4
     },
     "tests.test_notifications_wiring.NoSideEffectTest": {
-      "samples": 10,
-      "seconds": 4.345,
+      "samples": 12,
+      "seconds": 4.104,
       "tests": 1
     },
     "tests.test_notifications_wiring.ObservationTest": {
-      "samples": 10,
-      "seconds": 0.656,
+      "samples": 12,
+      "seconds": 0.564,
       "tests": 2
     },
+    "tests.test_notifications_wiring.OrchestratorStopDeriveTest": {
+      "samples": 2,
+      "seconds": 0.001,
+      "tests": 5
+    },
     "tests.test_notifications_wiring.PrMergedTest": {
-      "samples": 10,
+      "samples": 12,
       "seconds": 0.0,
       "tests": 2
     },
     "tests.test_notifications_wiring.RecoveryTest": {
-      "samples": 10,
-      "seconds": 7.076,
+      "samples": 12,
+      "seconds": 7.158,
       "tests": 10
     },
     "tests.test_notifications_wiring.RefusalRepositoryTest": {
-      "samples": 10,
-      "seconds": 0.506,
+      "samples": 12,
+      "seconds": 0.52,
       "tests": 1
     },
+    "tests.test_notifications_wiring.ReviewWaitDeriveTest": {
+      "samples": 2,
+      "seconds": 0.002,
+      "tests": 6
+    },
     "tests.test_notifications_wiring.RunRecordWiringTest": {
-      "samples": 10,
-      "seconds": 2.515,
+      "samples": 12,
+      "seconds": 2.513,
       "tests": 5
     },
     "tests.test_notifications_wiring.RunsTextTest": {
-      "samples": 10,
+      "samples": 12,
       "seconds": 0.0,
       "tests": 1
     },
+    "tests.test_notifications_wiring.SupersededNoticeTest": {
+      "samples": 2,
+      "seconds": 3.039,
+      "tests": 11
+    },
+    "tests.test_notifications_wiring.TesterStopSupersededNoticeTest": {
+      "samples": 2,
+      "seconds": 3.027,
+      "tests": 11
+    },
     "tests.test_notifications_wiring.UsageNotificationHookTest": {
-      "samples": 10,
-      "seconds": 2.03,
+      "samples": 12,
+      "seconds": 2.019,
       "tests": 4
     },
     "tests.test_notifications_wiring.UsageOccurrenceTest": {
-      "samples": 10,
-      "seconds": 0.077,
+      "samples": 12,
+      "seconds": 0.076,
       "tests": 9
     },
     "tests.test_notifications_wiring.UsageReleaseWiringTest": {
-      "samples": 10,
-      "seconds": 0.552,
+      "samples": 12,
+      "seconds": 0.54,
       "tests": 1
     },
     "tests.test_notifications_wiring.UsageRenewWiringTest": {
-      "samples": 10,
-      "seconds": 0.572,
+      "samples": 12,
+      "seconds": 0.557,
       "tests": 1
     },
     "tests.test_notifications_wiring.UsageShowWiringTest": {
-      "samples": 10,
-      "seconds": 1.073,
+      "samples": 12,
+      "seconds": 1.071,
       "tests": 2
     },
     "tests.test_notify.BodyTest": {
-      "samples": 10,
+      "samples": 12,
       "seconds": 0.001,
       "tests": 7
     },
     "tests.test_notify.CredentialsTest": {
-      "samples": 10,
-      "seconds": 0.005,
+      "samples": 12,
+      "seconds": 0.003,
       "tests": 7
     },
     "tests.test_notify.InertAndRunLogTest": {
-      "samples": 10,
-      "seconds": 2.01,
+      "samples": 12,
+      "seconds": 2.008,
       "tests": 4
     },
     "tests.test_notify.InstalledNotifierTest": {
-      "samples": 10,
-      "seconds": 0.503,
+      "samples": 12,
+      "seconds": 0.502,
       "tests": 1
     },
     "tests.test_notify.IsolationGuardTest": {
-      "samples": 10,
-      "seconds": 0.259,
+      "samples": 12,
+      "seconds": 0.206,
       "tests": 2
     },
     "tests.test_notify.ResolutionTest": {
-      "samples": 10,
+      "samples": 2,
       "seconds": 0.001,
-      "tests": 4
+      "tests": 6
     },
     "tests.test_notify.SenderTest": {
-      "samples": 10,
-      "seconds": 16.282,
+      "samples": 12,
+      "seconds": 16.171,
       "tests": 20
     },
     "tests.test_observation_equivalence.AttachDetachTest": {
-      "samples": 28,
-      "seconds": 5.011,
+      "samples": 30,
+      "seconds": 5.695,
       "tests": 2
     },
     "tests.test_observation_equivalence.EquivalenceTest": {
-      "samples": 28,
-      "seconds": 16.228,
+      "samples": 30,
+      "seconds": 14.546,
       "tests": 2
     },
     "tests.test_observation_equivalence.FinalResultTest": {
-      "samples": 28,
-      "seconds": 2.842,
+      "samples": 30,
+      "seconds": 2.533,
       "tests": 1
     },
     "tests.test_observation_equivalence.FollowReadOnlyTest": {
-      "samples": 28,
-      "seconds": 3.818,
+      "samples": 30,
+      "seconds": 3.547,
       "tests": 2
     },
     "tests.test_observation_equivalence.RendererFailureTest": {
-      "samples": 28,
-      "seconds": 8.115,
+      "samples": 30,
+      "seconds": 9.761,
       "tests": 3
     },
     "tests.test_observe.AppendJsonlTest": {
-      "samples": 28,
-      "seconds": 0.003,
+      "samples": 30,
+      "seconds": 0.002,
       "tests": 4
     },
     "tests.test_observe.BestEffortTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.005,
       "tests": 5
     },
     "tests.test_observe.ControllerLivenessTest": {
-      "samples": 28,
-      "seconds": 0.09,
+      "samples": 30,
+      "seconds": 0.073,
       "tests": 6
     },
     "tests.test_observe.FdSinkTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 3
     },
     "tests.test_observe.FollowJobTest": {
-      "samples": 28,
-      "seconds": 0.445,
+      "samples": 30,
+      "seconds": 0.437,
       "tests": 3
     },
     "tests.test_observe.FollowRunTest": {
-      "samples": 28,
-      "seconds": 0.354,
+      "samples": 30,
+      "seconds": 0.326,
       "tests": 9
     },
     "tests.test_observe.FollowSettingsTest": {
-      "samples": 22,
-      "seconds": 0.436,
+      "samples": 24,
+      "seconds": 0.438,
       "tests": 2
     },
     "tests.test_observe.HeartbeatTest": {
-      "samples": 28,
-      "seconds": 0.866,
+      "samples": 30,
+      "seconds": 0.862,
       "tests": 2
     },
     "tests.test_observe.JobActivityTest": {
-      "samples": 22,
-      "seconds": 0.386,
+      "samples": 24,
+      "seconds": 0.316,
       "tests": 15
     },
     "tests.test_observe.NormaliseRenderTest": {
-      "samples": 18,
-      "seconds": 0.003,
+      "samples": 20,
+      "seconds": 0.002,
       "tests": 15
     },
     "tests.test_observe.ParseAtTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.001,
       "tests": 3
     },
     "tests.test_observe.PluralTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 1
     },
     "tests.test_observe.StatusJobSummaryTest": {
-      "samples": 22,
-      "seconds": 0.001,
+      "samples": 24,
+      "seconds": 0.002,
       "tests": 7
     },
     "tests.test_observe.StreamDiagnosisPresentationTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 3
     },
     "tests.test_observe.TailTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.001,
       "tests": 3
     },
     "tests.test_observe.TrackedFollowTest": {
-      "samples": 28,
-      "seconds": 1.362,
+      "samples": 30,
+      "seconds": 1.304,
       "tests": 6
     },
     "tests.test_observe.TrackedRenderingTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 3
     },
     "tests.test_package_structure.DependencyGraphTest": {
-      "samples": 28,
-      "seconds": 0.609,
+      "samples": 30,
+      "seconds": 0.598,
       "tests": 2
     },
     "tests.test_package_structure.EagerLoadTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 2
     },
     "tests.test_package_structure.NoHotReloadOrUserOverrideTest": {
-      "samples": 28,
-      "seconds": 0.619,
+      "samples": 30,
+      "seconds": 0.61,
       "tests": 2
     },
     "tests.test_package_structure.NoLateResourceReadTest": {
-      "samples": 28,
-      "seconds": 1.581,
+      "samples": 30,
+      "seconds": 1.534,
       "tests": 2
     },
     "tests.test_package_structure.RaisedByInvariantTest": {
-      "samples": 28,
-      "seconds": 0.565,
+      "samples": 30,
+      "seconds": 0.564,
       "tests": 4
     },
     "tests.test_package_structure.SubpackageListedTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.001,
       "tests": 1
     },
@@ -2016,453 +2971,543 @@
       "tests": 1
     },
     "tests.test_plan_document_consistency.AdrExitCodeConstantsInstantiationTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.001,
       "tests": 6
     },
     "tests.test_plan_document_consistency.CommandLineHalfInstantiationTest": {
-      "samples": 28,
-      "seconds": 0.012,
+      "samples": 30,
+      "seconds": 0.009,
       "tests": 4
     },
     "tests.test_plan_document_consistency.ComplexityHalfInstantiationTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 4
     },
     "tests.test_plan_document_consistency.ExitCodeHalfInstantiationTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 2
     },
     "tests.test_plan_document_consistency.Gen1ExitCodeRowInstantiationTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 7
     },
     "tests.test_plan_document_consistency.LiveDocumentTest": {
-      "samples": 28,
-      "seconds": 0.245,
+      "samples": 30,
+      "seconds": 0.2,
       "tests": 7
     },
     "tests.test_plan_document_consistency.OperatorDocumentCommandLineTest": {
-      "samples": 22,
-      "seconds": 0.064,
+      "samples": 24,
+      "seconds": 0.076,
       "tests": 6
     },
     "tests.test_plan_document_consistency.ReadmeValidateJobTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.001,
       "tests": 2
     },
     "tests.test_plan_document_consistency.RoundCountHalfInstantiationTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 3
     },
     "tests.test_pr_report.DispatchTest": {
-      "samples": 2,
-      "seconds": 106.38,
+      "samples": 4,
+      "seconds": 62.965,
       "tests": 3
     },
     "tests.test_pr_report.PurePartsTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.001,
       "tests": 5
     },
     "tests.test_pr_report.ReportNotificationTest": {
       "samples": 2,
-      "seconds": 96.065,
-      "tests": 6
+      "seconds": 123.44,
+      "tests": 7
+    },
+    "tests.test_pr_report.ReportRecordTest": {
+      "samples": 1,
+      "seconds": 34.227,
+      "tests": 3
+    },
+    "tests.test_pr_report.ReportRefusalTest": {
+      "samples": 1,
+      "seconds": 32.677,
+      "tests": 3
+    },
+    "tests.test_pr_report.ReportScopeTest": {
+      "samples": 1,
+      "seconds": 36.339,
+      "tests": 3
     },
     "tests.test_pr_report.ReporterExecutableTest": {
-      "samples": 2,
-      "seconds": 0.039,
+      "samples": 4,
+      "seconds": 0.034,
       "tests": 6
     },
     "tests.test_pr_report.VendoredAgreementTest": {
-      "samples": 2,
-      "seconds": 44.215,
+      "samples": 4,
+      "seconds": 44.293,
+      "tests": 3
+    },
+    "tests.test_pr_report.WaitBudgetTest": {
+      "samples": 1,
+      "seconds": 48.651,
+      "tests": 4
+    },
+    "tests.test_pr_report.WaitReportsTest": {
+      "samples": 1,
+      "seconds": 44.035,
       "tests": 3
     },
     "tests.test_protocol.EnvelopeHandlingTest": {
-      "samples": 22,
-      "seconds": 1.405,
+      "samples": 24,
+      "seconds": 1.132,
       "tests": 16
     },
     "tests.test_protocol.IsolationTest": {
-      "samples": 22,
-      "seconds": 0.873,
+      "samples": 24,
+      "seconds": 0.877,
       "tests": 4
     },
     "tests.test_protocol.NoGlobalGitIdentityTest": {
-      "samples": 22,
-      "seconds": 0.36,
+      "samples": 24,
+      "seconds": 0.398,
       "tests": 1
     },
     "tests.test_protocol.QualifyingKeysTest": {
-      "samples": 22,
+      "samples": 24,
       "seconds": 0.0,
       "tests": 2
     },
     "tests.test_protocol.RealScriptsTest": {
-      "samples": 22,
-      "seconds": 2.956,
+      "samples": 24,
+      "seconds": 2.411,
       "tests": 5
     },
     "tests.test_protocol.RecordExternalResultTest": {
-      "samples": 2,
-      "seconds": 0.859,
+      "samples": 4,
+      "seconds": 0.693,
       "tests": 11
     },
     "tests.test_protocol.ScriptSetTest": {
-      "samples": 22,
-      "seconds": 0.748,
+      "samples": 24,
+      "seconds": 0.708,
       "tests": 11
     },
     "tests.test_protocol.TypedOperationsTest": {
-      "samples": 22,
-      "seconds": 0.266,
+      "samples": 24,
+      "seconds": 0.235,
       "tests": 4
     },
     "tests.test_protocol_decision.ActionTableTest": {
-      "samples": 2,
-      "seconds": 0.983,
+      "samples": 4,
+      "seconds": 0.993,
       "tests": 17
     },
     "tests.test_protocol_decision.CommittedStateGateTest": {
-      "samples": 22,
-      "seconds": 0.187,
+      "samples": 24,
+      "seconds": 0.247,
       "tests": 6
     },
     "tests.test_protocol_decision.DispositionTest": {
-      "samples": 2,
-      "seconds": 0.005,
+      "samples": 4,
+      "seconds": 0.004,
       "tests": 12
     },
     "tests.test_protocol_decision.InvocationRenderingTest": {
-      "samples": 2,
-      "seconds": 0.003,
+      "samples": 4,
+      "seconds": 0.002,
       "tests": 7
     },
     "tests.test_protocol_decision.JobWiringTest": {
-      "samples": 2,
-      "seconds": 19.558,
+      "samples": 4,
+      "seconds": 15.395,
       "tests": 10
     },
     "tests.test_protocol_decision.StaticTest": {
-      "samples": 22,
-      "seconds": 0.017,
+      "samples": 24,
+      "seconds": 0.012,
       "tests": 1
     },
     "tests.test_protocol_decision.ValidationTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.002,
       "tests": 4
     },
     "tests.test_protocol_decision.WarnAdvisoryTest": {
-      "samples": 2,
-      "seconds": 1.738,
+      "samples": 4,
+      "seconds": 1.364,
       "tests": 11
     },
     "tests.test_protocol_equivalence.EquivalenceTest": {
-      "samples": 22,
-      "seconds": 38.483,
+      "samples": 24,
+      "seconds": 42.444,
       "tests": 12
     },
     "tests.test_protocol_equivalence.NonObservableNotesTest": {
-      "samples": 22,
-      "seconds": 1.329,
+      "samples": 24,
+      "seconds": 1.265,
       "tests": 2
     },
     "tests.test_protocol_job.AFunctionalRecordIsResumableTest": {
-      "samples": 2,
-      "seconds": 43.879,
+      "samples": 4,
+      "seconds": 44.243,
       "tests": 1
     },
+    "tests.test_protocol_job.BlockedDispositionProductionPathTest": {
+      "samples": 2,
+      "seconds": 6.607,
+      "tests": 1
+    },
+    "tests.test_protocol_job.ControllerCodedGateOverARow14DecisionTest": {
+      "samples": 2,
+      "seconds": 34.698,
+      "tests": 4
+    },
     "tests.test_protocol_job.CurrencyCheckTest": {
-      "samples": 22,
-      "seconds": 22.426,
+      "samples": 24,
+      "seconds": 17.44,
       "tests": 9
     },
     "tests.test_protocol_job.ExecutedBytesBindingTest": {
-      "samples": 22,
-      "seconds": 3.375,
+      "samples": 24,
+      "seconds": 3.368,
       "tests": 2
     },
     "tests.test_protocol_job.IdentityRecheckTest": {
-      "samples": 22,
-      "seconds": 11.162,
+      "samples": 24,
+      "seconds": 9.197,
       "tests": 5
     },
     "tests.test_protocol_job.LoopGuardTest": {
-      "samples": 22,
-      "seconds": 11.894,
+      "samples": 24,
+      "seconds": 9.894,
       "tests": 13
     },
+    "tests.test_protocol_job.OutcomesEvidenceTest": {
+      "samples": 1,
+      "seconds": 81.594,
+      "tests": 4
+    },
+    "tests.test_protocol_job.OutcomesFailureTest": {
+      "samples": 1,
+      "seconds": 109.179,
+      "tests": 4
+    },
     "tests.test_protocol_job.RecordBlockTest": {
-      "samples": 22,
-      "seconds": 3.126,
+      "samples": 24,
+      "seconds": 2.396,
       "tests": 1
     },
     "tests.test_protocol_job.ReviewCapGateTest": {
-      "samples": 2,
-      "seconds": 13.736,
+      "samples": 4,
+      "seconds": 12.055,
       "tests": 12
     },
-    "tests.test_protocol_job.ThePreLaunchStopsTest": {
+    "tests.test_protocol_job.ReviewWaitLiveUpgradeTest": {
       "samples": 2,
-      "seconds": 157.292,
+      "seconds": 47.256,
+      "tests": 3
+    },
+    "tests.test_protocol_job.ReviewWaitProductionPathTest": {
+      "samples": 2,
+      "seconds": 50.787,
+      "tests": 3
+    },
+    "tests.test_protocol_job.TheFaultStopsRecordTest": {
+      "samples": 1,
+      "seconds": 50.19,
+      "tests": 6
+    },
+    "tests.test_protocol_job.TheFaultStopsSandboxTest": {
+      "samples": 1,
+      "seconds": 88.008,
+      "tests": 5
+    },
+    "tests.test_protocol_job.ThePreLaunchStopsTest": {
+      "samples": 4,
+      "seconds": 128.595,
       "tests": 6
     },
     "tests.test_protocol_job.TheRowThirtySevenNoteTest": {
-      "samples": 2,
-      "seconds": 39.699,
+      "samples": 4,
+      "seconds": 39.305,
       "tests": 1
     },
     "tests.test_protocol_lifecycle.GoldensUnchangedTest": {
-      "samples": 22,
-      "seconds": 46.231,
+      "samples": 24,
+      "seconds": 48.344,
       "tests": 2
     },
     "tests.test_protocol_lifecycle.InspectRepositoryBlockTest": {
-      "samples": 22,
-      "seconds": 2.59,
+      "samples": 24,
+      "seconds": 2.177,
       "tests": 1
     },
     "tests.test_protocol_lifecycle.LegacyModeLifecycleTest": {
-      "samples": 22,
-      "seconds": 6.735,
+      "samples": 24,
+      "seconds": 6.102,
       "tests": 1
     },
+    "tests.test_protocol_lifecycle.PrDefectLoopLifecycleReopenTest": {
+      "samples": 1,
+      "seconds": 90.665,
+      "tests": 2
+    },
+    "tests.test_protocol_lifecycle.PrDefectLoopLifecycleReportTest": {
+      "samples": 1,
+      "seconds": 117.387,
+      "tests": 3
+    },
+    "tests.test_protocol_lifecycle.PrDefectLoopLifecycleStopTest": {
+      "samples": 1,
+      "seconds": 138.193,
+      "tests": 4
+    },
     "tests.test_protocol_lifecycle.ProtocolModeLifecycleTest": {
-      "samples": 22,
-      "seconds": 23.688,
+      "samples": 24,
+      "seconds": 20.651,
       "tests": 1
     },
     "tests.test_protocol_lifecycle.ReleaseMovedBetweenStepsTest": {
-      "samples": 22,
-      "seconds": 21.752,
+      "samples": 24,
+      "seconds": 23.444,
       "tests": 1
     },
+    "tests.test_protocol_lifecycle.SatisfyGateLifecycleApprovalTest": {
+      "samples": 1,
+      "seconds": 80.304,
+      "tests": 3
+    },
+    "tests.test_protocol_lifecycle.SatisfyGateLifecycleRefusalTest": {
+      "samples": 1,
+      "seconds": 95.654,
+      "tests": 5
+    },
     "tests.test_protocol_outcome.CheckpointCompletionTest": {
-      "samples": 22,
-      "seconds": 20.151,
+      "samples": 24,
+      "seconds": 18.49,
       "tests": 4
     },
     "tests.test_protocol_outcome.ClassToResultTest": {
-      "samples": 22,
-      "seconds": 27.208,
+      "samples": 24,
+      "seconds": 23.709,
       "tests": 7
     },
     "tests.test_protocol_outcome.CliResumeDriftTest": {
-      "samples": 22,
-      "seconds": 4.671,
+      "samples": 24,
+      "seconds": 4.635,
       "tests": 2
     },
     "tests.test_protocol_outcome.DriftedResumeTest": {
-      "samples": 22,
-      "seconds": 9.493,
+      "samples": 24,
+      "seconds": 7.935,
       "tests": 5
     },
     "tests.test_protocol_outcome.InvalidAndFailingTest": {
-      "samples": 22,
-      "seconds": 10.974,
+      "samples": 24,
+      "seconds": 11.504,
       "tests": 4
     },
     "tests.test_protocol_outcome.ReleaseIdentityTest": {
-      "samples": 22,
-      "seconds": 10.574,
+      "samples": 24,
+      "seconds": 8.554,
       "tests": 3
     },
     "tests.test_protocol_outcome.ResumeTest": {
-      "samples": 22,
-      "seconds": 24.362,
+      "samples": 24,
+      "seconds": 19.282,
       "tests": 6
     },
     "tests.test_protocol_outcome.UsageLimitTest": {
-      "samples": 2,
-      "seconds": 83.295,
+      "samples": 4,
+      "seconds": 64.742,
       "tests": 14
     },
     "tests.test_protocol_schema.EnumRulesTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.001,
       "tests": 7
     },
     "tests.test_protocol_schema.SchemaLoadTest": {
-      "samples": 22,
+      "samples": 24,
       "seconds": 0.0,
       "tests": 5
     },
     "tests.test_protocol_schema.ValidationTest": {
-      "samples": 22,
+      "samples": 24,
       "seconds": 0.002,
       "tests": 10
     },
     "tests.test_protocol_schema.VendoredSchemaTest": {
-      "samples": 22,
+      "samples": 24,
       "seconds": 0.003,
       "tests": 6
     },
     "tests.test_pull_request_lifecycle.AutoMergeTest": {
-      "samples": 2,
-      "seconds": 74.367,
+      "samples": 4,
+      "seconds": 71.219,
       "tests": 32
     },
     "tests.test_pull_request_lifecycle.AutoMergeUnchangedTest": {
-      "samples": 22,
-      "seconds": 1.805,
+      "samples": 24,
+      "seconds": 1.55,
       "tests": 1
     },
     "tests.test_pull_request_lifecycle.CloseOutFromTrunkTest": {
-      "samples": 28,
-      "seconds": 5.163,
+      "samples": 30,
+      "seconds": 5.129,
       "tests": 4
     },
     "tests.test_pull_request_lifecycle.CloseOutTest": {
-      "samples": 28,
-      "seconds": 9.624,
+      "samples": 30,
+      "seconds": 8.08,
       "tests": 7
     },
     "tests.test_pull_request_lifecycle.CreationTest": {
-      "samples": 28,
-      "seconds": 7.726,
+      "samples": 30,
+      "seconds": 7.273,
       "tests": 9
     },
     "tests.test_pull_request_lifecycle.GateTextTest": {
-      "samples": 22,
+      "samples": 24,
       "seconds": 0.0,
       "tests": 3
     },
     "tests.test_pull_request_lifecycle.MatrixShapeTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 4
     },
     "tests.test_pull_request_lifecycle.MergeModeSquashTest": {
-      "samples": 22,
-      "seconds": 4.664,
+      "samples": 24,
+      "seconds": 3.991,
       "tests": 2
     },
     "tests.test_pull_request_lifecycle.MergeModeUnchangedTest": {
-      "samples": 22,
-      "seconds": 1.53,
+      "samples": 24,
+      "seconds": 1.324,
       "tests": 2
     },
     "tests.test_pull_request_lifecycle.OutcomeMatrixTest": {
-      "samples": 22,
-      "seconds": 24.58,
+      "samples": 24,
+      "seconds": 22.872,
       "tests": 38
     },
     "tests.test_pull_request_lifecycle.PlanTitleTest": {
-      "samples": 22,
+      "samples": 24,
       "seconds": 0.001,
       "tests": 2
     },
     "tests.test_pull_request_lifecycle.PrLessCloseOutTest": {
-      "samples": 28,
-      "seconds": 5.207,
+      "samples": 30,
+      "seconds": 4.747,
       "tests": 5
     },
     "tests.test_pull_request_lifecycle.ReadinessNotWaitableTest": {
-      "samples": 22,
-      "seconds": 2.01,
+      "samples": 24,
+      "seconds": 1.727,
       "tests": 2
     },
     "tests.test_pull_request_lifecycle.ReadinessTest": {
-      "samples": 28,
-      "seconds": 11.016,
+      "samples": 30,
+      "seconds": 9.175,
       "tests": 9
     },
     "tests.test_pull_request_lifecycle.RefusalExitTest": {
-      "samples": 28,
-      "seconds": 10.143,
+      "samples": 30,
+      "seconds": 9.714,
       "tests": 13
     },
     "tests.test_pull_request_lifecycle.ReleaseWaitSkippedTest": {
-      "samples": 22,
-      "seconds": 2.649,
+      "samples": 24,
+      "seconds": 2.284,
       "tests": 2
     },
     "tests.test_pull_request_lifecycle.ReleaseWaitTest": {
-      "samples": 22,
-      "seconds": 27.941,
+      "samples": 24,
+      "seconds": 25.276,
       "tests": 14
     },
     "tests.test_pull_request_lifecycle.ReleaseWaitUnchangedTest": {
-      "samples": 22,
-      "seconds": 1.82,
+      "samples": 24,
+      "seconds": 1.972,
       "tests": 1
     },
     "tests.test_pull_request_lifecycle.SquashCloseOutTest": {
-      "samples": 22,
-      "seconds": 21.518,
+      "samples": 24,
+      "seconds": 20.243,
       "tests": 11
     },
     "tests.test_pull_request_lifecycle.SquashReadinessTest": {
-      "samples": 22,
-      "seconds": 7.474,
+      "samples": 24,
+      "seconds": 6.488,
       "tests": 7
     },
     "tests.test_pull_request_lifecycle.SquashReleaseNotesTest": {
-      "samples": 22,
-      "seconds": 20.074,
+      "samples": 24,
+      "seconds": 19.465,
       "tests": 9
     },
     "tests.test_pull_request_lifecycle.SquashTitleTest": {
-      "samples": 22,
-      "seconds": 8.516,
+      "samples": 24,
+      "seconds": 7.95,
       "tests": 7
     },
     "tests.test_pull_request_lifecycle.SupersededReleaseTest": {
-      "samples": 22,
-      "seconds": 26.502,
+      "samples": 24,
+      "seconds": 25.669,
       "tests": 7
     },
     "tests.test_pull_request_lifecycle.VerifiedSquashTest": {
-      "samples": 22,
-      "seconds": 1.066,
+      "samples": 24,
+      "seconds": 0.914,
       "tests": 12
     },
     "tests.test_pull_request_lifecycle.WaitingPreflightTest": {
-      "samples": 22,
-      "seconds": 13.265,
+      "samples": 24,
+      "seconds": 14.258,
       "tests": 8
     },
     "tests.test_release_notes.LineRuleTest": {
-      "samples": 22,
+      "samples": 24,
       "seconds": 0.0,
       "tests": 5
     },
     "tests.test_release_notes.NotesBlockToolTest": {
-      "samples": 22,
-      "seconds": 0.021,
+      "samples": 24,
+      "seconds": 0.017,
       "tests": 2
     },
     "tests.test_release_notes.ParseMessageTest": {
-      "samples": 22,
+      "samples": 24,
       "seconds": 0.001,
       "tests": 9
     },
     "tests.test_release_notes.ResolveTest": {
-      "samples": 22,
+      "samples": 24,
       "seconds": 0.001,
       "tests": 4
     },
     "tests.test_release_notes.SectionTest": {
-      "samples": 22,
+      "samples": 24,
       "seconds": 0.0,
       "tests": 3
     },
     "tests.test_release_notes.TrailerRuleTest": {
-      "samples": 22,
-      "seconds": 0.074,
+      "samples": 24,
+      "seconds": 0.081,
       "tests": 6
     },
     "tests.test_release_tools.CheckTitleTest": {
-      "samples": 22,
-      "seconds": 0.589,
+      "samples": 24,
+      "seconds": 0.683,
       "tests": 5
     },
     "tests.test_release_tools.CheckedOutVersionTest": {
@@ -2471,18 +3516,18 @@
       "tests": 1
     },
     "tests.test_release_tools.ChecksumsTest": {
-      "samples": 28,
-      "seconds": 0.01,
+      "samples": 30,
+      "seconds": 0.007,
       "tests": 2
     },
     "tests.test_release_tools.ReleaseTransactionCliTest": {
-      "samples": 22,
-      "seconds": 1.99,
+      "samples": 24,
+      "seconds": 1.658,
       "tests": 5
     },
     "tests.test_release_tools.RetiredSubcommandsTest": {
-      "samples": 28,
-      "seconds": 0.006,
+      "samples": 30,
+      "seconds": 0.005,
       "tests": 2
     },
     "tests.test_release_tools.VerifyWheelTest": {
@@ -2491,883 +3536,1053 @@
       "tests": 16
     },
     "tests.test_release_tools.VersionCommandTest": {
-      "samples": 28,
-      "seconds": 0.331,
+      "samples": 30,
+      "seconds": 0.305,
       "tests": 4
     },
     "tests.test_release_txn": {
-      "samples": 22,
-      "seconds": 63.11,
+      "samples": 24,
+      "seconds": 54.574,
       "tests": 83
     },
     "tests.test_repo_policy.AutoMergePolicyTest": {
-      "samples": 22,
-      "seconds": 0.898,
+      "samples": 24,
+      "seconds": 0.786,
       "tests": 7
     },
     "tests.test_repo_policy.CommittedTreeReaderTest": {
-      "samples": 28,
-      "seconds": 0.367,
+      "samples": 30,
+      "seconds": 0.319,
       "tests": 9
     },
     "tests.test_repo_policy.ConventionalTriggerTest": {
-      "samples": 22,
-      "seconds": 0.644,
+      "samples": 24,
+      "seconds": 0.524,
       "tests": 7
     },
     "tests.test_repo_policy.LegacyPolicyMeaningTest": {
-      "samples": 22,
-      "seconds": 0.201,
+      "samples": 24,
+      "seconds": 0.169,
       "tests": 2
     },
     "tests.test_repo_policy.MergeMethodTest": {
-      "samples": 22,
-      "seconds": 0.312,
+      "samples": 24,
+      "seconds": 0.369,
       "tests": 2
     },
     "tests.test_repo_policy.ReadVersionUnderConventionalCommitTest": {
-      "samples": 22,
-      "seconds": 0.07,
+      "samples": 24,
+      "seconds": 0.063,
       "tests": 2
     },
     "tests.test_repo_policy.ReferencePolicyTest": {
-      "samples": 22,
-      "seconds": 0.104,
-      "tests": 5
-    },
-    "tests.test_repo_policy.ReleaseNotesPolicyTest": {
-      "samples": 22,
-      "seconds": 0.657,
-      "tests": 4
-    },
-    "tests.test_repo_policy.SwitchesTest": {
-      "samples": 28,
-      "seconds": 0.054,
-      "tests": 2
-    },
-    "tests.test_repo_policy.ValidationRefusalTest": {
-      "samples": 28,
-      "seconds": 1.535,
-      "tests": 26
-    },
-    "tests.test_resume.AbandonBeyondPreMilestoneRecordsTest": {
-      "samples": 28,
-      "seconds": 1.145,
-      "tests": 7
-    },
-    "tests.test_resume.AbandonWithAnOrphanedAnchorTest": {
-      "samples": 28,
-      "seconds": 0.594,
-      "tests": 1
-    },
-    "tests.test_resume.BaseVersionRecordShapeTest": {
-      "samples": 28,
-      "seconds": 0.025,
-      "tests": 1
-    },
-    "tests.test_resume.BootKeyedLivenessResumeTest": {
-      "samples": 28,
-      "seconds": 0.434,
-      "tests": 4
-    },
-    "tests.test_resume.BootstrapEndToEndInterruptionTest": {
-      "samples": 28,
-      "seconds": 0.415,
-      "tests": 1
-    },
-    "tests.test_resume.Case1UninterpretableTest": {
-      "samples": 28,
-      "seconds": 0.166,
-      "tests": 7
-    },
-    "tests.test_resume.Case2UnresolvableSubjectTest": {
-      "samples": 28,
-      "seconds": 0.115,
-      "tests": 5
-    },
-    "tests.test_resume.Case3WorkerOutcomeDisagreementTest": {
-      "samples": 28,
+      "samples": 24,
       "seconds": 0.12,
       "tests": 5
     },
+    "tests.test_repo_policy.ReleaseNotesPolicyTest": {
+      "samples": 24,
+      "seconds": 0.542,
+      "tests": 4
+    },
+    "tests.test_repo_policy.SwitchesTest": {
+      "samples": 30,
+      "seconds": 0.044,
+      "tests": 2
+    },
+    "tests.test_repo_policy.ValidationRefusalTest": {
+      "samples": 30,
+      "seconds": 1.708,
+      "tests": 26
+    },
+    "tests.test_resume.AbandonBeyondPreMilestoneRecordsTest": {
+      "samples": 30,
+      "seconds": 1.03,
+      "tests": 7
+    },
+    "tests.test_resume.AbandonWithAnOrphanedAnchorTest": {
+      "samples": 30,
+      "seconds": 0.522,
+      "tests": 1
+    },
+    "tests.test_resume.BaseVersionRecordShapeTest": {
+      "samples": 30,
+      "seconds": 0.037,
+      "tests": 1
+    },
+    "tests.test_resume.BootKeyedLivenessResumeTest": {
+      "samples": 30,
+      "seconds": 0.392,
+      "tests": 4
+    },
+    "tests.test_resume.BootstrapEndToEndInterruptionTest": {
+      "samples": 30,
+      "seconds": 0.371,
+      "tests": 1
+    },
+    "tests.test_resume.Case1UninterpretableTest": {
+      "samples": 30,
+      "seconds": 0.14,
+      "tests": 7
+    },
+    "tests.test_resume.Case2UnresolvableSubjectTest": {
+      "samples": 30,
+      "seconds": 0.107,
+      "tests": 5
+    },
+    "tests.test_resume.Case3WorkerOutcomeDisagreementTest": {
+      "samples": 30,
+      "seconds": 0.104,
+      "tests": 5
+    },
     "tests.test_resume.Case4DerivedFieldDisagreementTest": {
-      "samples": 28,
-      "seconds": 0.07,
+      "samples": 30,
+      "seconds": 0.104,
       "tests": 3
     },
     "tests.test_resume.CrossProcessEventSeqTest": {
-      "samples": 22,
-      "seconds": 2.519,
+      "samples": 24,
+      "seconds": 2.262,
       "tests": 2
     },
     "tests.test_resume.DrainDetachedReattachTest": {
-      "samples": 28,
-      "seconds": 6.849,
+      "samples": 30,
+      "seconds": 6.615,
       "tests": 2
     },
     "tests.test_resume.EndToEndInterruptionTest": {
-      "samples": 28,
-      "seconds": 0.415,
+      "samples": 30,
+      "seconds": 0.436,
       "tests": 1
     },
     "tests.test_resume.EndedSessionLossTest": {
-      "samples": 28,
-      "seconds": 1.394,
+      "samples": 30,
+      "seconds": 1.229,
       "tests": 1
     },
     "tests.test_resume.ImplementationStageResumeTest": {
-      "samples": 28,
-      "seconds": 2.819,
+      "samples": 30,
+      "seconds": 2.302,
       "tests": 5
     },
     "tests.test_resume.IncompleteLifecyclePairTest": {
-      "samples": 28,
-      "seconds": 20.866,
+      "samples": 30,
+      "seconds": 20.489,
       "tests": 4
     },
     "tests.test_resume.InterruptWhileWaitingTest": {
-      "samples": 28,
-      "seconds": 0.555,
+      "samples": 30,
+      "seconds": 0.615,
       "tests": 1
     },
     "tests.test_resume.NoKillAdviceAcrossBootsTest": {
-      "samples": 28,
-      "seconds": 0.06,
+      "samples": 30,
+      "seconds": 0.052,
       "tests": 1
     },
     "tests.test_resume.NonTerminalCoverageTest": {
-      "samples": 28,
-      "seconds": 0.238,
+      "samples": 30,
+      "seconds": 0.215,
       "tests": 2
     },
     "tests.test_resume.ObservationPathsNeverReadTest": {
-      "samples": 28,
-      "seconds": 0.046,
+      "samples": 30,
+      "seconds": 0.045,
       "tests": 1
     },
     "tests.test_resume.OrphanWorkerTest": {
-      "samples": 28,
-      "seconds": 0.626,
+      "samples": 30,
+      "seconds": 0.643,
       "tests": 1
     },
     "tests.test_resume.ParentGuardChildStepTest": {
-      "samples": 10,
-      "seconds": 6.075,
+      "samples": 12,
+      "seconds": 5.95,
       "tests": 2
     },
     "tests.test_resume.ParentGuardLostControllerTest": {
-      "samples": 10,
-      "seconds": 2.683,
+      "samples": 12,
+      "seconds": 2.594,
       "tests": 1
     },
     "tests.test_resume.PartialApplyPlanReviewResumeTest": {
-      "samples": 28,
-      "seconds": 0.11,
+      "samples": 30,
+      "seconds": 0.103,
       "tests": 4
     },
     "tests.test_resume.PlanBundlePostconditionResumeTest": {
-      "samples": 28,
-      "seconds": 0.641,
+      "samples": 30,
+      "seconds": 0.715,
       "tests": 5
     },
     "tests.test_resume.PlanBundlePostconditionRowSevenResumeTest": {
-      "samples": 28,
-      "seconds": 0.086,
+      "samples": 30,
+      "seconds": 0.077,
       "tests": 3
     },
     "tests.test_resume.PreMilestoneUnreconcilableRecordTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.273,
       "tests": 2
     },
     "tests.test_resume.ReattachAfterControllerLossTest": {
-      "samples": 28,
-      "seconds": 8.008,
+      "samples": 30,
+      "seconds": 8.68,
       "tests": 4
     },
     "tests.test_resume.RecognisedDaemonPresentationTest": {
-      "samples": 28,
-      "seconds": 0.952,
+      "samples": 30,
+      "seconds": 0.885,
       "tests": 1
     },
     "tests.test_resume.ReconcileCompletedTest": {
-      "samples": 28,
-      "seconds": 0.19,
+      "samples": 30,
+      "seconds": 0.166,
       "tests": 7
     },
     "tests.test_resume.ReconcileLaunchedTest": {
-      "samples": 28,
-      "seconds": 0.455,
+      "samples": 30,
+      "seconds": 0.5,
       "tests": 8
     },
     "tests.test_resume.ReconcilePlannedTest": {
-      "samples": 28,
-      "seconds": 0.026,
-      "tests": 1
-    },
-    "tests.test_resume.ReconciliationEventTest": {
-      "samples": 28,
-      "seconds": 0.191,
-      "tests": 6
-    },
-    "tests.test_resume.ReplayDeterminismTest": {
-      "samples": 28,
-      "seconds": 2.448,
-      "tests": 3
-    },
-    "tests.test_resume.ResumeLockScopeTest": {
-      "samples": 28,
-      "seconds": 0.028,
-      "tests": 1
-    },
-    "tests.test_resume.RowPredicateResumePathTest": {
-      "samples": 28,
-      "seconds": 0.112,
-      "tests": 4
-    },
-    "tests.test_resume.SettleWindowLossTest": {
-      "samples": 28,
-      "seconds": 16.181,
-      "tests": 4
-    },
-    "tests.test_resume.StartingRecordTest": {
-      "samples": 10,
-      "seconds": 2.006,
-      "tests": 2
-    },
-    "tests.test_resume.SupervisorLockScopeTest": {
-      "samples": 28,
-      "seconds": 4.053,
-      "tests": 2
-    },
-    "tests.test_resume.SupervisorProbeTest": {
-      "samples": 28,
-      "seconds": 0.781,
-      "tests": 3
-    },
-    "tests.test_resume.TargetScopingTest": {
-      "samples": 28,
-      "seconds": 0.043,
-      "tests": 1
-    },
-    "tests.test_resume.TerminalRecordsTest": {
-      "samples": 28,
-      "seconds": 0.029,
-      "tests": 1
-    },
-    "tests.test_resume.UnknownStatusRowTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.023,
       "tests": 1
     },
+    "tests.test_resume.ReconciliationEventTest": {
+      "samples": 30,
+      "seconds": 0.158,
+      "tests": 6
+    },
+    "tests.test_resume.ReplayDeterminismTest": {
+      "samples": 30,
+      "seconds": 2.456,
+      "tests": 3
+    },
+    "tests.test_resume.ResumeLockScopeTest": {
+      "samples": 30,
+      "seconds": 0.024,
+      "tests": 1
+    },
+    "tests.test_resume.RowPredicateResumePathTest": {
+      "samples": 30,
+      "seconds": 0.099,
+      "tests": 4
+    },
+    "tests.test_resume.SettleWindowLossTest": {
+      "samples": 30,
+      "seconds": 15.92,
+      "tests": 4
+    },
+    "tests.test_resume.StartingRecordTest": {
+      "samples": 12,
+      "seconds": 2.06,
+      "tests": 2
+    },
+    "tests.test_resume.SupervisorLockScopeTest": {
+      "samples": 30,
+      "seconds": 3.94,
+      "tests": 2
+    },
+    "tests.test_resume.SupervisorProbeTest": {
+      "samples": 30,
+      "seconds": 0.774,
+      "tests": 3
+    },
+    "tests.test_resume.TargetScopingTest": {
+      "samples": 30,
+      "seconds": 0.039,
+      "tests": 1
+    },
+    "tests.test_resume.TerminalRecordsTest": {
+      "samples": 30,
+      "seconds": 0.025,
+      "tests": 1
+    },
+    "tests.test_resume.UnknownStatusRowTest": {
+      "samples": 30,
+      "seconds": 0.02,
+      "tests": 1
+    },
     "tests.test_resume.UnreconcilableOrphanTest": {
-      "samples": 28,
-      "seconds": 0.486,
+      "samples": 30,
+      "seconds": 0.435,
       "tests": 1
     },
     "tests.test_resume.VerificationWorkflowFailureTest": {
-      "samples": 22,
-      "seconds": 18.905,
+      "samples": 24,
+      "seconds": 16.832,
       "tests": 11
     },
     "tests.test_resume.ZombieWorkerResumeTest": {
-      "samples": 28,
-      "seconds": 0.254,
+      "samples": 30,
+      "seconds": 0.223,
       "tests": 1
     },
-    "tests.test_review.BuildDirTest": {
+    "tests.test_review.BriefPromptTest": {
       "samples": 2,
+      "seconds": 0.001,
+      "tests": 5
+    },
+    "tests.test_review.BuildDirTest": {
+      "samples": 4,
       "seconds": 0.0,
       "tests": 1
     },
-    "tests.test_review.CopyTest": {
+    "tests.test_review.ChangesFileTest": {
       "samples": 2,
-      "seconds": 0.241,
+      "seconds": 0.005,
+      "tests": 3
+    },
+    "tests.test_review.CopyTest": {
+      "samples": 4,
+      "seconds": 0.206,
       "tests": 5
     },
     "tests.test_review.CredentialTest": {
-      "samples": 2,
-      "seconds": 0.02,
+      "samples": 4,
+      "seconds": 0.016,
       "tests": 4
     },
     "tests.test_review.EnvironmentAndHomeTest": {
-      "samples": 2,
-      "seconds": 0.056,
+      "samples": 4,
+      "seconds": 0.046,
       "tests": 20
     },
     "tests.test_review.FakeLaunchTest": {
       "samples": 2,
-      "seconds": 20.168,
-      "tests": 51
+      "seconds": 22.067,
+      "tests": 52
     },
     "tests.test_review.GuardTest": {
-      "samples": 2,
-      "seconds": 0.252,
+      "samples": 4,
+      "seconds": 0.355,
       "tests": 4
     },
     "tests.test_review.RegistryAndContractTest": {
       "samples": 2,
-      "seconds": 0.005,
-      "tests": 12
+      "seconds": 0.004,
+      "tests": 14
+    },
+    "tests.test_review.RoundPromptTest": {
+      "samples": 2,
+      "seconds": 0.001,
+      "tests": 8
     },
     "tests.test_review.RunnerTest": {
-      "samples": 2,
-      "seconds": 1.036,
+      "samples": 4,
+      "seconds": 1.03,
       "tests": 3
     },
     "tests.test_review.VerifyVerdictTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.001,
       "tests": 10
     },
     "tests.test_review_claude.ArgvAndBoundaryTest": {
-      "samples": 2,
-      "seconds": 0.006,
+      "samples": 4,
+      "seconds": 0.005,
       "tests": 8
     },
     "tests.test_review_claude.CaptureContractTest": {
-      "samples": 2,
-      "seconds": 0.003,
+      "samples": 4,
+      "seconds": 0.002,
       "tests": 6
     },
     "tests.test_review_claude.FakeContractTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.0,
       "tests": 2
     },
     "tests.test_review_claude.FakeLaunchTest": {
-      "samples": 2,
-      "seconds": 4.325,
+      "samples": 4,
+      "seconds": 4.318,
       "tests": 23
+    },
+    "tests.test_review_independence.MixedLaneJobTest": {
+      "samples": 2,
+      "seconds": 15.954,
+      "tests": 3
+    },
+    "tests.test_review_independence.MixedLaneTextTest": {
+      "samples": 2,
+      "seconds": 0.002,
+      "tests": 6
+    },
+    "tests.test_review_independence.UnchangedLanesTest": {
+      "samples": 2,
+      "seconds": 0.014,
+      "tests": 1
     },
     "tests.test_review_job.CliTest": {
       "samples": 2,
-      "seconds": 46.054,
-      "tests": 5
+      "seconds": 130.175,
+      "tests": 11
     },
     "tests.test_review_job.ExternalCapTest": {
       "samples": 2,
-      "seconds": 38.951,
-      "tests": 5
+      "seconds": 47.628,
+      "tests": 6
     },
     "tests.test_review_job.FakeCodexEndToEndTest": {
-      "samples": 2,
-      "seconds": 20.0,
+      "samples": 4,
+      "seconds": 15.729,
       "tests": 2
     },
     "tests.test_review_job.GateSelectionTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.0,
       "tests": 3
     },
     "tests.test_review_job.HappyPathTest": {
-      "samples": 2,
-      "seconds": 50.277,
+      "samples": 4,
+      "seconds": 40.621,
       "tests": 4
     },
-    "tests.test_review_job.NotificationTest": {
+    "tests.test_review_job.LinkedAgentsCopyTest": {
       "samples": 2,
-      "seconds": 16.456,
+      "seconds": 0.021,
+      "tests": 1
+    },
+    "tests.test_review_job.LinkedAgentsJobTest": {
+      "samples": 2,
+      "seconds": 5.993,
+      "tests": 1
+    },
+    "tests.test_review_job.NotificationTest": {
+      "samples": 4,
+      "seconds": 13.378,
       "tests": 2
     },
     "tests.test_review_job.OutcomeMappingTest": {
-      "samples": 2,
-      "seconds": 71.306,
+      "samples": 4,
+      "seconds": 57.747,
       "tests": 8
     },
     "tests.test_review_job.RecordShapeTest": {
+      "samples": 4,
+      "seconds": 31.52,
+      "tests": 4
+    },
+    "tests.test_review_job.ReplayTest": {
+      "samples": 4,
+      "seconds": 61.692,
+      "tests": 9
+    },
+    "tests.test_review_job.RetainedReadingsTest": {
+      "samples": 4,
+      "seconds": 26.582,
+      "tests": 5
+    },
+    "tests.test_review_job.RoundPromptWiringTest": {
+      "samples": 2,
+      "seconds": 47.096,
+      "tests": 5
+    },
+    "tests.test_review_job.UnconfiguredAndRefusalTest": {
+      "samples": 4,
+      "seconds": 16.296,
+      "tests": 3
+    },
+    "tests.test_review_job.UsageTest": {
+      "samples": 4,
+      "seconds": 57.421,
+      "tests": 9
+    },
+    "tests.test_review_job.VerdictEvidenceTest": {
+      "samples": 4,
+      "seconds": 63.819,
+      "tests": 6
+    },
+    "tests.test_review_job.VerdictFormatIngestTest": {
       "samples": 2,
       "seconds": 30.303,
       "tests": 4
     },
-    "tests.test_review_job.ReplayTest": {
-      "samples": 2,
-      "seconds": 78.83,
-      "tests": 9
-    },
-    "tests.test_review_job.RetainedReadingsTest": {
-      "samples": 2,
-      "seconds": 26.227,
-      "tests": 5
-    },
-    "tests.test_review_job.UnconfiguredAndRefusalTest": {
-      "samples": 2,
-      "seconds": 20.377,
-      "tests": 3
-    },
-    "tests.test_review_job.UsageTest": {
-      "samples": 2,
-      "seconds": 73.007,
-      "tests": 9
-    },
-    "tests.test_review_job.VerdictEvidenceTest": {
-      "samples": 2,
-      "seconds": 63.097,
-      "tests": 6
-    },
     "tests.test_review_mode.CapturesTest": {
-      "samples": 2,
-      "seconds": 1.055,
+      "samples": 4,
+      "seconds": 0.934,
       "tests": 1
     },
     "tests.test_review_mode.ChooseTest": {
-      "samples": 2,
-      "seconds": 0.004,
+      "samples": 4,
+      "seconds": 0.005,
       "tests": 9
     },
     "tests.test_review_mode.FamilyTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.0,
       "tests": 1
     },
     "tests.test_review_mode.FlagTest": {
-      "samples": 2,
-      "seconds": 0.04,
+      "samples": 4,
+      "seconds": 0.034,
       "tests": 2
     },
     "tests.test_review_mode.JobChoiceTest": {
       "samples": 2,
-      "seconds": 64.206,
-      "tests": 8
+      "seconds": 103.327,
+      "tests": 12
     },
     "tests.test_review_mode.SignalTest": {
-      "samples": 2,
-      "seconds": 0.002,
+      "samples": 4,
+      "seconds": 0.001,
       "tests": 10
     },
-    "tests.test_review_round_lifecycle.FunctionalFixLoopTest": {
+    "tests.test_review_mode.WorkerFamiliesTest": {
       "samples": 2,
-      "seconds": 26.385,
+      "seconds": 0.018,
+      "tests": 7
+    },
+    "tests.test_review_recorder.CausesTest": {
+      "samples": 2,
+      "seconds": 0.0,
+      "tests": 2
+    },
+    "tests.test_review_recorder.ImplementationStageTest": {
+      "samples": 2,
+      "seconds": 24.44,
+      "tests": 12
+    },
+    "tests.test_review_recorder.PlanStageTest": {
+      "samples": 2,
+      "seconds": 29.086,
+      "tests": 19
+    },
+    "tests.test_review_round_lifecycle.FunctionalFixLoopTest": {
+      "samples": 4,
+      "seconds": 25.459,
       "tests": 1
     },
     "tests.test_review_round_lifecycle.ImplementationLoopTest": {
-      "samples": 2,
-      "seconds": 37.93,
+      "samples": 4,
+      "seconds": 39.159,
       "tests": 2
     },
     "tests.test_review_round_lifecycle.PlanLoopTest": {
-      "samples": 2,
-      "seconds": 39.581,
+      "samples": 4,
+      "seconds": 40.732,
       "tests": 2
     },
     "tests.test_review_round_lifecycle.WorkflowGivenRoundTest": {
-      "samples": 2,
-      "seconds": 14.161,
+      "samples": 4,
+      "seconds": 16.662,
       "tests": 1
     },
     "tests.test_review_rounds.CapDecisionTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.0,
       "tests": 4
     },
     "tests.test_review_rounds.EffectiveCapsTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.0,
       "tests": 5
     },
     "tests.test_review_rounds.ImplementationCountTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.0,
       "tests": 6
     },
     "tests.test_review_rounds.PlanCountTest": {
-      "samples": 2,
-      "seconds": 0.001,
+      "samples": 4,
+      "seconds": 0.157,
       "tests": 8
     },
     "tests.test_review_rounds.ReadyPhasesPinTest": {
-      "samples": 2,
-      "seconds": 1.076,
+      "samples": 4,
+      "seconds": 0.888,
       "tests": 1
     },
     "tests.test_review_rounds.SplitCapDecisionTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.0,
       "tests": 5
     },
     "tests.test_review_rounds.SplitRoundsTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.0,
       "tests": 2
     },
     "tests.test_review_rounds.WorkflowIntegerTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.0,
       "tests": 3
     },
     "tests.test_review_same_provider.AdoptedPolicyLoopTest": {
-      "samples": 2,
-      "seconds": 64.401,
+      "samples": 4,
+      "seconds": 61.755,
       "tests": 2
     },
     "tests.test_review_same_provider.ClaudeRecoveryTest": {
-      "samples": 2,
-      "seconds": 32.76,
+      "samples": 4,
+      "seconds": 32.748,
       "tests": 4
     },
     "tests.test_review_same_provider.DefaultPolicyRefusalTest": {
-      "samples": 2,
-      "seconds": 9.32,
+      "samples": 4,
+      "seconds": 9.147,
       "tests": 1
     },
     "tests.test_review_same_provider.DistinctRefusalTest": {
-      "samples": 2,
-      "seconds": 88.741,
+      "samples": 4,
+      "seconds": 67.797,
       "tests": 7
     },
     "tests.test_review_same_provider.RemediesTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.0,
       "tests": 1
     },
     "tests.test_review_same_provider.ReportTest": {
       "samples": 2,
-      "seconds": 31.289,
-      "tests": 3
+      "seconds": 37.373,
+      "tests": 4
     },
     "tests.test_review_same_provider.RunTest": {
       "samples": 2,
-      "seconds": 51.493,
-      "tests": 6
+      "seconds": 59.902,
+      "tests": 7
     },
     "tests.test_review_same_provider.UsageTest": {
-      "samples": 2,
-      "seconds": 30.09,
+      "samples": 4,
+      "seconds": 24.17,
       "tests": 4
     },
-    "tests.test_routing.PrecedenceTest": {
-      "samples": 28,
-      "seconds": 0.001,
-      "tests": 5
+    "tests.test_route_select.FamilyRuleTest": {
+      "samples": 2,
+      "seconds": 0.0,
+      "tests": 1
     },
-    "tests.test_routing.RoleDerivationTest": {
-      "samples": 28,
+    "tests.test_route_select.ProviderTest": {
+      "samples": 2,
+      "seconds": 0.0,
+      "tests": 4
+    },
+    "tests.test_route_select.SelectTest": {
+      "samples": 2,
+      "seconds": 0.001,
+      "tests": 13
+    },
+    "tests.test_route_select_job.ChainStepTest": {
+      "samples": 2,
+      "seconds": 1.707,
+      "tests": 9
+    },
+    "tests.test_route_select_job.TelemetryDimensionsTest": {
+      "samples": 2,
+      "seconds": 0.0,
+      "tests": 3
+    },
+    "tests.test_routing.CheckRouteValuesTest": {
+      "samples": 2,
       "seconds": 0.0,
       "tests": 5
     },
-    "tests.test_routing.RoutingConfigTest": {
-      "samples": 28,
-      "seconds": 0.002,
+    "tests.test_routing.CodexTesterRouteTest": {
+      "samples": 2,
+      "seconds": 0.001,
       "tests": 4
     },
-    "tests.test_routing.RoutingTableTest": {
+    "tests.test_routing.HarnessFieldTest": {
       "samples": 2,
       "seconds": 0.001,
       "tests": 10
     },
+    "tests.test_routing.HarnessResolutionTest": {
+      "samples": 2,
+      "seconds": 0.001,
+      "tests": 5
+    },
+    "tests.test_routing.PrecedenceTest": {
+      "samples": 30,
+      "seconds": 0.001,
+      "tests": 5
+    },
+    "tests.test_routing.RoleDerivationTest": {
+      "samples": 30,
+      "seconds": 0.0,
+      "tests": 5
+    },
+    "tests.test_routing.RoutingConfigTest": {
+      "samples": 30,
+      "seconds": 0.002,
+      "tests": 4
+    },
+    "tests.test_routing.RoutingOptionsHarnessCheckTest": {
+      "samples": 2,
+      "seconds": 0.001,
+      "tests": 6
+    },
+    "tests.test_routing.RoutingTableTest": {
+      "samples": 4,
+      "seconds": 0.001,
+      "tests": 10
+    },
     "tests.test_routing.SingleAgentNotOverridableTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.001,
       "tests": 2
     },
     "tests.test_routing.ValueCheckTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 3
     },
+    "tests.test_routing_chain.FamiliesTest": {
+      "samples": 2,
+      "seconds": 0.001,
+      "tests": 4
+    },
+    "tests.test_routing_chain.LoadsTest": {
+      "samples": 2,
+      "seconds": 0.001,
+      "tests": 5
+    },
+    "tests.test_routing_chain.PrecedenceTest": {
+      "samples": 2,
+      "seconds": 0.002,
+      "tests": 1
+    },
+    "tests.test_routing_chain.RefusedTest": {
+      "samples": 2,
+      "seconds": 0.003,
+      "tests": 7
+    },
+    "tests.test_routing_chain.SettingsFileTest": {
+      "samples": 2,
+      "seconds": 0.02,
+      "tests": 3
+    },
+    "tests.test_routing_chain.UnchangedTest": {
+      "samples": 2,
+      "seconds": 0.001,
+      "tests": 3
+    },
     "tests.test_run_scenarios.CheckTest": {
-      "samples": 12,
-      "seconds": 10.698,
+      "samples": 14,
+      "seconds": 9.816,
       "tests": 2
     },
     "tests.test_run_scenarios.DeterminismTest": {
-      "samples": 12,
-      "seconds": 10.549,
+      "samples": 14,
+      "seconds": 13.262,
       "tests": 2
     },
     "tests.test_run_scenarios.DiscoveryIsolationTest": {
-      "samples": 10,
-      "seconds": 3.045,
+      "samples": 12,
+      "seconds": 3.434,
+      "tests": 2
+    },
+    "tests.test_run_scenarios.FixtureClassificationTest": {
+      "samples": 2,
+      "seconds": 0.025,
       "tests": 2
     },
     "tests.test_run_scenarios.IngestionTest": {
-      "samples": 12,
-      "seconds": 4.969,
+      "samples": 14,
+      "seconds": 5.788,
       "tests": 1
     },
     "tests.test_run_scenarios.IsolationRefusalTest": {
-      "samples": 12,
-      "seconds": 1.724,
+      "samples": 14,
+      "seconds": 1.573,
       "tests": 4
     },
     "tests.test_run_scenarios.OutputOwnershipTest": {
-      "samples": 7,
-      "seconds": 0.903,
+      "samples": 9,
+      "seconds": 1.36,
       "tests": 17
     },
     "tests.test_run_scenarios.OutputPlacementTest": {
-      "samples": 9,
-      "seconds": 14.436,
+      "samples": 11,
+      "seconds": 13.242,
       "tests": 7
     },
+    "tests.test_run_scenarios.PinBaseToCheckoutTest": {
+      "samples": 2,
+      "seconds": 0.02,
+      "tests": 1
+    },
     "tests.test_run_scenarios.RecordShapeTest": {
-      "samples": 12,
-      "seconds": 10.384,
+      "samples": 14,
+      "seconds": 9.972,
       "tests": 4
     },
     "tests.test_run_scenarios.ScopedRefusalTest": {
-      "samples": 10,
-      "seconds": 9.993,
+      "samples": 12,
+      "seconds": 12.666,
       "tests": 6
     },
     "tests.test_run_scenarios.SubsetDeterminismTest": {
-      "samples": 1,
-      "seconds": 17.579,
+      "samples": 3,
+      "seconds": 16.055,
       "tests": 1
     },
     "tests.test_run_scenarios.SymlinkedEvidenceTest": {
-      "samples": 8,
-      "seconds": 0.089,
+      "samples": 10,
+      "seconds": 0.081,
       "tests": 4
     },
     "tests.test_run_tests.BuildingBlocksTest": {
-      "samples": 22,
-      "seconds": 6.91,
+      "samples": 24,
+      "seconds": 6.046,
       "tests": 17
     },
     "tests.test_run_tests.EnvironmentTest": {
-      "samples": 28,
-      "seconds": 0.999,
+      "samples": 30,
+      "seconds": 1.006,
       "tests": 4
     },
     "tests.test_run_tests.ExclusivePhaseTest": {
-      "samples": 27,
-      "seconds": 1.414,
+      "samples": 29,
+      "seconds": 1.439,
       "tests": 1
     },
     "tests.test_run_tests.MainCheckTest": {
-      "samples": 1,
-      "seconds": 0.673,
+      "samples": 3,
+      "seconds": 0.549,
       "tests": 8
     },
     "tests.test_run_tests.NestedRunTest": {
-      "samples": 28,
-      "seconds": 0.179,
+      "samples": 30,
+      "seconds": 0.18,
       "tests": 1
     },
     "tests.test_run_tests.ProcessHygieneTest": {
-      "samples": 22,
-      "seconds": 1.006,
+      "samples": 24,
+      "seconds": 1.041,
       "tests": 3
     },
     "tests.test_run_tests.RunnerVerdictTest": {
-      "samples": 28,
-      "seconds": 1.997,
+      "samples": 30,
+      "seconds": 1.804,
       "tests": 7
     },
     "tests.test_runtime.EnsureRuntimeRootTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.001,
       "tests": 2
     },
+    "tests.test_runtime.FillLogFileTest": {
+      "samples": 2,
+      "seconds": 0.002,
+      "tests": 4
+    },
+    "tests.test_runtime.RemoveTreeTest": {
+      "samples": 2,
+      "seconds": 0.013,
+      "tests": 12
+    },
     "tests.test_runtime.ResolveRuntimeRootTest": {
-      "samples": 28,
-      "seconds": 0.02,
+      "samples": 30,
+      "seconds": 0.022,
       "tests": 6
     },
     "tests.test_runtime.UsageLockTest": {
-      "samples": 18,
+      "samples": 20,
       "seconds": 0.001,
       "tests": 1
     },
     "tests.test_runtime.WriteJsonTest": {
-      "samples": 28,
-      "seconds": 0.007,
+      "samples": 30,
+      "seconds": 0.004,
       "tests": 4
     },
     "tests.test_scenario_kit.CheckoutSnapshotTest": {
-      "samples": 12,
-      "seconds": 0.218,
+      "samples": 14,
+      "seconds": 0.196,
       "tests": 6
     },
     "tests.test_scenario_kit.DeterminismTest": {
-      "samples": 12,
-      "seconds": 2.642,
+      "samples": 14,
+      "seconds": 2.41,
       "tests": 4
     },
     "tests.test_scenario_kit.FailClosedTest": {
-      "samples": 12,
-      "seconds": 0.904,
+      "samples": 14,
+      "seconds": 0.927,
       "tests": 5
     },
     "tests.test_scenario_kit.FixtureHygieneTest": {
-      "samples": 12,
-      "seconds": 0.063,
+      "samples": 14,
+      "seconds": 0.05,
       "tests": 1
     },
     "tests.test_scenario_kit.GitMetadataTest": {
-      "samples": 12,
-      "seconds": 0.13,
+      "samples": 14,
+      "seconds": 0.118,
       "tests": 1
     },
     "tests.test_scenario_kit.KillPointTest": {
-      "samples": 10,
-      "seconds": 11.202,
+      "samples": 12,
+      "seconds": 11.559,
       "tests": 8
     },
     "tests.test_scenario_kit.LeakScanTest": {
-      "samples": 10,
-      "seconds": 0.085,
+      "samples": 12,
+      "seconds": 0.084,
       "tests": 4
     },
     "tests.test_scenario_kit.ProtectionPlanTemporaryDirectoryTest": {
-      "samples": 10,
+      "samples": 12,
       "seconds": 0.012,
       "tests": 2
     },
     "tests.test_scenario_kit.RegistryTest": {
-      "samples": 12,
+      "samples": 14,
       "seconds": 0.004,
       "tests": 2
     },
     "tests.test_scenario_kit.RemoteGuardTest": {
-      "samples": 10,
-      "seconds": 0.059,
+      "samples": 12,
+      "seconds": 0.053,
       "tests": 3
     },
     "tests.test_scenario_kit.SandboxEnforcementTest": {
-      "samples": 10,
-      "seconds": 24.918,
+      "samples": 12,
+      "seconds": 24.258,
       "tests": 9
     },
     "tests.test_scenario_kit.ScratchInsideProtectedLocationTest": {
-      "samples": 10,
-      "seconds": 0.073,
+      "samples": 12,
+      "seconds": 0.078,
       "tests": 1
     },
     "tests.test_scenarios.GeneratedClassTest": {
-      "samples": 12,
-      "seconds": 0.007,
+      "samples": 14,
+      "seconds": 0.008,
       "tests": 4
     },
     "tests.test_scenarios.ImportTimeConfinementTest": {
-      "samples": 8,
-      "seconds": 0.625,
+      "samples": 10,
+      "seconds": 0.68,
       "tests": 4
     },
     "tests.test_scenarios.ScenarioInventoryTest": {
-      "samples": 12,
-      "seconds": 0.102,
+      "samples": 14,
+      "seconds": 0.113,
       "tests": 3
     },
     "tests.test_scenarios.Scenario_scenario_codex_review_implementation_stage_limit": {
-      "samples": 2,
-      "seconds": 32.289,
+      "samples": 4,
+      "seconds": 31.451,
       "tests": 1
     },
     "tests.test_scenarios.Scenario_scenario_codex_review_plan_stage": {
-      "samples": 2,
-      "seconds": 26.116,
+      "samples": 4,
+      "seconds": 21.394,
       "tests": 1
     },
     "tests.test_scenarios.Scenario_scenario_full_lifecycle_to_merge": {
-      "samples": 11,
-      "seconds": 5.116,
+      "samples": 13,
+      "seconds": 4.443,
       "tests": 1
     },
     "tests.test_scenarios.Scenario_scenario_functional_review_closes_the_cycle": {
-      "samples": 2,
-      "seconds": 205.618,
+      "samples": 4,
+      "seconds": 170.549,
       "tests": 1
     },
     "tests.test_scenarios.Scenario_scenario_functional_review_stops_for_a_person": {
-      "samples": 2,
-      "seconds": 208.602,
+      "samples": 4,
+      "seconds": 205.716,
       "tests": 1
     },
     "tests.test_scenarios.Scenario_scenario_functional_review_without_a_run": {
-      "samples": 2,
-      "seconds": 126.078,
+      "samples": 4,
+      "seconds": 143.683,
       "tests": 1
     },
     "tests.test_scenarios.Scenario_scenario_functional_tester_isolation": {
-      "samples": 2,
-      "seconds": 245.158,
+      "samples": 4,
+      "seconds": 241.838,
       "tests": 1
     },
     "tests.test_scenarios.Scenario_scenario_human_gates_stop_and_resume": {
-      "samples": 11,
-      "seconds": 2.103,
+      "samples": 13,
+      "seconds": 1.884,
       "tests": 1
     },
     "tests.test_scenarios.Scenario_scenario_kill_and_resume_binding_after": {
-      "samples": 11,
-      "seconds": 1.64,
+      "samples": 13,
+      "seconds": 1.508,
       "tests": 1
     },
     "tests.test_scenarios.Scenario_scenario_kill_and_resume_binding_before": {
-      "samples": 11,
-      "seconds": 1.681,
+      "samples": 13,
+      "seconds": 1.491,
       "tests": 1
     },
     "tests.test_scenarios.Scenario_scenario_kill_and_resume_job_after": {
-      "samples": 11,
-      "seconds": 4.217,
+      "samples": 13,
+      "seconds": 4.27,
       "tests": 1
     },
     "tests.test_scenarios.Scenario_scenario_kill_and_resume_job_before": {
-      "samples": 11,
-      "seconds": 4.394,
+      "samples": 13,
+      "seconds": 4.465,
       "tests": 1
     },
     "tests.test_scenarios.Scenario_scenario_kill_and_resume_run_after": {
-      "samples": 11,
-      "seconds": 1.638,
+      "samples": 13,
+      "seconds": 1.67,
       "tests": 1
     },
     "tests.test_scenarios.Scenario_scenario_kill_and_resume_run_before": {
-      "samples": 11,
-      "seconds": 1.62,
+      "samples": 13,
+      "seconds": 1.465,
       "tests": 1
     },
     "tests.test_scenarios.Scenario_scenario_notifications_never_steer": {
-      "samples": 11,
-      "seconds": 9.847,
+      "samples": 13,
+      "seconds": 9.433,
       "tests": 1
     },
     "tests.test_scenarios.Scenario_scenario_read_only_commands_change_nothing": {
-      "samples": 11,
-      "seconds": 7.615,
+      "samples": 13,
+      "seconds": 7.024,
       "tests": 1
     },
     "tests.test_scenarios.Scenario_scenario_review_mode_single_provider": {
-      "samples": 2,
-      "seconds": 17.981,
+      "samples": 4,
+      "seconds": 17.96,
       "tests": 1
     },
     "tests.test_scenarios.Scenario_scenario_review_round_cap_stops_and_continues": {
-      "samples": 2,
-      "seconds": 14.647,
+      "samples": 4,
+      "seconds": 11.702,
       "tests": 1
     },
     "tests.test_scenarios.Scenario_scenario_settings_file_effect": {
-      "samples": 11,
-      "seconds": 1.052,
+      "samples": 13,
+      "seconds": 1.06,
       "tests": 1
     },
     "tests.test_scenarios.Scenario_scenario_squash_merge_and_release_classification": {
-      "samples": 11,
-      "seconds": 5.236,
+      "samples": 13,
+      "seconds": 4.714,
       "tests": 1
     },
     "tests.test_scenarios.Scenario_scenario_trunk_drift": {
-      "samples": 11,
-      "seconds": 4.069,
+      "samples": 13,
+      "seconds": 3.721,
       "tests": 1
     },
     "tests.test_scenarios.Scenario_scenario_usage_limit_mid_job_waits_and_repeats": {
-      "samples": 2,
-      "seconds": 10.156,
+      "samples": 4,
+      "seconds": 8.971,
       "tests": 1
     },
     "tests.test_scenarios.Scenario_scenario_usage_pause_and_resume": {
-      "samples": 11,
-      "seconds": 2.035,
+      "samples": 13,
+      "seconds": 1.862,
       "tests": 1
     },
     "tests.test_scenarios.Scenario_scenario_worker_failure_fails_closed": {
-      "samples": 11,
-      "seconds": 4.384,
+      "samples": 13,
+      "seconds": 4.473,
       "tests": 1
     },
     "tests.test_scenarios_negative.EveryScenarioHasAMutationTest": {
@@ -3601,1013 +4816,1083 @@
       "tests": 1
     },
     "tests.test_settings.CleanTest": {
-      "samples": 22,
-      "seconds": 0.043,
+      "samples": 24,
+      "seconds": 0.045,
       "tests": 6
     },
     "tests.test_settings.FillTest": {
-      "samples": 22,
-      "seconds": 0.019,
+      "samples": 24,
+      "seconds": 0.016,
       "tests": 6
     },
     "tests.test_settings.FunctionalRowsTest": {
-      "samples": 2,
-      "seconds": 0.014,
+      "samples": 4,
+      "seconds": 0.016,
       "tests": 3
     },
+    "tests.test_settings.HarnessModelsRowTest": {
+      "samples": 2,
+      "seconds": 0.016,
+      "tests": 6
+    },
     "tests.test_settings.IsolationTest": {
-      "samples": 22,
-      "seconds": 0.771,
+      "samples": 24,
+      "seconds": 0.685,
       "tests": 3
     },
     "tests.test_settings.LocationTest": {
-      "samples": 22,
+      "samples": 24,
       "seconds": 0.002,
       "tests": 3
     },
     "tests.test_settings.LockTest": {
-      "samples": 22,
-      "seconds": 1.967,
+      "samples": 24,
+      "seconds": 2.026,
       "tests": 4
     },
     "tests.test_settings.MergeRowsTest": {
-      "samples": 22,
-      "seconds": 0.019,
+      "samples": 24,
+      "seconds": 0.02,
       "tests": 6
     },
     "tests.test_settings.NotificationsRowsTest": {
-      "samples": 10,
-      "seconds": 0.155,
-      "tests": 9
+      "samples": 2,
+      "seconds": 0.133,
+      "tests": 10
     },
     "tests.test_settings.ProcessDefaultsTest": {
-      "samples": 22,
-      "seconds": 0.831,
+      "samples": 24,
+      "seconds": 0.744,
       "tests": 7
     },
     "tests.test_settings.ReviewRoundCapRowTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.011,
       "tests": 2
     },
-    "tests.test_settings.ReviewerRowsTest": {
+    "tests.test_settings.ReviewerBriefRowTest": {
       "samples": 2,
+      "seconds": 0.016,
+      "tests": 4
+    },
+    "tests.test_settings.ReviewerRowsTest": {
+      "samples": 4,
       "seconds": 0.013,
       "tests": 2
     },
+    "tests.test_settings.RoundCapsInForceTest": {
+      "samples": 2,
+      "seconds": 0.047,
+      "tests": 8
+    },
+    "tests.test_settings.RoutingHarnessTest": {
+      "samples": 2,
+      "seconds": 0.021,
+      "tests": 5
+    },
     "tests.test_settings.RoutingSectionTest": {
-      "samples": 22,
+      "samples": 24,
       "seconds": 0.008,
       "tests": 4
     },
     "tests.test_settings.SharedRoutingTest": {
-      "samples": 22,
-      "seconds": 0.03,
+      "samples": 24,
+      "seconds": 0.032,
       "tests": 4
     },
     "tests.test_settings.ShowAndPathTest": {
-      "samples": 22,
-      "seconds": 0.022,
-      "tests": 3
-    },
-    "tests.test_settings.SplitRoundCapRowsTest": {
-      "samples": 2,
+      "samples": 24,
       "seconds": 0.016,
       "tests": 3
     },
+    "tests.test_settings.SplitRoundCapRowsTest": {
+      "samples": 4,
+      "seconds": 0.013,
+      "tests": 3
+    },
     "tests.test_settings.TableTest": {
-      "samples": 22,
+      "samples": 24,
       "seconds": 0.0,
       "tests": 3
     },
     "tests.test_settings.TwoReleasesTest": {
-      "samples": 22,
-      "seconds": 0.022,
+      "samples": 24,
+      "seconds": 0.02,
       "tests": 3
     },
     "tests.test_settings.UnknownKeyTest": {
-      "samples": 22,
+      "samples": 24,
       "seconds": 0.005,
       "tests": 2
     },
     "tests.test_settings.UsageRowsTest": {
-      "samples": 18,
-      "seconds": 0.342,
+      "samples": 20,
+      "seconds": 0.328,
       "tests": 6
     },
     "tests.test_settings.ValidationTest": {
-      "samples": 22,
-      "seconds": 0.071,
+      "samples": 24,
+      "seconds": 0.061,
       "tests": 4
     },
     "tests.test_shared_snapshot.CopyTest": {
-      "samples": 1,
-      "seconds": 17.978,
+      "samples": 3,
+      "seconds": 14.519,
       "tests": 4
     },
     "tests.test_shared_snapshot.FallbackTest": {
-      "samples": 1,
-      "seconds": 10.265,
+      "samples": 3,
+      "seconds": 8.311,
       "tests": 3
     },
     "tests.test_shared_snapshot.FreshBuildTest": {
-      "samples": 1,
-      "seconds": 30.251,
+      "samples": 3,
+      "seconds": 24.842,
       "tests": 1
     },
     "tests.test_shared_snapshot.InputsTest": {
-      "samples": 1,
-      "seconds": 5.097,
+      "samples": 3,
+      "seconds": 4.132,
       "tests": 1
     },
     "tests.test_target_state.ImplementationReviewFieldsTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.008,
       "tests": 5
     },
     "tests.test_target_state.IncompleteChildrenTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.001,
       "tests": 1
     },
     "tests.test_target_state.KnownPhaseSetEqualityTest": {
-      "samples": 28,
-      "seconds": 0.893,
+      "samples": 30,
+      "seconds": 0.849,
       "tests": 2
     },
     "tests.test_target_state.MalformedStateTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.005,
       "tests": 7
     },
     "tests.test_target_state.MissingStateTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 1
     },
     "tests.test_target_state.NoPhaseSentinelTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 3
     },
     "tests.test_target_state.ReadHappyPathTest": {
-      "samples": 28,
-      "seconds": 0.02,
+      "samples": 30,
+      "seconds": 0.034,
       "tests": 6
     },
     "tests.test_target_state.ReadOnlySourceScanTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.01,
       "tests": 3
     },
     "tests.test_target_state.RegistryCompleteTest": {
-      "samples": 28,
-      "seconds": 0.024,
+      "samples": 30,
+      "seconds": 0.035,
       "tests": 9
     },
     "tests.test_target_state.SelectWorkItemTest": {
-      "samples": 28,
-      "seconds": 0.007,
+      "samples": 30,
+      "seconds": 0.006,
       "tests": 8
     },
     "tests.test_target_state.UnknownPhaseTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.002,
       "tests": 2
     },
     "tests.test_telemetry.DerivationTest": {
-      "samples": 22,
-      "seconds": 0.061,
+      "samples": 24,
+      "seconds": 0.054,
       "tests": 5
     },
     "tests.test_telemetry.GroupingTest": {
-      "samples": 22,
-      "seconds": 0.288,
+      "samples": 24,
+      "seconds": 0.334,
       "tests": 7
     },
     "tests.test_telemetry.InspectLastJobTest": {
-      "samples": 22,
-      "seconds": 0.073,
+      "samples": 24,
+      "seconds": 0.064,
       "tests": 1
     },
     "tests.test_telemetry.PresentationTest": {
-      "samples": 22,
-      "seconds": 0.066,
+      "samples": 24,
+      "seconds": 0.064,
       "tests": 6
     },
     "tests.test_telemetry.RoundsTest": {
-      "samples": 2,
-      "seconds": 0.391,
+      "samples": 4,
+      "seconds": 0.38,
       "tests": 11
     },
+    "tests.test_telemetry_harness.HarnessGroupingTest": {
+      "samples": 2,
+      "seconds": 0.071,
+      "tests": 4
+    },
+    "tests.test_telemetry_harness.HarnessRowTest": {
+      "samples": 2,
+      "seconds": 0.056,
+      "tests": 5
+    },
     "tests.test_test_shards.AggregateTest": {
-      "samples": 22,
-      "seconds": 0.045,
+      "samples": 24,
+      "seconds": 0.053,
       "tests": 16
     },
     "tests.test_test_shards.AttemptSelectionTest": {
-      "samples": 22,
-      "seconds": 0.067,
+      "samples": 24,
+      "seconds": 0.056,
       "tests": 19
     },
     "tests.test_test_shards.BaselineBalanceTest": {
-      "samples": 28,
-      "seconds": 0.444,
+      "samples": 30,
+      "seconds": 0.534,
       "tests": 1
     },
     "tests.test_test_shards.CiPlacementTest": {
-      "samples": 1,
-      "seconds": 0.201,
+      "samples": 3,
+      "seconds": 0.232,
       "tests": 5
     },
     "tests.test_test_shards.CommittedTimingsTest": {
-      "samples": 22,
-      "seconds": 0.808,
+      "samples": 24,
+      "seconds": 0.981,
       "tests": 3
     },
     "tests.test_test_shards.ConformanceFamilyTest": {
-      "samples": 4,
-      "seconds": 0.008,
+      "samples": 6,
+      "seconds": 0.006,
       "tests": 6
     },
     "tests.test_test_shards.ConformanceLaneExecutionTest": {
-      "samples": 2,
-      "seconds": 12.287,
+      "samples": 4,
+      "seconds": 11.509,
       "tests": 21
     },
     "tests.test_test_shards.DeterminismTest": {
-      "samples": 28,
-      "seconds": 1.651,
+      "samples": 30,
+      "seconds": 1.902,
       "tests": 1
     },
     "tests.test_test_shards.EnvironmentShapingTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 2
     },
     "tests.test_test_shards.EquivalencePropertyTest": {
-      "samples": 28,
-      "seconds": 4.095,
+      "samples": 30,
+      "seconds": 5.037,
       "tests": 1
     },
     "tests.test_test_shards.EstimateTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 5
     },
     "tests.test_test_shards.ExclusiveAtomsTest": {
-      "samples": 27,
-      "seconds": 0.08,
+      "samples": 29,
+      "seconds": 0.1,
       "tests": 7
     },
     "tests.test_test_shards.ExecutorRecordingTest": {
-      "samples": 28,
-      "seconds": 0.071,
+      "samples": 30,
+      "seconds": 0.055,
       "tests": 10
     },
     "tests.test_test_shards.ExecutorRefusalTest": {
-      "samples": 28,
-      "seconds": 0.017,
+      "samples": 30,
+      "seconds": 0.016,
       "tests": 4
     },
     "tests.test_test_shards.LanePlanningTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.003,
       "tests": 6
     },
     "tests.test_test_shards.LeakScanTest": {
-      "samples": 28,
-      "seconds": 0.017,
+      "samples": 30,
+      "seconds": 0.018,
       "tests": 1
     },
     "tests.test_test_shards.LeakedShardTest": {
-      "samples": 22,
-      "seconds": 0.01,
+      "samples": 24,
+      "seconds": 0.008,
       "tests": 3
     },
     "tests.test_test_shards.LocalFloorTest": {
-      "samples": 22,
+      "samples": 24,
       "seconds": 0.009,
       "tests": 4
     },
     "tests.test_test_shards.PlanTest": {
-      "samples": 28,
-      "seconds": 0.006,
+      "samples": 30,
+      "seconds": 0.005,
       "tests": 10
     },
     "tests.test_test_shards.PlanValidationTest": {
-      "samples": 28,
-      "seconds": 0.003,
+      "samples": 30,
+      "seconds": 0.002,
       "tests": 3
     },
     "tests.test_test_shards.ProfileParametersTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 3
     },
     "tests.test_test_shards.RealInventoryLocalFloorTest": {
-      "samples": 22,
-      "seconds": 0.214,
+      "samples": 24,
+      "seconds": 0.233,
       "tests": 3
     },
     "tests.test_test_shards.RealInventoryTest": {
-      "samples": 28,
-      "seconds": 0.131,
+      "samples": 30,
+      "seconds": 0.156,
       "tests": 4
     },
     "tests.test_test_shards.RealInventoryTimingTest": {
-      "samples": 28,
-      "seconds": 0.104,
+      "samples": 30,
+      "seconds": 0.099,
       "tests": 3
     },
     "tests.test_test_shards.ResultRecordTest": {
-      "samples": 22,
+      "samples": 24,
       "seconds": 0.004,
       "tests": 6
     },
     "tests.test_test_shards.SelectionTest": {
-      "samples": 28,
-      "seconds": 0.111,
+      "samples": 30,
+      "seconds": 0.105,
       "tests": 8
     },
     "tests.test_test_shards.ShardCountTest": {
-      "samples": 22,
+      "samples": 24,
       "seconds": 0.0,
       "tests": 6
     },
     "tests.test_test_shards.SyntheticInventoryTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.02,
       "tests": 10
     },
     "tests.test_test_shards.TimingFileTest": {
-      "samples": 28,
-      "seconds": 0.006,
+      "samples": 30,
+      "seconds": 0.008,
       "tests": 7
     },
     "tests.test_test_shards.TimingUpdateTest": {
-      "samples": 28,
-      "seconds": 0.002,
+      "samples": 30,
+      "seconds": 0.001,
       "tests": 10
     },
     "tests.test_trunk_orchestration_e2e.InterruptedLifecycleTest": {
-      "samples": 28,
-      "seconds": 33.69,
+      "samples": 30,
+      "seconds": 39.187,
       "tests": 2
     },
     "tests.test_trunk_orchestration_e2e.NoPolicyLifecycleTest": {
-      "samples": 28,
-      "seconds": 4.236,
+      "samples": 30,
+      "seconds": 3.784,
       "tests": 1
     },
     "tests.test_trunk_orchestration_e2e.PolicyLifecycleTest": {
-      "samples": 28,
-      "seconds": 5.098,
+      "samples": 30,
+      "seconds": 4.547,
       "tests": 1
     },
     "tests.test_trunk_orchestration_e2e.ReleaseHistoryTest": {
-      "samples": 22,
-      "seconds": 9.889,
+      "samples": 24,
+      "seconds": 8.195,
       "tests": 3
     },
     "tests.test_trunk_orchestration_e2e.SquashLifecycleTest": {
-      "samples": 22,
-      "seconds": 5.354,
+      "samples": 24,
+      "seconds": 4.705,
       "tests": 1
     },
     "tests.test_trunk_orchestration_e2e.TrunkDriftTest": {
-      "samples": 28,
-      "seconds": 4.09,
+      "samples": 30,
+      "seconds": 3.554,
       "tests": 1
     },
     "tests.test_trunk_preflight.DisallowedToolsTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.0,
       "tests": 2
     },
     "tests.test_trunk_preflight.MilestoneBindingTest": {
-      "samples": 28,
-      "seconds": 6.009,
+      "samples": 30,
+      "seconds": 5.447,
       "tests": 8
     },
     "tests.test_trunk_preflight.NoPolicyGoldenMergeRowsTest": {
-      "samples": 22,
+      "samples": 24,
       "seconds": 0.005,
       "tests": 1
     },
     "tests.test_trunk_preflight.NoPolicyGoldenTest": {
-      "samples": 28,
-      "seconds": 2.176,
+      "samples": 30,
+      "seconds": 2.158,
       "tests": 1
     },
     "tests.test_trunk_preflight.ObservationTest": {
-      "samples": 22,
-      "seconds": 3.593,
+      "samples": 24,
+      "seconds": 3.309,
       "tests": 6
     },
     "tests.test_trunk_preflight.PolicyStepTest": {
-      "samples": 22,
-      "seconds": 6.949,
+      "samples": 24,
+      "seconds": 5.762,
       "tests": 9
     },
     "tests.test_trunk_preflight.ProbeTest": {
-      "samples": 28,
-      "seconds": 0.195,
+      "samples": 30,
+      "seconds": 0.179,
       "tests": 5
     },
     "tests.test_trunk_preflight.RunWaitTest": {
-      "samples": 22,
-      "seconds": 9.911,
+      "samples": 24,
+      "seconds": 9.457,
       "tests": 5
     },
     "tests.test_usage.AdmissionTest": {
-      "samples": 18,
-      "seconds": 0.027,
+      "samples": 20,
+      "seconds": 0.023,
       "tests": 8
     },
     "tests.test_usage.ClaudeReaderTest": {
-      "samples": 18,
+      "samples": 20,
       "seconds": 0.003,
       "tests": 12
     },
     "tests.test_usage.CodexHomeIsolationTest": {
-      "samples": 18,
+      "samples": 20,
       "seconds": 0.0,
       "tests": 2
     },
     "tests.test_usage.CodexReaderTest": {
-      "samples": 18,
-      "seconds": 0.008,
+      "samples": 20,
+      "seconds": 0.006,
       "tests": 9
     },
     "tests.test_usage.CompleteTest": {
-      "samples": 2,
-      "seconds": 0.088,
+      "samples": 4,
+      "seconds": 0.086,
       "tests": 18
     },
     "tests.test_usage.EvaluateTest": {
-      "samples": 18,
+      "samples": 20,
       "seconds": 0.001,
       "tests": 12
     },
     "tests.test_usage.ForecastTest": {
-      "samples": 18,
-      "seconds": 0.011,
+      "samples": 20,
+      "seconds": 0.01,
       "tests": 5
     },
     "tests.test_usage.LimitsTest": {
-      "samples": 18,
+      "samples": 20,
       "seconds": 0.0,
       "tests": 1
     },
     "tests.test_usage.MalformedRecordTest": {
-      "samples": 18,
-      "seconds": 0.093,
+      "samples": 20,
+      "seconds": 0.071,
       "tests": 12
     },
     "tests.test_usage.MergeTest": {
-      "samples": 18,
-      "seconds": 0.005,
+      "samples": 20,
+      "seconds": 0.004,
       "tests": 9
     },
     "tests.test_usage.OutstandingAndRetentionTest": {
-      "samples": 18,
-      "seconds": 0.027,
+      "samples": 20,
+      "seconds": 0.022,
       "tests": 10
     },
     "tests.test_usage.RenewalTickerTest": {
-      "samples": 18,
+      "samples": 20,
       "seconds": 0.031,
       "tests": 2
     },
     "tests.test_usage.ReplayEquivalenceTest": {
-      "samples": 18,
-      "seconds": 0.052,
+      "samples": 20,
+      "seconds": 0.05,
       "tests": 8
     },
     "tests.test_usage.RolloverLapseRenewTest": {
-      "samples": 18,
-      "seconds": 0.067,
+      "samples": 20,
+      "seconds": 0.052,
       "tests": 12
     },
     "tests.test_usage.SnapshotTest": {
-      "samples": 18,
+      "samples": 20,
       "seconds": 0.002,
       "tests": 2
     },
     "tests.test_usage.SweepTest": {
-      "samples": 18,
-      "seconds": 0.063,
+      "samples": 20,
+      "seconds": 0.061,
       "tests": 11
     },
     "tests.test_usage_command.AdmitWithoutReservingTest": {
-      "samples": 18,
+      "samples": 20,
       "seconds": 0.003,
       "tests": 1
     },
     "tests.test_usage_command.UsageCheckTest": {
-      "samples": 18,
-      "seconds": 0.253,
+      "samples": 20,
+      "seconds": 0.217,
       "tests": 9
     },
     "tests.test_usage_command.UsageContextTest": {
-      "samples": 18,
-      "seconds": 0.542,
+      "samples": 20,
+      "seconds": 0.45,
       "tests": 9
     },
     "tests.test_usage_command.UsageEventsTest": {
-      "samples": 18,
-      "seconds": 0.092,
+      "samples": 20,
+      "seconds": 0.094,
       "tests": 3
     },
     "tests.test_usage_command.UsageParserTest": {
-      "samples": 18,
-      "seconds": 0.128,
+      "samples": 20,
+      "seconds": 0.103,
       "tests": 8
     },
     "tests.test_usage_command.UsageReleaseTest": {
-      "samples": 18,
-      "seconds": 0.4,
+      "samples": 20,
+      "seconds": 0.452,
       "tests": 11
     },
     "tests.test_usage_command.UsageRenewTest": {
-      "samples": 18,
-      "seconds": 0.263,
+      "samples": 20,
+      "seconds": 0.238,
       "tests": 4
     },
     "tests.test_usage_command.UsageShowTest": {
-      "samples": 18,
-      "seconds": 0.243,
+      "samples": 20,
+      "seconds": 0.245,
       "tests": 7
     },
     "tests.test_usage_command.UsageUncalendarTimeTest": {
-      "samples": 18,
-      "seconds": 0.087,
+      "samples": 20,
+      "seconds": 0.078,
       "tests": 2
     },
     "tests.test_usage_command.UsageWaitTest": {
-      "samples": 18,
-      "seconds": 0.283,
+      "samples": 20,
+      "seconds": 0.23,
       "tests": 9
     },
     "tests.test_usage_gate.ExitSeventeenTest": {
-      "samples": 18,
-      "seconds": 0.668,
+      "samples": 20,
+      "seconds": 0.655,
       "tests": 5
     },
     "tests.test_usage_gate.GateAndLiveAccountingTest": {
-      "samples": 2,
-      "seconds": 1.116,
+      "samples": 4,
+      "seconds": 1.073,
       "tests": 8
     },
     "tests.test_usage_gate.NeverLaunchedPredicateTest": {
-      "samples": 18,
+      "samples": 20,
       "seconds": 0.0,
       "tests": 1
     },
     "tests.test_usage_gate.ReattachAccountingTest": {
-      "samples": 18,
-      "seconds": 0.054,
+      "samples": 20,
+      "seconds": 0.051,
       "tests": 5
     },
     "tests.test_usage_gate.RenewalTest": {
-      "samples": 18,
-      "seconds": 0.808,
+      "samples": 20,
+      "seconds": 0.746,
       "tests": 3
     },
     "tests.test_usage_gate.ReplayTest": {
-      "samples": 18,
-      "seconds": 3.209,
+      "samples": 20,
+      "seconds": 3.104,
       "tests": 15
     },
     "tests.test_usage_gate.RunLoopTest": {
-      "samples": 18,
-      "seconds": 2.013,
+      "samples": 20,
+      "seconds": 2.122,
       "tests": 9
     },
     "tests.test_usage_limit_mid_job.InterruptedJobMappingTest": {
-      "samples": 2,
-      "seconds": 0.253,
+      "samples": 4,
+      "seconds": 0.249,
       "tests": 4
     },
     "tests.test_usage_limit_mid_job.MidJobHoldTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.0,
       "tests": 1
     },
     "tests.test_usage_record.ClaudeConverterTest": {
       "samples": 2,
-      "seconds": 0.05,
-      "tests": 6
+      "seconds": 0.049,
+      "tests": 7
     },
     "tests.test_usage_record.CodexConverterTest": {
       "samples": 2,
       "seconds": 0.001,
-      "tests": 6
+      "tests": 7
     },
     "tests.test_usage_record.PriceTableTest": {
       "samples": 2,
-      "seconds": 0.615,
-      "tests": 5
+      "seconds": 0.599,
+      "tests": 9
     },
     "tests.test_usage_record_job.ClaudeReviewRecordTest": {
-      "samples": 2,
-      "seconds": 33.402,
+      "samples": 4,
+      "seconds": 33.738,
       "tests": 4
     },
     "tests.test_usage_record_job.CodexReviewRecordTest": {
-      "samples": 2,
-      "seconds": 78.697,
+      "samples": 4,
+      "seconds": 64.674,
       "tests": 8
     },
     "tests.test_usage_record_job.FailureBoundaryTest": {
-      "samples": 2,
-      "seconds": 15.424,
+      "samples": 4,
+      "seconds": 15.721,
       "tests": 2
     },
     "tests.test_usage_record_job.ReasoningFailureBoundaryTest": {
-      "samples": 2,
-      "seconds": 0.179,
+      "samples": 4,
+      "seconds": 0.156,
       "tests": 1
     },
     "tests.test_usage_record_job.ReattachRecordTest": {
-      "samples": 2,
-      "seconds": 0.02,
+      "samples": 4,
+      "seconds": 0.018,
       "tests": 5
     },
     "tests.test_usage_record_job.ResumeJsonTest": {
+      "samples": 4,
+      "seconds": 0.024,
+      "tests": 1
+    },
+    "tests.test_usage_record_job.RetriedCodexReviewRolloutsTest": {
       "samples": 2,
-      "seconds": 0.027,
+      "seconds": 0.349,
       "tests": 1
     },
     "tests.test_usage_record_job.ScanKeepsRolloutFiguresTest": {
       "samples": 2,
-      "seconds": 0.003,
-      "tests": 4
+      "seconds": 0.004,
+      "tests": 5
     },
     "tests.test_usage_record_job.WorkerRecordTest": {
-      "samples": 2,
-      "seconds": 1.705,
+      "samples": 4,
+      "seconds": 1.813,
       "tests": 6
     },
+    "tests.test_verify_codex_live.LiveVerifyCodexTest": {
+      "samples": 2,
+      "seconds": 0.0,
+      "tests": 1
+    },
     "tests.test_version_authority.FixtureTest": {
-      "samples": 22,
-      "seconds": 0.786,
+      "samples": 24,
+      "seconds": 0.937,
       "tests": 3
     },
     "tests.test_version_authority.HandoffVersionTest": {
-      "samples": 22,
-      "seconds": 0.243,
+      "samples": 24,
+      "seconds": 0.302,
       "tests": 3
     },
     "tests.test_version_authority.PackageRuntimeTest": {
-      "samples": 28,
-      "seconds": 0.044,
+      "samples": 30,
+      "seconds": 0.041,
       "tests": 3
     },
     "tests.test_version_authority.PinnedChildTest": {
-      "samples": 22,
-      "seconds": 0.611,
+      "samples": 24,
+      "seconds": 0.599,
       "tests": 6
     },
     "tests.test_version_authority.ReadersTest": {
-      "samples": 22,
-      "seconds": 0.081,
+      "samples": 24,
+      "seconds": 0.076,
       "tests": 5
     },
     "tests.test_version_authority.SingleAuthorityTest": {
-      "samples": 28,
-      "seconds": 0.496,
+      "samples": 30,
+      "seconds": 0.584,
       "tests": 3
     },
     "tests.test_version_authority.SourceRuntimeTest": {
-      "samples": 22,
-      "seconds": 2.1,
+      "samples": 24,
+      "seconds": 1.972,
       "tests": 5
     },
     "tests.test_version_authority.TagVersionTest": {
-      "samples": 22,
-      "seconds": 0.978,
+      "samples": 24,
+      "seconds": 0.871,
       "tests": 10
     },
     "tests.test_worker.AmbiguousTest": {
-      "samples": 28,
-      "seconds": 0.383,
+      "samples": 30,
+      "seconds": 0.364,
       "tests": 4
     },
     "tests.test_worker.AnchorTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 8.49,
       "tests": 5
     },
     "tests.test_worker.ChildReapingTest": {
-      "samples": 22,
-      "seconds": 10.816,
+      "samples": 24,
+      "seconds": 10.879,
       "tests": 3
     },
     "tests.test_worker.CmdlineFillTest": {
-      "samples": 22,
-      "seconds": 0.006,
+      "samples": 24,
+      "seconds": 0.005,
       "tests": 4
     },
     "tests.test_worker.FailureTest": {
-      "samples": 28,
-      "seconds": 0.385,
+      "samples": 30,
+      "seconds": 0.368,
       "tests": 2
     },
     "tests.test_worker.FollowerStartsNoProcessTest": {
-      "samples": 22,
-      "seconds": 0.006,
+      "samples": 24,
+      "seconds": 0.004,
       "tests": 1
     },
     "tests.test_worker.ForeignBornTest": {
-      "samples": 22,
-      "seconds": 0.017,
+      "samples": 24,
+      "seconds": 0.015,
       "tests": 6
     },
     "tests.test_worker.GoldenTranscriptTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.001,
       "tests": 1
     },
     "tests.test_worker.GroupDrainTest": {
-      "samples": 28,
-      "seconds": 12.114,
+      "samples": 30,
+      "seconds": 12.175,
       "tests": 7
     },
     "tests.test_worker.IdleReaperTest": {
-      "samples": 22,
-      "seconds": 0.833,
+      "samples": 24,
+      "seconds": 0.835,
       "tests": 3
     },
     "tests.test_worker.InterruptedTest": {
-      "samples": 28,
-      "seconds": 1.104,
+      "samples": 30,
+      "seconds": 1.082,
       "tests": 2
     },
     "tests.test_worker.LaunchMechanicsTest": {
-      "samples": 28,
-      "seconds": 0.574,
+      "samples": 30,
+      "seconds": 0.551,
       "tests": 3
     },
     "tests.test_worker.LaunchOnSpawnTest": {
-      "samples": 28,
-      "seconds": 0.298,
+      "samples": 30,
+      "seconds": 0.305,
       "tests": 7
     },
     "tests.test_worker.LifecycleBracketSupervisionTest": {
-      "samples": 28,
-      "seconds": 33.737,
+      "samples": 30,
+      "seconds": 34.058,
       "tests": 6
     },
     "tests.test_worker.LivenessBootKeyedVerdictTest": {
-      "samples": 28,
-      "seconds": 0.551,
+      "samples": 30,
+      "seconds": 0.437,
       "tests": 10
     },
     "tests.test_worker.LivenessProcessTestRealTest": {
-      "samples": 28,
-      "seconds": 0.105,
+      "samples": 30,
+      "seconds": 0.099,
       "tests": 6
     },
     "tests.test_worker.LivenessZombieTest": {
-      "samples": 28,
-      "seconds": 0.287,
+      "samples": 30,
+      "seconds": 0.255,
       "tests": 14
     },
     "tests.test_worker.OwnershipProvenanceTest": {
-      "samples": 26,
-      "seconds": 0.013,
+      "samples": 28,
+      "seconds": 0.01,
       "tests": 6
     },
     "tests.test_worker.OwnershipTest": {
-      "samples": 22,
-      "seconds": 40.895,
+      "samples": 24,
+      "seconds": 41.384,
       "tests": 17
     },
     "tests.test_worker.QuiescenceConfirmationTest": {
-      "samples": 28,
-      "seconds": 0.003,
+      "samples": 30,
+      "seconds": 0.002,
       "tests": 2
     },
     "tests.test_worker.ReapingLaunchTest": {
-      "samples": 22,
-      "seconds": 20.884,
+      "samples": 24,
+      "seconds": 20.525,
       "tests": 13
     },
     "tests.test_worker.ReapingPredicateTest": {
-      "samples": 22,
-      "seconds": 0.012,
+      "samples": 24,
+      "seconds": 0.01,
       "tests": 5
     },
     "tests.test_worker.ReapingResetTest": {
-      "samples": 22,
+      "samples": 24,
       "seconds": 0.002,
       "tests": 3
     },
     "tests.test_worker.ReapingSweepTest": {
-      "samples": 22,
-      "seconds": 0.018,
+      "samples": 24,
+      "seconds": 0.016,
       "tests": 7
     },
     "tests.test_worker.RouteArgvTest": {
-      "samples": 28,
-      "seconds": 15.263,
+      "samples": 30,
+      "seconds": 15.447,
       "tests": 8
     },
     "tests.test_worker.StreamFilesTest": {
-      "samples": 28,
-      "seconds": 0.493,
+      "samples": 30,
+      "seconds": 0.511,
       "tests": 4
     },
     "tests.test_worker.StreamParseTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.002,
       "tests": 10
     },
     "tests.test_worker.SuccessTest": {
-      "samples": 28,
-      "seconds": 0.184,
+      "samples": 30,
+      "seconds": 0.179,
       "tests": 1
     },
     "tests.test_worker.SupervisionTest": {
-      "samples": 28,
-      "seconds": 14.289,
+      "samples": 30,
+      "seconds": 14.848,
       "tests": 9
     },
     "tests.test_worker.TimeoutNoneTest": {
-      "samples": 28,
-      "seconds": 1.493,
+      "samples": 30,
+      "seconds": 1.609,
       "tests": 2
     },
     "tests.test_worker.UserOnlyCommandTest": {
-      "samples": 28,
-      "seconds": 0.182,
+      "samples": 30,
+      "seconds": 0.191,
+      "tests": 5
+    },
+    "tests.test_worker.UserOnlySpellingTest": {
+      "samples": 2,
+      "seconds": 0.017,
       "tests": 5
     },
     "tests.test_worker.WorkerLaunchErrorTest": {
-      "samples": 28,
-      "seconds": 0.009,
+      "samples": 30,
+      "seconds": 0.007,
       "tests": 1
     },
     "tests.test_worker.WrongMatchTest": {
-      "samples": 28,
-      "seconds": 33.352,
+      "samples": 30,
+      "seconds": 33.54,
       "tests": 5
     },
+    "tests.test_worker_launch.ClaudeCodeLauncherTest": {
+      "samples": 2,
+      "seconds": 0.122,
+      "tests": 3
+    },
+    "tests.test_worker_launch.ImportDisciplineTest": {
+      "samples": 2,
+      "seconds": 0.024,
+      "tests": 2
+    },
+    "tests.test_worker_launch.RegistryTest": {
+      "samples": 2,
+      "seconds": 0.0,
+      "tests": 4
+    },
+    "tests.test_worker_launch.SeamTest": {
+      "samples": 2,
+      "seconds": 0.294,
+      "tests": 2
+    },
     "tests.test_worker_stream.BracketCorrelationTest": {
-      "samples": 28,
-      "seconds": 0.083,
+      "samples": 30,
+      "seconds": 0.087,
       "tests": 17
     },
     "tests.test_worker_stream.FixtureClassificationTest": {
-      "samples": 28,
-      "seconds": 0.401,
+      "samples": 30,
+      "seconds": 0.297,
       "tests": 11
     },
     "tests.test_worker_stream.OriginTest": {
-      "samples": 28,
-      "seconds": 0.007,
+      "samples": 30,
+      "seconds": 0.006,
       "tests": 3
     },
     "tests.test_worker_stream.PositionalKillTest": {
-      "samples": 28,
-      "seconds": 0.004,
+      "samples": 30,
+      "seconds": 0.003,
       "tests": 2
     },
     "tests.test_worker_stream.RowPrecedenceTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.001,
       "tests": 5
     },
     "tests.test_worker_stream.SessionTelemetryTest": {
-      "samples": 22,
-      "seconds": 0.025,
+      "samples": 24,
+      "seconds": 0.02,
       "tests": 7
     },
     "tests.test_worker_stream.SettlementTest": {
-      "samples": 28,
-      "seconds": 0.009,
+      "samples": 30,
+      "seconds": 0.007,
       "tests": 12
     },
     "tests.test_worker_stream.StateTest": {
-      "samples": 28,
-      "seconds": 0.119,
+      "samples": 30,
+      "seconds": 0.095,
       "tests": 8
     },
     "tests.test_worker_stream.UsageLimitFactTest": {
-      "samples": 2,
+      "samples": 4,
       "seconds": 0.005,
       "tests": 12
     },
     "tests.test_worker_stream.WakeupTimeTest": {
-      "samples": 28,
-      "seconds": 0.008,
+      "samples": 30,
+      "seconds": 0.006,
       "tests": 4
     },
     "tests.test_worker_stream.WrongMatchTest": {
-      "samples": 28,
+      "samples": 30,
       "seconds": 0.002,
       "tests": 6
     },
     "tests.test_workflow_contract.ContractTableTest": {
-      "samples": 22,
-      "seconds": 0.453,
+      "samples": 24,
+      "seconds": 0.39,
       "tests": 9
     },
     "tests.test_workflow_contract.GitIsolationTest": {
-      "samples": 22,
-      "seconds": 13.131,
+      "samples": 24,
+      "seconds": 10.793,
       "tests": 21
     },
     "tests.test_workflow_contract.OutputValidationTest": {
-      "samples": 22,
-      "seconds": 1.645,
+      "samples": 24,
+      "seconds": 1.463,
       "tests": 4
     },
     "tests.test_workflow_contract.PublicationStatusTest": {
-      "samples": 22,
-      "seconds": 6.049,
+      "samples": 24,
+      "seconds": 6.533,
       "tests": 11
     },
     "tests.test_workflow_contract.QueryHookCensusTest": {
-      "samples": 22,
-      "seconds": 5.752,
+      "samples": 24,
+      "seconds": 5.565,
       "tests": 1
     },
     "tests.test_workflow_contract.QueryIsolationTest": {
-      "samples": 22,
-      "seconds": 3.314,
+      "samples": 24,
+      "seconds": 2.745,
+      "tests": 6
+    },
+    "tests.test_workflow_contract.RealIndexTest": {
+      "samples": 2,
+      "seconds": 1.056,
       "tests": 6
     },
     "tests.test_workflow_contract.ResolveFeedbackPathTest": {
-      "samples": 22,
-      "seconds": 1.888,
+      "samples": 24,
+      "seconds": 1.611,
       "tests": 8
     },
     "tests.test_workflow_contract.RunnerFailureTest": {
-      "samples": 22,
-      "seconds": 1.912,
+      "samples": 24,
+      "seconds": 1.667,
       "tests": 7
     },
     "tests.test_workflow_release_migration.BoundPlanReviewMigrationTest": {
-      "samples": 22,
-      "seconds": 25.711,
+      "samples": 24,
+      "seconds": 21.503,
       "tests": 6
     },
     "tests.test_workflow_release_migration.ImplementingMigrationTest": {
-      "samples": 22,
-      "seconds": 3.072,
+      "samples": 24,
+      "seconds": 3.149,
       "tests": 1
     },
     "tests.test_workflow_release_migration.JobStraddlingUpdateTest": {
-      "samples": 22,
-      "seconds": 2.267,
+      "samples": 24,
+      "seconds": 2.257,
       "tests": 1
     },
     "tests.test_workflow_release_migration.NewScopedItemMigrationTest": {
-      "samples": 22,
-      "seconds": 2.684,
+      "samples": 24,
+      "seconds": 2.721,
       "tests": 1
     },
     "tests.test_workflow_release_migration.TrunkUpdatedMigrationTest": {
-      "samples": 22,
-      "seconds": 4.276,
+      "samples": 24,
+      "seconds": 3.683,
       "tests": 1
     },
     "tests.test_workflow_releases.CheckTest": {
-      "samples": 22,
-      "seconds": 0.69,
+      "samples": 24,
+      "seconds": 0.8,
       "tests": 6
     },
     "tests.test_workflow_releases.InstalledReleaseRefusalTest": {
-      "samples": 20,
-      "seconds": 1.387,
+      "samples": 22,
+      "seconds": 1.13,
       "tests": 8
     },
     "tests.test_workflow_releases.InstalledReleaseTest": {
-      "samples": 20,
-      "seconds": 0.399,
+      "samples": 22,
+      "seconds": 0.439,
       "tests": 4
     },
     "tests.test_workflow_releases.ManagerManifestTest": {
-      "samples": 22,
+      "samples": 24,
       "seconds": 0.0,
       "tests": 1
     },
     "tests.test_workflow_releases.SyncTest": {
-      "samples": 22,
-      "seconds": 0.319,
+      "samples": 24,
+      "seconds": 0.279,
       "tests": 10
     },
     "tests.test_write_containment.PackageWideWriteContainmentScanTest": {
-      "samples": 28,
-      "seconds": 0.716,
+      "samples": 30,
+      "seconds": 0.808,
       "tests": 1
     },
     "tests.test_write_containment.SyntheticInstantiationTest": {
-      "samples": 28,
-      "seconds": 0.053,
+      "samples": 30,
+      "seconds": 0.043,
       "tests": 9
     }
   },
@@ -4629,6 +5914,7 @@
     "8419ba8c81cdfc6d31c8ddbff7f03765d87caf45aa533419ce5c67839342d4e9",
     "9690cdf527f12e4a28fef711da7298b9837095b629622a2c8031ef88da8f1564",
     "614e767ea56a70165a3c9230ff22c9507cd8838d12d43395c522e78b2a08a4d1",
-    "0b9fc8cdcdc9d6d1019beadde4a7d85c1a473d8c994a3cf41f9ebc719eac34a2"
+    "0b9fc8cdcdc9d6d1019beadde4a7d85c1a473d8c994a3cf41f9ebc719eac34a2",
+    "eb289dec895fd658c92d1b20e0792924fb315cb049351696bc96f470fb0fc453"
   ]
 }

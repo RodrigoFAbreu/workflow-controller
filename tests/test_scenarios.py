@@ -28,7 +28,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 #: Read from the scenario modules' source: importing them here would run their top-level code on the host, before the
 #: isolation gate below could apply.
 FLOW_IDS = inventory.catalogue_flow_ids()
-MAX_CI_SHARDS = 6
 
 
 def class_name(flow_id: str) -> str:
@@ -170,7 +169,7 @@ class ScenarioInventoryTest(unittest.TestCase):
         self.assertIn(f"{__name__}.ScenarioInventoryTest", keys)
         self.assertNotIn(__name__, keys, "the module must not be a single atom (no module fixtures)")
 
-    def test_the_ci_plan_stays_within_six_shards(self) -> None:
+    def test_the_ci_plan_stays_within_the_shard_ceiling(self) -> None:
         shards = self.shards
         selection = self.inventory.select([], ci_placement=True)
         params = shards.PlanParameters("ci", shards.CI_TARGET_SHARD_SECONDS, shards.DEFAULT_MIN_SHARDS,
@@ -178,7 +177,7 @@ class ScenarioInventoryTest(unittest.TestCase):
         timings = [(REPO_ROOT / shards.CI_TIMINGS, shards.load_timings(REPO_ROOT / shards.CI_TIMINGS))]
         plan = shards.build_plan(selection, params, timings, REPO_ROOT)
         parallel = plan["shard_count"] - sum(1 for s in plan["shards"] if s.get("exclusive"))
-        self.assertLessEqual(parallel, MAX_CI_SHARDS)
+        self.assertLessEqual(parallel, self.shards.CI_MAX_SHARDS)
 
 
 if __name__ == "__main__":

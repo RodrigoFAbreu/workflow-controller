@@ -2416,6 +2416,20 @@ class LeakScanTest(unittest.TestCase):
         self.assertEqual(shards.scan_marked_processes(marker), [])
 
 
+#: No class atom of more than one test may exceed this many seconds in the committed
+#: CI timings (CI1b, D5). A class past it is split along its test methods so that the
+#: planner can balance the halves; a single-test atom cannot be split by class and is
+#: exempt. Without a limit one large class keeps a shard long however the rest is
+#: balanced, which is what the six classes split in CI1b did.
+MAX_SPLITTABLE_ATOM_SECONDS = 200
+
+
+def splittable_atoms_over_the_limit(atoms: dict, limit: float = MAX_SPLITTABLE_ATOM_SECONDS) -> list:
+    """The ``(key, seconds, tests)`` of every atom with more than one test and more than ``limit`` seconds."""
+    return sorted((key, entry["seconds"], entry["tests"]) for key, entry in atoms.items()
+                  if entry["tests"] > 1 and entry["seconds"] > limit)
+
+
 class CommittedTimingsTest(unittest.TestCase):
     """The committed profile is advisory (I3): it must parse and name only
     existing atoms, but its test counts and coverage may drift until the
@@ -2427,6 +2441,19 @@ class CommittedTimingsTest(unittest.TestCase):
         inventory = shards.build_inventory(fixtures.REPO_ROOT)
         keys = {atom.key for atom in inventory.atoms}
         self.assertEqual(sorted(set(profile.atoms) - keys), [])
+
+    def test_no_multi_test_class_atom_exceeds_the_splittable_limit(self) -> None:
+        profile = shards.parse_timings((fixtures.REPO_ROOT / shards.CI_TIMINGS).read_bytes())
+        self.assertEqual(splittable_atoms_over_the_limit(profile.atoms), [],
+                         "split the class along its test methods (CI1b, D5)")
+
+    def test_the_splittable_limit_check_fails_on_a_synthetic_giant(self) -> None:
+        atoms = {"tests.test_x.GiantTest": {"seconds": MAX_SPLITTABLE_ATOM_SECONDS + 0.5, "samples": 1, "tests": 2},
+                 "tests.test_x.OneTest": {"seconds": 5000.0, "samples": 1, "tests": 1},
+                 "tests.test_x.EdgeTest": {"seconds": float(MAX_SPLITTABLE_ATOM_SECONDS), "samples": 1, "tests": 3},
+                 "tests.test_x.SmallTest": {"seconds": 10.0, "samples": 1, "tests": 4}}
+        self.assertEqual(splittable_atoms_over_the_limit(atoms),
+                         [("tests.test_x.GiantTest", MAX_SPLITTABLE_ATOM_SECONDS + 0.5, 2)])
 
     def test_the_committed_profile_is_measured_on_ci(self) -> None:
         # Functional review F1: a local-machine seed underestimated CI by

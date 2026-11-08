@@ -1,0 +1,106 @@
+{
+  "dispositions": {
+    "F-032783f1260d": {
+      "disposition": "fixed",
+      "reason": "c04a1d6 states the guard's static limits in the guide's 'The guard' bullet"
+    },
+    "F-0a7c7c3c38b0": {
+      "disposition": "dropped",
+      "reason": "plan-stage note; the implemented first run reports exactly seven fixture modules and the guard test asserts it"
+    },
+    "F-0ee267468fb0": {
+      "disposition": "dropped",
+      "reason": "reviewer called it harmless: the match still yields a top-level docs file; no behaviour change"
+    },
+    "F-1807175c9006": {
+      "disposition": "fixed",
+      "reason": "plan revised after the REVISE round; plan approved at revision 6"
+    },
+    "F-2b33f9f0d755": {
+      "disposition": "dropped",
+      "reason": "matches the plan's module-and-folded-path mention shape; a later whole-tree walk in those two modules is a known, documented limit"
+    },
+    "F-311e9c97153d": {
+      "disposition": "dropped",
+      "reason": "evidence-file staleness; every fix round's results are in IMPLEMENTATION_SUMMARY.md and the reviewer re-ran the suite"
+    },
+    "F-493890b5b5e3": {
+      "disposition": "fixed",
+      "reason": "8a17040 matches root-level globs against every existing member"
+    },
+    "F-4c9d576e0a4f": {
+      "disposition": "fixed",
+      "reason": "plan revised after the REVISE round; plan approved at revision 6"
+    },
+    "F-4d4023a6b4e2": {
+      "disposition": "dropped",
+      "reason": "count approximation in the plan; the first run states the exact table, as the finding asks"
+    },
+    "F-65724c784245": {
+      "disposition": "fixed",
+      "reason": "e12bd59 decides wildcard-only walks by what a repository root reaches (parameters, aliases, attributes)"
+    },
+    "F-683f467c7eca": {
+      "disposition": "dropped",
+      "reason": "cosmetic line length in one guide bullet; reflow on the next edit of that page"
+    },
+    "F-84fe6b9a1aa1": {
+      "disposition": "dropped",
+      "reason": "the pinned counts are kept deliberately as the recorded first-run result; the other guard tests enforce the rules"
+    },
+    "F-9516b63ee341": {
+      "disposition": "fixed",
+      "reason": "the assertion is relabelled in tests/test_ci_changes.py as an expectation check, not a ceiling"
+    },
+    "F-97e56a735559": {
+      "disposition": "fixed",
+      "reason": "plan revised after the REVISE round; plan approved at revision 6"
+    },
+    "F-9a00af917bb6": {
+      "disposition": "dropped",
+      "reason": "no module calls a helper through the class name today; the guard is documented as static with limits"
+    },
+    "F-9da29d84f361": {
+      "disposition": "dropped",
+      "reason": "evidence-file staleness; the reviewer ran the suite for that round and nothing was unverified"
+    },
+    "F-a3871cd1d6cf": {
+      "disposition": "dropped",
+      "reason": "evidence-file staleness; revision 8 results are in IMPLEMENTATION_SUMMARY.md"
+    },
+    "F-b69ea7b2dea8": {
+      "disposition": "fixed",
+      "reason": "8dd1402 follows keyword-only parameters in the reach rule"
+    },
+    "F-bdcb34787b2d": {
+      "disposition": "fixed",
+      "reason": "plan revised after the REVISE round; plan approved at revision 6"
+    },
+    "F-cfff24ac3e4c": {
+      "disposition": "dropped",
+      "reason": "plan-stage note; behaviour is right (a skipped required job reports Success) and the guide names the check lists"
+    },
+    "F-d767db84a65d": {
+      "disposition": "fixed",
+      "reason": "plan revised after the REVISE round; plan approved at revision 6"
+    },
+    "F-dc4c3665ff33": {
+      "disposition": "dropped",
+      "reason": "the guide's 'six tests shards' wording matches the current six-shard plan, as the rest of that page does"
+    },
+    "F-df20dc691462": {
+      "disposition": "fixed",
+      "reason": "c04a1d6 names the os.path form limit in the guide; neither form exists in the repository"
+    },
+    "F-e88ebc788c9c": {
+      "disposition": "fixed",
+      "reason": "plan revised after the REVISE round; plan approved at revision 6"
+    },
+    "F-ffc65798172f": {
+      "disposition": "fixed",
+      "reason": "c04a1d6 names whole-tree walks in the guide's static limits"
+    }
+  },
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ci1a"
+}

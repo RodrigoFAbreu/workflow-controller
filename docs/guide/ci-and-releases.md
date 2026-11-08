@@ -7,18 +7,29 @@
 ## Continuous integration
 
 `.github/workflows/validate.yml` is the single definition of required
-validation. It is called, never triggered directly, and has four jobs,
+validation. It is called, never triggered directly, and has six jobs,
 each on `ubuntu-latest` with Python 3.12 and read-only permissions
 (`tests-result` also has `actions: read`, which only the reuse path below
 uses):
 
-- `plan`: plans the whole CI selection with
+- `changes`: decides whether the pull request changes anything but
+  documentation (`python3 tools/ci_changes.py detect`). It checks out the
+  full history, because it compares the merge ref with its first parent,
+  and exposes one output, `code`. See
+  [Documentation-only pull requests](#documentation-only-pull-requests);
+- `docs`: runs the documentation gate on every event, whatever `changes`
+  says: `python3 tools/check_docs.py` and
+  `python3 -m unittest tests.test_docs tests.test_backlog`. It is a job of
+  its own so that a documentation failure never hides the shards' feedback
+  on a code pull request, and so that a pull request that skips the shards
+  still has its documentation checked;
+- `plan`: (only when `code` is `true`) plans the whole CI selection with
   `tools/run_tests.py plan --profile ci --ci-placement`: every test
   `python3 -m unittest discover -s tests -t .` loads, plus the nine frozen
   Workflow conformance suites, in duration-balanced shards, from the
   committed `tools/test_timings.json`. Its outputs are the shard indexes,
   their count and the plan's digest, and it uploads `plan.json`;
-- `tests`: one matrix job per planned shard (`fail-fast: false`). Each
+- `tests`: (only when `code` is `true`) one matrix job per planned shard (`fail-fast: false`). Each
   recomputes the plan from the checked-out commit, refuses to run unless
   its digest equals `plan`'s, runs its shard (its Controller tests and,
   beside them in a second process, its Workflow conformance suites; see
@@ -30,7 +41,10 @@ uses):
   leaked processes, in its own step log;
 - `tests-result`: runs even when a shard failed or never started, and
   aggregates every shard's result (see
-  [Re-running failed jobs](#re-running-failed-jobs)). It passes only if
+  [Re-running failed jobs](#re-running-failed-jobs)). When `code` is
+  `false` it skips the aggregation and the upload and only checks that
+  `changes` and `docs` succeeded (see
+  [Documentation-only pull requests](#documentation-only-pull-requests)). It passes only if
   every planned test ran exactly once and passed and no shard leaked a
   process; a missing plan or a missing shard result fails it. It uploads
   the plan and the records it counted as the `timings-ci-attempt-<a>`
@@ -93,6 +107,53 @@ run's summary also names each failing test, its shard, the shard's log,
 the artifacts to download (`results-<i>-attempt-<a>` holds the log,
 `test-plan` the `plan.json` the replay command reads) and the
 reproduction commands.
+
+### Documentation-only pull requests
+
+A pull request whose every changed path is documentation skips `plan` and
+the six `tests` shards, about 24 minutes of the roughly 25 a pull request
+took. It still runs `docs` and `package`, and the required check
+`tests-result` still reports. The decision is a job, never a `paths` or
+`paths-ignore` filter on the workflow: a filtered workflow would leave the
+required check pending forever.
+
+- **The set.** `tools/ci_changes.py` holds the documentation set as data,
+  each entry with its reason: the work-item pages under `docs/items/`, the
+  release notes under `docs/releases/`, the top-level `docs/*.md` pages and
+  `docs/backlog.yaml`. Two top-level pages are not in it, because tests
+  read them: `docs/ACTIVE_MILESTONE.md` and `docs/roadmap-archive.md`. The
+  guides (`docs/guide/`), the ADRs, `README.md` and the Workflow's own
+  records are code for this purpose: a test parses them, so a change to one
+  runs the shards. The set holds only paths that no test of the validation
+  gate reads as input.
+- **The guard.** `tests/test_ci_changes.py` scans `tests/`, `scripts/`,
+  `tools/` and `controller/` for readers of a path in the set and fails
+  with the reader and the path when a module outside the documentation gate
+  reads one. The fix is to take the path out of the set, not to widen the
+  gate. The guard is static and has limits: a path built from a non-constant
+  segment or through an `os.path` form it does not fold is not seen, and a
+  pattern made only of `*`/`**` (a whole-tree walk) counts only on a root
+  that a repository-root value reaches (`REPO_ROOT`, or what is assigned,
+  returned or passed from it, a call to a same-module function or
+  method that returns one, or an import alias of `REPO_ROOT`, in the same
+  module), whatever the root is called; the reach is by name within a module, so a temporary directory
+  that shares a name with a reached one is flagged and needs an entry in
+  `MENTIONS`, and a value passed in from another module is not followed.
+- **Fail closed.** `code` is `false` only for a `pull_request` event whose
+  merge ref differs from its first parent by documentation paths alone. A
+  push to `main`, a manual dispatch, a `HEAD` that is not a merge commit, an
+  empty diff, a failed `git` call or a path outside the set (a rename out of
+  the set counts both ends) all give `true`.
+- **The aggregate.** In the skipped mode `tests-result` uploads no timings
+  and the reuse path is not taken. Its last step, `python3
+  tools/ci_changes.py require`, always runs and passes only when `changes`
+  and `docs` succeeded and `code` is exactly `true` or `false`; a failed or
+  cancelled `changes` job fails the required check.
+- **`main` runs everything.** `main.yml` calls the same workflow on a push,
+  where `code` is always `true`. The saving applies to a pull request only.
+- **Measurement.** On the last 60 first-parent commits of `main` 19 were
+  documentation-only under this set, about a third. The live duration of
+  the first documentation-only pull request is not recorded yet.
 
 ### Checks that run after the merge
 
@@ -235,8 +296,9 @@ The workflow files `ci.yml`, `main.yml`, `main-reuse-report.yml`, `validate.yml`
 `python3 tools/ci_workflows.py --check` (and a test) fails when a
 committed file differs from the model.
 
-The checks are `validate / plan`, `validate / tests (<i>)`,
-`validate / tests-result`, `validate / package` and `PR title`. See
+The checks are `validate / changes`, `validate / docs`,
+`validate / plan`, `validate / tests (<i>)`, `validate / tests-result`,
+`validate / package` and `PR title`. See
 [Repository settings](#repository-settings) for which of them `main`
 requires.
 
@@ -695,7 +757,13 @@ configuration from the [cutover](#cutover-from-the-version-file-model) on.
     `validate / package`, `workflow-conformance` and `PR title`. The
     individual `validate / tests (<i>)` shards are deliberately not
     required: their number changes with the plan, and `tests-result`
-    fails whenever a shard fails or is missing;
+    fails whenever a shard fails or is missing. `validate / changes` and
+    `validate / docs` are not required either, because `tests-result`
+    fails unless both succeeded. On a
+    [documentation-only pull request](#documentation-only-pull-requests)
+    `validate / plan` is skipped by its condition, and GitHub reports a
+    job skipped that way as a success, so the required check passes and
+    the merge is not blocked;
   - a pull request does **not** have to be up to date with `main` to be
     merged. That requirement would block the `integration_required`
     procedure (merging a milestone pull request that `main` moved ahead

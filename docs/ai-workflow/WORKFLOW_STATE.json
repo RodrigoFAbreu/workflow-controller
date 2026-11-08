@@ -64412,6 +64412,943 @@
         "evaluated_at": "2026-11-07T06:46:40Z",
         "workflow_release": "2.27.0"
       }
+    },
+    "workflow-controller-ci1a": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-ci1a",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CI1A_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-ci1a-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci1a-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "MILESTONE_COMPLETE",
+      "plan_revision": 6,
+      "implementation_revision": 9,
+      "functional_review_round": null,
+      "base_commit": "2affeab6ce016451e6c1d83b27aa6b1db0b95cc9",
+      "reviewed_implementation_head": "b4d9dac5657d861424e1e83fb7ca3baac0cd8a8c",
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": "CP3",
+      "checkpoints": {
+        "CP1": {
+          "status": "COMPLETE",
+          "start_commit": "a250890f83d1c785082583e869211a69863fd155"
+        },
+        "CP2": {
+          "status": "COMPLETE",
+          "start_commit": "19f66581cfba0cbfc8d0098cd49bf317b3775d5e"
+        },
+        "CP3": {
+          "status": "COMPLETE",
+          "start_commit": "e94571faf92ec14ccdfb07f7c492fe081d6faaab"
+        }
+      },
+      "current_bundle_id": "13c6b6eba6d19b3bab1e977555ac787ce6ca89277c68771e5ad4f80d4a894f8f",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "13c6b6eba6d19b3bab1e977555ac787ce6ca89277c68771e5ad4f80d4a894f8f",
+        "approved_review_content_id": "2d3a15c8cb082288b7aedfe610ac4882c2284fc193eff6093551b072fbb92ccf",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CI1A_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9e55276e29dfa39e0e40a4f59cf5f1ab8cc39438"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-ci1a-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "057914972314a15acd9eafd987acbfe828780992"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-ci1a-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "96bf6dcc393d5d057ee648afa5ec9418b9c819de"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-07T08:34:38Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "2d3a15c8cb082288b7aedfe610ac4882c2284fc193eff6093551b072fbb92ccf",
+            "ledger": {
+              "local": {
+                "bundle_id": "13c6b6eba6d19b3bab1e977555ac787ce6ca89277c68771e5ad4f80d4a894f8f",
+                "verdict": "APPROVE",
+                "round": 6,
+                "verdict_sha256": "7d8ae65a3763bea7d83a2e4397cc455f3824e8207d6b925e94e9bcd1aedf0d55",
+                "ledger_entry_sha256": "4b6ad5cc6205137b689f8a166da71650513639073c0b42ce4b74972eaf086e04",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-ci1a/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "13c6b6eba6d19b3bab1e977555ac787ce6ca89277c68771e5ad4f80d4a894f8f",
+                "verdict": "APPROVE",
+                "round": 6,
+                "verdict_sha256": "b2d2b79c960f07bfee46fb4de9d94ee5236b5e9f7247ba7f1ad139affb9d385f",
+                "ledger_entry_sha256": "f317914fdd0347f9f2bf39445b64e5e08e9d472127333d0ecee8732344ef69dc",
+                "run_ref": "codex:20261107T083023Z-249cd7f0",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-07T08:34:38Z",
+          "workflow_release": "2.27.0"
+        }
+      },
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "590be3d546cebc9c20697e3af9582387ee8d9e8b4c8f1c56b2fce44ff6d77ff1",
+        "approved_review_content_id": "dfa5e3b7a62c21f9e4f6addcbdd5b9f20e264007b1d179e3ec68734c7676c845",
+        "review_content_manifest": [
+          {
+            "path": ".github/workflows/validate.yml",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1c9ee3e634756332ee61f7f7a89e9ad15d177397"
+          },
+          {
+            "path": "README.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d4c5a39fe3b2c6050bb92ba319fe7cd2f52efa72"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-ci1a-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8a66ad69bb0e32dda7c0f1d67009fde5b3746144"
+          },
+          {
+            "path": "docs/guide/ci-and-releases.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "26f2df2d869de413969b2b02d74be4fc02bdcb6c"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7064b4a326c311b8da30159cc6ba58e32c3bf941"
+          },
+          {
+            "path": "tests/test_ci_changes.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a1dc7e01a5aa860d8da03d6e6ffe370408758176"
+          },
+          {
+            "path": "tests/test_ci_workflows.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "557f677596f8acfb5d533243acbe4f03271b4e42"
+          },
+          {
+            "path": "tests/test_plan_document_consistency.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "57f33a17fa9a4719f9f1a3c5570b9d8aed189959"
+          },
+          {
+            "path": "tools/ci_changes.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "347a6878978710c2804dec31f7096a9974b8fdba"
+          },
+          {
+            "path": "tools/ci_workflows.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2ec22ad3f2538d0495917c7b67c9507c65568c72"
+          }
+        ],
+        "reviewed_content_commit": "b4d9dac5657d861424e1e83fb7ca3baac0cd8a8c",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-08T03:07:02Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "dfa5e3b7a62c21f9e4f6addcbdd5b9f20e264007b1d179e3ec68734c7676c845",
+            "ledger": {
+              "local": {
+                "bundle_id": "590be3d546cebc9c20697e3af9582387ee8d9e8b4c8f1c56b2fce44ff6d77ff1",
+                "verdict": "APPROVE",
+                "round": 9,
+                "verdict_sha256": "83eec556ff82d3d6a3b5a0e3f14a7cd15a217cbfaaf951d82b86a695120c468d",
+                "ledger_entry_sha256": "9c1094089c193cbd3d2b29bb5fffb900e5319bb292c70086ea8876437293fa5f",
+                "run_ref": "session:local .ai-review/workflow-controller-ci1a/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "590be3d546cebc9c20697e3af9582387ee8d9e8b4c8f1c56b2fce44ff6d77ff1",
+                "verdict": "APPROVE",
+                "round": 9,
+                "verdict_sha256": "6284912d690f9fc7157f8804bfd018e666a055be45efde440792f7820a3895b2",
+                "ledger_entry_sha256": "9d8ea1f1f8d6a3096d54dbdff4cd989833d67ec755105f93aa0eff86abf4f8fc",
+                "run_ref": "codex:20261108T030340Z-6dd232ef",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-08T03:07:02Z",
+          "workflow_release": "2.27.0"
+        }
+      },
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "2d3a15c8cb082288b7aedfe610ac4882c2284fc193eff6093551b072fbb92ccf",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "13c6b6eba6d19b3bab1e977555ac787ce6ca89277c68771e5ad4f80d4a894f8f",
+          "verdict": "APPROVE",
+          "round": 6,
+          "completed_at": "2026-11-07T08:30:01Z",
+          "verdict_sha256": "7d8ae65a3763bea7d83a2e4397cc455f3824e8207d6b925e94e9bcd1aedf0d55",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-ci1a/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "13c6b6eba6d19b3bab1e977555ac787ce6ca89277c68771e5ad4f80d4a894f8f",
+          "verdict": "APPROVE",
+          "round": 6,
+          "completed_at": "2026-11-07T08:32:02Z",
+          "verdict_sha256": "b2d2b79c960f07bfee46fb4de9d94ee5236b5e9f7247ba7f1ad139affb9d385f",
+          "run_ref": "codex:20261107T083023Z-249cd7f0",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 6,
+          "external": 2
+        },
+        "implementation": {
+          "local": 9,
+          "external": 7
+        }
+      },
+      "state_revision": 57,
+      "last_transition": "2026-11-08T03:36:08Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-07T08:25:13Z",
+        "consumed": {
+          "review_content_id": "d382833d428cfe491545e666db1ebeb7893c8363ff59475c4f3290c4f84d2a17",
+          "plan_revision": 5,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "2d3a15c8cb082288b7aedfe610ac4882c2284fc193eff6093551b072fbb92ccf",
+          "plan_revision": 6
+        },
+        "bound": {
+          "review_content_id": "2d3a15c8cb082288b7aedfe610ac4882c2284fc193eff6093551b072fbb92ccf",
+          "bundle_id": "13c6b6eba6d19b3bab1e977555ac787ce6ca89277c68771e5ad4f80d4a894f8f",
+          "plan_revision": 6
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "6aa1d3efb471a6fc165241a06eb7c8f70c72de19f7c3d59312bed2364197cdbf",
+        "94fc15574bb885d98c8bee7887c8b0f74a072905e369fcfde2ad9287d53b7535",
+        "d382833d428cfe491545e666db1ebeb7893c8363ff59475c4f3290c4f84d2a17",
+        "e606c2da4f2a39a5130b47d3b6c1a1a7676ae14bc82bedb6bd215877eb58223f",
+        "e943269f3f497fa2d0cb084c82b1e9f8c48c71dbecc4ae05453ff31c66d43618"
+      ],
+      "optional_findings": {
+        "F-d767db84a65d": {
+          "digest": "d767db84a65d9748e1eabbad82ce5ec9f63bd21741e154d08cc82433950ebae2",
+          "text": "**LPR-R1-007: name the diff endpoints in `detect`.** D1 and CP1 give `changed_paths(base, head)` without saying what `head` is or that the diff is two-dot. On a `pull_request` run `HEAD` is the merge ref; `HEAD^1..HEAD` gives exactly what the merge introduces and does not depend on `pull_request.base.sha` matching the merge's first parent. If `base.sha` stays, state that it is two-dot against the merge ref, and test a stale base.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "6aa1d3efb471a6fc165241a06eb7c8f70c72de19f7c3d59312bed2364197cdbf",
+              "verdict": "REVISE",
+              "at": "2026-11-07T07:37:47Z"
+            }
+          ]
+        },
+        "F-e88ebc788c9c": {
+          "digest": "e88ebc788c9c2b9ec548e91ded3883bd572a980fa41ac6d16c4f3f115b86acdc",
+          "text": "**LPR-R1-008: the D2 scan list repeats itself.** `scripts/*.py` already contains `scripts/*_test.py`. State also whether `tests/workflow_releases/` (frozen trees) is scanned, since `tests/` as written includes it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "6aa1d3efb471a6fc165241a06eb7c8f70c72de19f7c3d59312bed2364197cdbf",
+              "verdict": "REVISE",
+              "at": "2026-11-07T07:37:47Z"
+            }
+          ]
+        },
+        "F-1807175c9006": {
+          "digest": "1807175c9006690a93e6c94a29aa3a56cb281fe66e25cb11602ffe065a929627",
+          "text": "**LPR-R1-009: D3 and CP2 are ambiguous about the `docs` checkout.** CP2's \"checkout with `fetch-depth: 0`\" reads as applying to both new jobs; only `changes` needs history. A shallow checkout for `docs` keeps the gate cheap.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "6aa1d3efb471a6fc165241a06eb7c8f70c72de19f7c3d59312bed2364197cdbf",
+              "verdict": "REVISE",
+              "at": "2026-11-07T07:37:47Z"
+            }
+          ]
+        },
+        "F-97e56a735559": {
+          "digest": "97e56a735559f993ad6299e0b035b30fb800abb51a27f44d4127ee513c27937d",
+          "text": "**LPR-R2-002: nothing tests that `changes` declares the output its readers use.** CP2's direct-dependency test checks the job name in `needs.<job>`, not the output name, and neither D4 nor CP2 states the job-level `outputs: {code: ...}` mapping or a step id for `detect`. Without the mapping, `needs.changes.outputs.code` is empty, so the shards never run and `require` fails every pull request. That is loud but survives until the first CI run. Name the mapping in CP2 and extend the test to `needs.<job>.outputs.<name>`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "94fc15574bb885d98c8bee7887c8b0f74a072905e369fcfde2ad9287d53b7535",
+              "verdict": "REVISE",
+              "at": "2026-11-07T07:57:53Z"
+            }
+          ]
+        },
+        "F-bdcb34787b2d": {
+          "digest": "bdcb34787b2d0cbd5cb3f33d9bc6bbf8c3efead2c8b6e76e030f4d4b75dc766b",
+          "text": "**LPR-R2-003: the Goal's \"about half\" does not match D1's measurement.** The Goal repeats the item page's \"About half of the recent pull requests touch no code\", while D1 measures 19 of the last 60 commits as documentation-only under this set, about a third. The saving per pull request is unaffected, but CP3 records the 19 of 60 on a page that still says about half. Have CP3 reword the page's sentence, or say what the two numbers each count.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "94fc15574bb885d98c8bee7887c8b0f74a072905e369fcfde2ad9287d53b7535",
+              "verdict": "REVISE",
+              "at": "2026-11-07T07:57:53Z"
+            }
+          ]
+        },
+        "F-4c9d576e0a4f": {
+          "digest": "4c9d576e0a4fdafe8511c84a6785b16c9140cb53e806080bc755acbec29d5879",
+          "text": "**LPR-R4-002: three path forms fall outside D2's path positions and the Known limit does not name them.** `Path(ROOT, \"docs/run.md\")` and `os.path.join(ROOT, \"docs\", \"run.md\")` carry the path in an argument after the first, and `ROOT.joinpath(\"docs\", \"run.md\")` is not a listed position, so a new reader written this way is not flagged. None of the three exists at the base commit (the replay checks for them), and main still runs everything, so a miss would surface after the merge. Either add them to the positions or name them in the Known limit.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "e943269f3f497fa2d0cb084c82b1e9f8c48c71dbecc4ae05453ff31c66d43618",
+              "verdict": "REVISE",
+              "at": "2026-11-07T08:12:48Z"
+            }
+          ]
+        },
+        "F-4d4023a6b4e2": {
+          "digest": "4d4023a6b4e2fab1b77a611b40ca3386bc39c9a75fc9601b676e399287833caf",
+          "text": "**LPR-R5-001: D2's named roots and site count are approximate.** D2 lists the fixture roots as `root`, `repo.root`, `d.root`, `ev.root`, `self.scratch.root`, `self.root` and `checkout`, but `scripts/workflow_state_completion_obligations_test.py:2699-2711` builds its candidates on `self.repo.root`, a root expression not named. An independent replay of the rule finds 47 sites rather than 48 (42 fixture sites rather than 43; round 4's replay found 37), the same eight modules and the same module-and-path outcome. CP1 and its Done-when cite \"the 43 sites\" as a result to reproduce, though the count depends on how sites are counted. The implementer should treat the modules, roots and outcome as the expected result, state the exact table and count from the first run, and not read a differing site count as a disagreement that shrinks the set.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "d382833d428cfe491545e666db1ebeb7893c8363ff59475c4f3290c4f84d2a17",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T08:21:09Z"
+            }
+          ]
+        },
+        "F-0a7c7c3c38b0": {
+          "digest": "0a7c7c3c38b0a87226d47a7e143a43b0296d96dbc0eb05b47c0b6216a74b4575",
+          "text": "**LPR-R5-002: the new test module can itself become an eighth fixture module.** CP1's `detect` tests build a real temporary repository, and a natural `root / \"docs\" / \"items\" / \"a.md\"` in `tests/test_ci_changes.py` is a candidate under D2's rule. It would then need a fixture-table entry, and CP1's Done-when (\"seven fixture modules on the table\") would not literally hold. Either give the module its own entry and report eight, or build those paths from a non-constant segment; the checkpoint's report should say which.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "d382833d428cfe491545e666db1ebeb7893c8363ff59475c4f3290c4f84d2a17",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T08:21:09Z"
+            }
+          ]
+        },
+        "F-ffc65798172f": {
+          "digest": "ffc65798172f084d000a84490aee3d898e17e772e4918eecf7b8bb875b62019e",
+          "text": "**LPR-R5-003: the Known limit does not name whole-tree readers.** A bare parent is not a candidate, so `(REPO_ROOT / \"docs\").rglob(\"*\")` (folds to `docs/*`), `REPO_ROOT.glob(\"docs/**/*.md\")`, `os.walk(REPO_ROOT / \"docs\")` and a `git ls-files` listing used to open files are not flagged, and an iterating reader of this kind also passes the removal experiment D1 relies on, because deleting the files leaves it nothing to fail on. None exists at the base commit (checked below), and main still runs everything, so a miss surfaces after the merge. Worth a sentence in the Known limit, or flagging a real-root `glob`/`rglob`/`walk` over `docs`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "d382833d428cfe491545e666db1ebeb7893c8363ff59475c4f3290c4f84d2a17",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T08:21:09Z"
+            }
+          ]
+        },
+        "F-cfff24ac3e4c": {
+          "digest": "cfff24ac3e4c884564d969cb636416784dfe36ea947b20bf6d889642f06bf62f",
+          "text": "**LPR-R6-001: `tests-result` is not the only required check, and the plan does not say what happens to the others.** D4 says \"the required check is `tests-result`\", but the live ruleset of `main` (and `docs/guide/ci-and-releases.md:694`) also requires `validate / plan`, which D4 skips on a documentation-only pull request. GitHub's documentation says a job skipped by a conditional reports Success and does not block a merge, even when required, so the behaviour is right, but that rests on a premise the plan does not state. D4 could name it, CP3 could update both check lists in that guide (`:238` and `:694`, the second to say a skipped `plan` passes and that the new `changes` and `docs` jobs need not be required because `tests-result` covers them), and D8's live proof could record that the pull request merged with `validate / plan` skipped, not only its duration.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 6,
+              "review_content_id": "2d3a15c8cb082288b7aedfe610ac4882c2284fc193eff6093551b072fbb92ccf",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T08:30:01Z"
+            }
+          ]
+        },
+        "F-84fe6b9a1aa1": {
+          "digest": "84fe6b9a1aa1fc64299be27fe6b6b10b5be641866068343a85b54c7f0bdf5fd6",
+          "text": "**LIR-R1-001: the first-run test pins counts permanently.** `tests/test_ci_changes.py:730` (`test_the_first_run_matches_the_expected_result`) asserts exactly five reads, all in `tests/test_backlog.py`, and exactly seven fixture modules on every run, not only the first. A legitimate later change, such as a sixth `test_backlog` read or a new test module that builds a temporary repository and adds its own fixture-table entry, would fail the guard. The message would read like a violation and would not say that the expected counts should be updated. The plan's D2/CP1 asked the first run to reproduce the expected result, and the other guard tests already enforce the rules themselves. Consider relaxing this test to the rules (reads only in gate modules, every fixture site on the table) or giving it a message that says the pinned counts are a record to update.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "edb34c37ed3f0e4c1019823edb77d582046ff56c2787308d53ddfd7a627657db",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T10:12:00Z"
+            }
+          ]
+        },
+        "F-df20dc691462": {
+          "digest": "df20dc6914625fff57a2645f18033cf1452ddd92f6da677f1b8b74898d01f499",
+          "text": "**LIR-R1-002: two reader forms are not seen by the scanner.** `open(os.path.join(os.path.dirname(__file__), \"..\", \"docs\", \"run.md\"))` and an f-string segment without placeholders (`ROOT / f\"docs/run.md\"`) are not flagged. Neither exists in the repository today (checked), and D2's root-value definition covers only `Path(__file__)` chains, so this is within the plan. The Known limit as written in the guide's \"The guard\" bullet does not name them, though. Either flag `os.path.dirname(__file__)` chains and placeholder-free `JoinedStr` segments, or add one sentence to the guide that the guard sees `pathlib` roots only.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "edb34c37ed3f0e4c1019823edb77d582046ff56c2787308d53ddfd7a627657db",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T10:12:00Z"
+            }
+          ]
+        },
+        "F-0ee267468fb0": {
+          "digest": "0ee267468fb03eb0ef4149e394b2e8a17abfe4622a4974d9bc87e600cf18fa8e",
+          "text": "**LIR-R1-003: `DOCS_TOP_LEVEL` uses `match` with `$`.** `tools/ci_changes.py` matches `docs/run.md\\n`, because `$` also matches before a trailing newline. As the implementation summary says, the result is still a top-level file under `docs/` and is harmless, but `DOCS_TOP_LEVEL.fullmatch(path)` states the intent exactly and costs nothing.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "edb34c37ed3f0e4c1019823edb77d582046ff56c2787308d53ddfd7a627657db",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T10:12:00Z"
+            }
+          ]
+        },
+        "F-dc4c3665ff33": {
+          "digest": "dc4c3665ff3306aeb53446d4665f75d8c63e7f2f9d57ec22153b2a459b006abd",
+          "text": "**LIR-R1-004: the guide hard-codes the shard count.** The new \"Documentation-only pull requests\" section says the pull request \"skips `plan` and the six `tests` shards\". The shard count comes from `tools/test_shards.shard_count` and changes with the plan, as the same guide says of the required checks. \"the `tests` shards\" would stay true.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "edb34c37ed3f0e4c1019823edb77d582046ff56c2787308d53ddfd7a627657db",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T10:12:00Z"
+            }
+          ]
+        },
+        "F-493890b5b5e3": {
+          "digest": "493890b5b5e32d047fd53b48482e4d805764a8076d760d329cb7a0c160272b71",
+          "text": "**LIR-R2-O1 — The `rootval` root-level branch is over-broad.** `return rest[0] == \"**\" or fnmatch.fnmatch(\"docs\", rest[0])` flags any `rglob` from the repository root (for example `ROOT.rglob(\"__pycache__\")` or `ROOT.rglob(\"*.py\")`) although such a pattern can name no member of the set. It fails closed, so it is not a defect today, but the fix for LIR-R2-001 should match the whole pattern against the members (for example `fnmatch` of each member path, or of `docs/<name>` and the prefix trees, against the joined pattern) for every root kind, rather than widening this branch to `expr` roots as it stands — that would flag the existing temporary-directory scans such as `tests/test_lock.py:243` `root.rglob(\"*\")` (which can, in fact, name a member, so it would then need a fixture entry or a mention with its reason).",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "c48627e651414fd567503d7fe42bcbc2bb1d886c0b24247fd2afc4d062975d00",
+              "verdict": "REVISE",
+              "at": "2026-11-07T10:33:01Z"
+            }
+          ]
+        },
+        "F-032783f1260d": {
+          "digest": "032783f1260d900c4b7cf1465a1d75e2758ea97366acddfe562b62d589c17dad",
+          "text": "**LIR-R3-O1: the guide does not name the guard's whole-tree-walk exemption.** The round-2 fix (`tests/test_ci_changes.py` `touches_set`, the `literal == ()` branch) treats a pattern made only of `*`/`**` as a candidate only on a `Path(__file__)`-derived root, so `fixtures.REPO_ROOT.rglob(\"*\")` is not flagged (checked with `scan()`), while `rglob(\"*.md\")`, `glob(\"docs/*\")`, `glob(\"*/items/*.md\")` and `rglob(\"*.yaml\")` on the same root are. The judgement is reasoned in IMPLEMENTATION_SUMMARY and in the code comment, and it holds today: every non-narrowing walk outside the gate is a tree listing of a temporary or runtime directory (for example `tests/test_observation_equivalence.py:716` and `tests/test_cli.py:2261` `_tree_listing`), not a read of the documentation. But the \"The guard\" bullet in `docs/guide/ci-and-releases.md` names no limit at all, so a reader of the guide would not know that a whole-tree walk of the real repository through an imported root, or the non-constant-segment and `os.path` forms of the plan's Known limit and LIR-R1-002, pass the guard. One sentence there would cover all three.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "56ea11eb7d40061d62586066b8dead2d2b5eec5c81e7a28ae2afb8adf3851675",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T10:49:38Z"
+            }
+          ]
+        },
+        "F-65724c784245": {
+          "digest": "65724c784245b52a1774d3df05592258be1eed54d1e4b35d4bd4e56e2075d902",
+          "text": "**LIR-R4-O1: a whole-tree walk of the repository through a parameter, an alias or an attribute is still not flagged, although the scan can prove the root is the repository.** `touches_set` (`tests/test_ci_changes.py:644`) counts a pattern made only of `*`/`**` on an `expr` root only when the root's final name is in `REPOSITORY_ROOT_NAMES`. Checked with `scan()`: `def walk(root): return list(root.rglob(\"*\"))` called as `walk(REPO_ROOT)` with `REPO_ROOT = Path(__file__).resolve().parent.parent`, the same with `walk(fixtures.REPO_ROOT)`, `base = fixtures.REPO_ROOT` then `base.rglob(\"*\")`, and `self.repo = fixtures.REPO_ROOT` then `self.repo.rglob(\"*\")` all give no site, while `(base / \"docs\" / \"run.md\")` on the same alias is flagged. In the first case `ModuleScan.reached()` already reports `root` as reached by a repository-root value, so treating a wildcard-only walk as a candidate when its root is in `reached()` (and letting `reached()` treat a repository-named expression such as `fixtures.REPO_ROOT` as a root value) would close the parameter, alias and attribute forms without flagging the temporary-directory listings. Nothing in the repository uses these forms today, the plan's Know",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "6573860943506847f3ea76c9aa8bbd2e45f213292f9097e234e11cc9e8f04049",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T12:01:20Z"
+            }
+          ]
+        },
+        "F-9da29d84f361": {
+          "digest": "9da29d84f3610f120e82b0cade17cd30a2359723c3088b1355bd51f5dc6c447e",
+          "text": "**LIR-R4-O2: `TEST_RESULTS.md` was not updated for round 3.** Its header still says \"implementation revision 2\", head `29de47a`, and neither it nor IMPLEMENTATION_SUMMARY's \"Round 3 fixes\" section records a full-suite run for `8a17040`/`c04a1d6`. This review ran it (below), so nothing is unverified, but the bundle's own evidence should cover each fix round.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "6573860943506847f3ea76c9aa8bbd2e45f213292f9097e234e11cc9e8f04049",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T12:01:20Z"
+            }
+          ]
+        },
+        "F-b69ea7b2dea8": {
+          "digest": "b69ea7b2dea84c81d4307e06c2e2739f38191cebd3dcee2f50aef7f18ee119de",
+          "text": "**O1. Keyword-only parameters are not followed by the reach rule.** `ModuleScan.reached` (`tests/test_ci_changes.py:555`) collects parameters from `posonlyargs` and `args` only, so `def read(*, root): return list(root.glob(\"**/*\"))` called as `read(root=fixtures.REPO_ROOT)` is not flagged (probe confirmed). This is the call-argument route (c) of D2. The fix is to include `kwonlyargs` in `params`, plus a regression test.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 5,
+              "review_content_id": "49d24ef654d4f3e3143a84ce1a0c25b8f39165d53425c0f53585d85c58262d28",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T13:05:38Z"
+            }
+          ]
+        },
+        "F-2b33f9f0d755": {
+          "digest": "2b33f9f0d7555d957564b8c9761067c1a1f28b5200ec38bb9d50873e390ee987",
+          "text": "**O2. A `MENTIONS` entry keyed on `**/*` exempts every whole-tree walk in its module.** The entries for `scripts/workflow_state_test.py` and `controller/identity.py` match by (module, folded path). So a later real walk of the repository root in either module is also allowed: appending `_R = Path(__file__).resolve().parent.parent` and `[p.read_bytes() for p in _R.rglob(\"*\") if p.is_file()]` to `scripts/workflow_state_test.py` produces no violation (probe confirmed). This matches the plan's \"module and folded path\" shape for a mention, so it is not a plan deviation. Keying these two entries also on the root expression (`root`, `directory`) would confine each one to the site it explains.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 5,
+              "review_content_id": "49d24ef654d4f3e3143a84ce1a0c25b8f39165d53425c0f53585d85c58262d28",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T13:05:38Z"
+            }
+          ]
+        },
+        "F-311e9c97153d": {
+          "digest": "311e9c97153dab3bee1c4c85dd4e09b89452516f9c3754fbfb25d1143631ef73",
+          "text": "**O3. `TEST_RESULTS.md` in the bundle still describes implementation revision 2** (head `29de47a`, 6009 tests). Revision 5's results appear only in `IMPLEMENTATION_SUMMARY.md`. I re-ran them at `d2c1565`: `python3 tools/run_tests.py` gave 6012 tests in 8 shards, all PASS, coverage exact, wall time 687.5 s. Refresh the file on the next post-fix generation.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 5,
+              "review_content_id": "49d24ef654d4f3e3143a84ce1a0c25b8f39165d53425c0f53585d85c58262d28",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T13:05:38Z"
+            }
+          ]
+        },
+        "F-9516b63ee341": {
+          "digest": "9516b63ee34149434147963871675db7215c8c780421d86f5870534b2ff5e789",
+          "text": "**O1. The fixture-table cap of 12 is not in the plan.** `test_the_first_run_matches_the_expected_result` asserts `len(cc.FIXTURES) <= 12`. The rejection of \"fixture entries for every unknown root\" in rounds 4 and 5 rests on that cap. D2's Limits paragraph says the opposite: the fixture table \"is bounded by the fixture sites it explains, never by that limit\". \"Roughly ten to twelve\" is the plan's expected count, not a ceiling. The narrowed rule may still be the right engineering call, but its stated reason should match the plan, or the assertion should be relabelled as an expectation check.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 6,
+              "review_content_id": "a9a3e2fcf7ea7955dabc0f3171ce70901a91c9a7222bb2362ac7394764a84bbc",
+              "verdict": "REVISE",
+              "at": "2026-11-07T13:40:23Z"
+            }
+          ]
+        },
+        "F-683f467c7eca": {
+          "digest": "683f467c7eca887c8e81ee1099f5b79296d4321f2cad6c52a1277fe770b911f2",
+          "text": "**O1. The rewrapped sentence in the guide's \"The guard\" bullet has one overlong line.** In `docs/guide/ci-and-releases.md`, the line beginning `module), whatever the root is called; the reach is by name within a module, so a temporary directory` runs to about 100 columns while the surrounding text wraps at about 75. This is cosmetic only, so reflow it on the next edit of that page.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 7,
+              "review_content_id": "8284c3bfa9c7f22cff82a8bf328a0d3406d2db1a471d9959cbedf03fede750bb",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T14:32:43Z"
+            }
+          ]
+        },
+        "F-9a00af917bb6": {
+          "digest": "9a00af917bb6433e348af9586225d3ad82331efdc3834fbdb0ee1040b8e10929",
+          "text": "**O1. Calls through the class name are not followed, although the guide says \"method\".** `ModuleScan.reached()`'s `helper_name` (`tests/test_ci_changes.py:578-586`) resolves `f()` and `self.f()`/`cls.f()` only. `B._repo().rglob(\"*\")` with `@staticmethod def _repo(): return fixtures.REPO_ROOT`, and `_repo = lambda: fixtures.REPO_ROOT` then `_repo().rglob(\"*\")`, are not flagged (checked with `scan()`). No module in the repository does this today, and the guide already says the guard is static and has limits. Either follow `<class defined in the module>.f()`, or make `docs/guide/ci-and-releases.md` (\"a call to a same-module function or method\") say `self.`/`cls.` methods.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 8,
+              "review_content_id": "40870f69e4f6f89011bc120f7ddc1fd84020f357e4c31f6e79163d317bba04ce",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T23:06:24Z"
+            }
+          ]
+        },
+        "F-a3871cd1d6cf": {
+          "digest": "a3871cd1d6cfc70543db830d8a3cffd7d446b0095fe8dafafef7d616de3523bd",
+          "text": "**O2. `TEST_RESULTS.md` still describes revision 7.** Its header and figures name revision 7, `05ad8d3` and 76 narrow tests, while the bundle is revision 8 at `9b484b9`. The revision-8 results are only in `IMPLEMENTATION_SUMMARY.md`. Refresh it with the post-fix bundle so the two agree.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 8,
+              "review_content_id": "40870f69e4f6f89011bc120f7ddc1fd84020f357e4c31f6e79163d317bba04ce",
+              "verdict": "APPROVE",
+              "at": "2026-11-07T23:06:24Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "dfa5e3b7a62c21f9e4f6addcbdd5b9f20e264007b1d179e3ec68734c7676c845",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "590be3d546cebc9c20697e3af9582387ee8d9e8b4c8f1c56b2fce44ff6d77ff1",
+          "verdict": "APPROVE",
+          "round": 9,
+          "completed_at": "2026-11-08T01:18:37Z",
+          "verdict_sha256": "83eec556ff82d3d6a3b5a0e3f14a7cd15a217cbfaaf951d82b86a695120c468d",
+          "run_ref": "session:local .ai-review/workflow-controller-ci1a/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "590be3d546cebc9c20697e3af9582387ee8d9e8b4c8f1c56b2fce44ff6d77ff1",
+          "verdict": "APPROVE",
+          "round": 9,
+          "completed_at": "2026-11-08T03:05:42Z",
+          "verdict_sha256": "6284912d690f9fc7157f8804bfd018e666a055be45efde440792f7820a3895b2",
+          "run_ref": "codex:20261108T030340Z-6dd232ef",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "gate_evidence": {
+        "functional": {
+          "flow-1": {
+            "flow_id": "flow-1",
+            "status": "passed",
+            "head": "97e4d50f2064f8ea045c08fa7275662e3df01763",
+            "ran_at": "2026-11-08T03:09:28Z",
+            "summary": {
+              "checklist_blob": "80ba27a9e70dfe2fc5dc864fe22aca2fe27aa3b7",
+              "text": "Ran 77 tests, OK"
+            },
+            "log_digest": "2c64fa0d6f345ba82a5ad7890e19ed02ec15432167a76f901e8d9f361571921f",
+            "run_ref": "controller:20261108T030819Z-29444676",
+            "reporter": "workflow-controller 1.27.10",
+            "identity": "dfa5e3b7a62c21f9e4f6addcbdd5b9f20e264007b1d179e3ec68734c7676c845",
+            "recorded_at": "2026-11-08T03:09:28Z"
+          },
+          "flow-2": {
+            "flow_id": "flow-2",
+            "status": "passed",
+            "head": "97e4d50f2064f8ea045c08fa7275662e3df01763",
+            "ran_at": "2026-11-08T03:09:28Z",
+            "summary": {
+              "checklist_blob": "80ba27a9e70dfe2fc5dc864fe22aca2fe27aa3b7",
+              "text": "Ran 105 tests, OK"
+            },
+            "log_digest": "05e49bbb99bf2d513100128fe23bb30878f31b4d5845625665c4cc59385c239a",
+            "run_ref": "controller:20261108T030819Z-29444676",
+            "reporter": "workflow-controller 1.27.10",
+            "identity": "dfa5e3b7a62c21f9e4f6addcbdd5b9f20e264007b1d179e3ec68734c7676c845",
+            "recorded_at": "2026-11-08T03:09:28Z"
+          },
+          "flow-3": {
+            "flow_id": "flow-3",
+            "status": "passed",
+            "head": "97e4d50f2064f8ea045c08fa7275662e3df01763",
+            "ran_at": "2026-11-08T03:09:28Z",
+            "summary": {
+              "checklist_blob": "80ba27a9e70dfe2fc5dc864fe22aca2fe27aa3b7",
+              "text": "code=false (1 changed path(s), all documentation); then code=true (tools.py is not documentation: everything runs)"
+            },
+            "log_digest": "0fb02e52e86221739ade0c662c28a349458e0fb5b25730759d33b6bfccf88d80",
+            "run_ref": "controller:20261108T030819Z-29444676",
+            "reporter": "workflow-controller 1.27.10",
+            "identity": "dfa5e3b7a62c21f9e4f6addcbdd5b9f20e264007b1d179e3ec68734c7676c845",
+            "recorded_at": "2026-11-08T03:09:28Z"
+          },
+          "flow-4": {
+            "flow_id": "flow-4",
+            "status": "passed",
+            "head": "97e4d50f2064f8ea045c08fa7275662e3df01763",
+            "ran_at": "2026-11-08T03:09:28Z",
+            "summary": {
+              "checklist_blob": "80ba27a9e70dfe2fc5dc864fe22aca2fe27aa3b7",
+              "text": "push and unset event both give code=true. Not run: empty/unreadable diff and non-merge HEAD cases (covered by flow-1 unit tests)."
+            },
+            "log_digest": "6909fd8de59cc48097c9c7606390ff52201ce1d5f58488fa13d79c7c19534c56",
+            "run_ref": "controller:20261108T030819Z-29444676",
+            "reporter": "workflow-controller 1.27.10",
+            "identity": "dfa5e3b7a62c21f9e4f6addcbdd5b9f20e264007b1d179e3ec68734c7676c845",
+            "recorded_at": "2026-11-08T03:09:28Z"
+          },
+          "flow-5": {
+            "flow_id": "flow-5",
+            "status": "passed",
+            "head": "97e4d50f2064f8ea045c08fa7275662e3df01763",
+            "ran_at": "2026-11-08T03:09:28Z",
+            "summary": {
+              "checklist_blob": "80ba27a9e70dfe2fc5dc864fe22aca2fe27aa3b7",
+              "text": "rc=0, rc=1 (no usable code output), rc=1 (docs did not succeed)"
+            },
+            "log_digest": "6909fd8de59cc48097c9c7606390ff52201ce1d5f58488fa13d79c7c19534c56",
+            "run_ref": "controller:20261108T030819Z-29444676",
+            "reporter": "workflow-controller 1.27.10",
+            "identity": "dfa5e3b7a62c21f9e4f6addcbdd5b9f20e264007b1d179e3ec68734c7676c845",
+            "recorded_at": "2026-11-08T03:09:29Z"
+          },
+          "flow-6": {
+            "flow_id": "flow-6",
+            "status": "passed",
+            "head": "97e4d50f2064f8ea045c08fa7275662e3df01763",
+            "ran_at": "2026-11-08T03:09:29Z",
+            "summary": {
+              "checklist_blob": "80ba27a9e70dfe2fc5dc864fe22aca2fe27aa3b7",
+              "text": "check_docs rc=0; backlog rc=0 with the expected JSON line"
+            },
+            "log_digest": "a794c646fb41ce3f08431601918b76e8c77b27098490f25d748d571193923539",
+            "run_ref": "controller:20261108T030819Z-29444676",
+            "reporter": "workflow-controller 1.27.10",
+            "identity": "dfa5e3b7a62c21f9e4f6addcbdd5b9f20e264007b1d179e3ec68734c7676c845",
+            "recorded_at": "2026-11-08T03:09:29Z"
+          },
+          "flow-7": {
+            "flow_id": "flow-7",
+            "status": "passed",
+            "head": "97e4d50f2064f8ea045c08fa7275662e3df01763",
+            "ran_at": "2026-11-08T03:09:29Z",
+            "summary": {
+              "checklist_blob": "80ba27a9e70dfe2fc5dc864fe22aca2fe27aa3b7",
+              "text": "Guides say documentation-only PRs skip plan and shards, name what stays code, and say main and any doubt run everything. 'about half' absent from ci1a. Note: ci-and-releases.md lists docs/ACTIVE_MILESTONE.md, docs/guide/, ADRs, README.md and the Workflow records as code in prose, not as the checklist's exact list; I judged that sufficient."
+            },
+            "log_digest": "6baf11081f352fb424ac046548f538a3a9dbb15ed300c7c933344699d539955c",
+            "run_ref": "controller:20261108T030819Z-29444676",
+            "reporter": "workflow-controller 1.27.10",
+            "identity": "dfa5e3b7a62c21f9e4f6addcbdd5b9f20e264007b1d179e3ec68734c7676c845",
+            "recorded_at": "2026-11-08T03:09:29Z"
+          }
+        },
+        "pr": {
+          "pr": {
+            "number": 321,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/321"
+          },
+          "state": "open",
+          "head": "97e4d50f2064f8ea045c08fa7275662e3df01763",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "dfa5e3b7a62c21f9e4f6addcbdd5b9f20e264007b1d179e3ec68734c7676c845",
+          "observed_at": "2026-11-08T03:36:08Z",
+          "ingest_seq": 2,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "b4d9dac5657d861424e1e83fb7ca3baac0cd8a8c",
+          "provenance": {
+            "source": "workflow_gh",
+            "fetched_by": {
+              "name": "workflow-gh",
+              "version": "pr-list-v1"
+            },
+            "fetched_at": "2026-11-08T03:36:08Z",
+            "raw_sha256": "2d2c63432354b3e4d629f1f55e36bb1ea2f1057d53da61288805936c5075c3ed",
+            "run_ref": null,
+            "gh_path": "/usr/bin/gh",
+            "gh_sha256": "a6b35a153e40cc347601522acdb583da3dccfc06401505a63eacaeab6909ed80"
+          },
+          "fact_id": "d3f305487aef7bff7bf580a4efc41d95a07c9064cb58c1f1595e217c4b644fea"
+        },
+        "pr_reported": null,
+        "pr_keys": {
+          "reopened_for": [],
+          "applied": [],
+          "ingest_seq": 2
+        }
+      },
+      "acceptance_satisfaction": {
+        "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "policy_source": "default",
+        "file_digest": null,
+        "adopted_digest": null,
+        "floor_digest": null,
+        "requirements": [
+          {
+            "id": "checkpoints_complete",
+            "met": true,
+            "detail": "every checkpoint of the item's own registry is COMPLETE"
+          },
+          {
+            "id": "technical_approval_current",
+            "met": true,
+            "detail": "the technical approval is CURRENT for the content now"
+          },
+          {
+            "id": "functional_flows_passed",
+            "met": true,
+            "detail": "flows ['flow-1', 'flow-2', 'flow-3', 'flow-4', 'flow-5', 'flow-6', 'flow-7'] passed at the approved content"
+          },
+          {
+            "id": "pr_fact_current",
+            "met": true,
+            "detail": "workflow_gh fact for PR #321 at 97e4d50f2064f8ea045c08fa7275662e3df01763 is current"
+          },
+          {
+            "id": "no_standing_pr_objection",
+            "met": true,
+            "detail": "no CHANGES_REQUESTED decision and no failed check"
+          },
+          {
+            "id": "ci_green",
+            "met": true,
+            "detail": "checks are 'success'"
+          }
+        ],
+        "inputs": {
+          "anchor_commit": "b4d9dac5657d861424e1e83fb7ca3baac0cd8a8c",
+          "anchor_identity": "dfa5e3b7a62c21f9e4f6addcbdd5b9f20e264007b1d179e3ec68734c7676c845",
+          "technical_approval": {
+            "basis": "POLICY_SATISFIED",
+            "approved_review_content_id": "dfa5e3b7a62c21f9e4f6addcbdd5b9f20e264007b1d179e3ec68734c7676c845",
+            "recorded_at": "2026-11-08T03:07:02Z"
+          },
+          "functional": {
+            "flow-1": {
+              "evidence_id": "920bcd0ff94f5d9b0dd72a0c8f5b492d2ae6ffd28678534dc4085e04bd066491",
+              "log_digest": "2c64fa0d6f345ba82a5ad7890e19ed02ec15432167a76f901e8d9f361571921f",
+              "run_ref": "controller:20261108T030819Z-29444676"
+            },
+            "flow-2": {
+              "evidence_id": "ad674323b0abb7e5a6a2dd7d2ece2690c3142e082893bd8b197b932f12533c3d",
+              "log_digest": "05e49bbb99bf2d513100128fe23bb30878f31b4d5845625665c4cc59385c239a",
+              "run_ref": "controller:20261108T030819Z-29444676"
+            },
+            "flow-3": {
+              "evidence_id": "9e8fd9aaeacd0be2c9736cd4c0fa117eb06ef9d8b07f6bffae321d142b939db8",
+              "log_digest": "0fb02e52e86221739ade0c662c28a349458e0fb5b25730759d33b6bfccf88d80",
+              "run_ref": "controller:20261108T030819Z-29444676"
+            },
+            "flow-4": {
+              "evidence_id": "5569e1fa3f6c19188d49d817fa69a55c658685d99479f43de7bbb6b0e157125d",
+              "log_digest": "6909fd8de59cc48097c9c7606390ff52201ce1d5f58488fa13d79c7c19534c56",
+              "run_ref": "controller:20261108T030819Z-29444676"
+            },
+            "flow-5": {
+              "evidence_id": "a5f37a7b7b4d2705be17bd7d4b1fcd6470632499fe1a8ec982c214c8f1ba6a7f",
+              "log_digest": "6909fd8de59cc48097c9c7606390ff52201ce1d5f58488fa13d79c7c19534c56",
+              "run_ref": "controller:20261108T030819Z-29444676"
+            },
+            "flow-6": {
+              "evidence_id": "24036baa791b25a507a392b56665e28c6d1ba6406b2aac7460e23bb65ef35a25",
+              "log_digest": "a794c646fb41ce3f08431601918b76e8c77b27098490f25d748d571193923539",
+              "run_ref": "controller:20261108T030819Z-29444676"
+            },
+            "flow-7": {
+              "evidence_id": "1385d996e2d2dfa1b9c72dd322e8743c3e187064fb705c5fc25b1a96e2c5e02b",
+              "log_digest": "6baf11081f352fb424ac046548f538a3a9dbb15ed300c7c933344699d539955c",
+              "run_ref": "controller:20261108T030819Z-29444676"
+            }
+          },
+          "pr": {
+            "fact_id": "d3f305487aef7bff7bf580a4efc41d95a07c9064cb58c1f1595e217c4b644fea",
+            "head": "97e4d50f2064f8ea045c08fa7275662e3df01763",
+            "provenance": "workflow_gh",
+            "raw_sha256": "2d2c63432354b3e4d629f1f55e36bb1ea2f1057d53da61288805936c5075c3ed"
+          }
+        },
+        "trust": {
+          "review_verdicts": "orchestrator",
+          "functional_evidence": "orchestrator",
+          "pr_fact": "workflow_gh"
+        },
+        "evaluated_at": "2026-11-08T03:36:08Z",
+        "workflow_release": "2.27.0"
+      }
     }
   }
 }

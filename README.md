@@ -153,7 +153,8 @@ python3 tools/check_docs.py     # links, anchors and the commands shown on the t
 ```
 
 Do not set `PYTHONPATH=.`, and run the suite in the foreground. Pull requests
-are validated by `.github/workflows/validate.yml`, whose jobs are `plan`,
-`tests` (one per shard), `tests-result` and `package`; the documentation
-checks run inside `tests`. See
+are validated by `.github/workflows/validate.yml`, whose jobs are `changes`,
+`docs`, `plan`, `tests` (one per shard), `tests-result` and `package`; a
+pull request that changes only documentation skips `plan` and `tests`, and
+the `docs` job runs the documentation checks on every pull request. See
 [Development and the test runner](docs/guide/development.md).

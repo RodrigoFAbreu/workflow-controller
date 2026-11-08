@@ -5,12 +5,17 @@ The tests are stdlib-only and cannot parse YAML, so the four workflows live
 here as Python data and are rendered by a small deterministic emitter:
 
 - ``validate.yml`` (``workflow_call`` only) is the single definition of the
-  required validation: ``plan`` computes a duration-balanced plan over the
+  required validation: ``changes`` decides, from the pull request's changed
+  paths, whether it touches anything but documentation
+  (``tools/ci_changes.py``), ``docs`` runs the documentation gate on every
+  event, ``plan`` computes a duration-balanced plan over the
   Controller suite and the frozen conformance suites
   (``tools/run_tests.py``, over ``tools/test_shards.py``), ``tests`` runs
   one matrix job per planned shard, ``tests-result`` aggregates them and
   proves every planned test ran exactly once, and ``package`` builds and
-  checks the wheel;
+  checks the wheel. A pull request that changes only documentation skips
+  ``plan`` and ``tests``; ``tests-result`` then succeeds only when ``changes``
+  and ``docs`` did, and fails closed otherwise;
 - ``ci.yml`` runs it on every pull request;
 - ``pr-title.yml`` checks every pull request's title against the committed
   policy (``tools/release.py check-title``): the title becomes the squash
@@ -150,12 +155,21 @@ SHARDS_DIR = f"{RESULTS_DIR}/shards"
 SELECTED_DIR = f"{RESULTS_DIR}/selected"
 PLAN_JOB_OUTPUTS = ("shards", "count", "digest")
 
+#: The ``docs`` job's checks: the offline link, anchor and command check, and
+#: the two test modules that read the real documentation and backlog files.
+DOCS_GATE = "python3 tools/check_docs.py\npython3 -m unittest tests.test_docs tests.test_backlog"
+
 #: ``validate.yml``'s only input: the id of a pull request run whose recorded
 #: results ``tests-result`` re-verifies instead of the shards running.
 #: Empty (the default, and every pull request) runs the shards.
 REUSE_INPUT = "tests-from-run"
 RUN_SHARDS = f"inputs.{REUSE_INPUT} == ''"
 REUSE_RESULTS = f"inputs.{REUSE_INPUT} != ''"
+#: The ``changes`` job's one output: ``true`` unless the pull request changes
+#: only documentation (``tools/ci_changes.py``). Every job and step the
+#: documentation-only mode skips carries this condition.
+CHANGES_CODE_OUTPUT = "needs.changes.outputs.code"
+IS_CODE = f"{CHANGES_CODE_OUTPUT} == 'true'"
 #: The recorded tree, written next to the plan and the shard records.
 TREE_FILE = "tree.txt"
 #: Where ``tests-result`` puts the reused run's timings artifact.
@@ -344,7 +358,35 @@ def validate_workflow() -> dict:
             "description": "Id of a pull request run to reuse the results of; empty runs the shards.",
             "type": "string", "required": False, "default": ""}}}},
         "jobs": {
+            # Detection is a job, never a workflow-level paths filter: the
+            # required check is tests-result, and a skipped workflow would
+            # leave it pending forever. Full history, for HEAD^1 of the merge ref.
+            "changes": {
+                "runs-on": RUNNER,
+                "permissions": read,
+                "outputs": {"code": "${{ steps.detect.outputs.code }}"},
+                "steps": [
+                    _checkout(pinned=False, fetch_depth=0),
+                    _setup_python(pinned=False),
+                    {"name": "detect", "id": "detect", "run": "python3 tools/ci_changes.py detect"},
+                ],
+            },
+            # The documentation gate, on every event: what a skipped shard
+            # run must not lose. Separate from changes so a documentation
+            # failure never hides the shards' feedback on a code pull request.
+            "docs": {
+                "runs-on": RUNNER,
+                "permissions": read,
+                "steps": [
+                    _checkout(pinned=False),
+                    _setup_python(pinned=False),
+                    _install_editable(),
+                    {"name": "documentation checks", "run": DOCS_GATE},
+                ],
+            },
             "plan": {
+                "needs": ["changes"],
+                "if": IS_CODE,
                 "runs-on": RUNNER,
                 "permissions": read,
                 "outputs": {name: f"${{{{ steps.plan.outputs.{name} }}}}" for name in PLAN_JOB_OUTPUTS},
@@ -361,8 +403,8 @@ def validate_workflow() -> dict:
             },
             "tests": {
                 "name": "tests (${{ matrix.shard }})",
-                "needs": ["plan"],
-                "if": RUN_SHARDS,
+                "needs": ["changes", "plan"],
+                "if": f"{RUN_SHARDS} && {IS_CODE}",
                 "runs-on": RUNNER,
                 "permissions": read,
                 "strategy": {"fail-fast": False,
@@ -386,7 +428,7 @@ def validate_workflow() -> dict:
             # latest attempt's record, and a plan or tests job of this attempt
             # that did not succeed fails it even when earlier records pass.
             "tests-result": {
-                "needs": ["plan", "tests"],
+                "needs": ["changes", "docs", "plan", "tests"],
                 "if": "always()",
                 "runs-on": RUNNER,
                 # actions: read only for the download of a reused run's artifact.
@@ -394,23 +436,23 @@ def validate_workflow() -> dict:
                 "steps": [
                     _checkout(pinned=False),
                     _setup_python(pinned=False),
-                    {"uses": "actions/download-artifact@v4", "continue-on-error": True,
+                    {"if": IS_CODE, "uses": "actions/download-artifact@v4", "continue-on-error": True,
                      "with": {"name": PLAN_ARTIFACT, "path": RESULTS_DIR}},
-                    {"if": RUN_SHARDS, "uses": "actions/download-artifact@v4", "continue-on-error": True,
+                    {"if": f"{RUN_SHARDS} && {IS_CODE}", "uses": "actions/download-artifact@v4", "continue-on-error": True,
                      "with": {"pattern": RESULTS_ARTIFACT_PREFIX + "*", "path": SHARDS_DIR}},
                     # Reuse (main.yml, CI_MAIN_REUSE=on): the pull request run's
                     # records stand in for the shards, but only when its tree
                     # and plan digest equal this run's (verify fails closed),
                     # and they are re-aggregated: exactly once, all passed.
-                    {"if": REUSE_RESULTS, "uses": "actions/download-artifact@v4", "continue-on-error": True,
+                    {"if": f"{REUSE_RESULTS} && {IS_CODE}", "uses": "actions/download-artifact@v4", "continue-on-error": True,
                      "with": {"pattern": "timings-ci-attempt-*", "path": REUSED_DIR,
                               "run-id": f"${{{{ inputs.{REUSE_INPUT} }}}}",
                               "github-token": "${{ github.token }}",
                               "repository": "${{ github.repository }}"}},
-                    {"name": "verify the reused results", "id": "verify", "if": REUSE_RESULTS,
+                    {"name": "verify the reused results", "id": "verify", "if": f"{REUSE_RESULTS} && {IS_CODE}",
                      "run": f"python3 tools/ci_reuse.py verify --reused-dir {REUSED_DIR} "
                             f"--plan {RESULTS_DIR}/{PLAN_FILE}"},
-                    {"name": "aggregate", "if": RUN_SHARDS,
+                    {"name": "aggregate", "if": f"{RUN_SHARDS} && {IS_CODE}",
                      "run": f"python3 tools/run_tests.py aggregate --plan {RESULTS_DIR}/{PLAN_FILE} "
                             f"--results-dir {SHARDS_DIR} --run-attempt {RUN_ATTEMPT} "
                             f"--write-selected {SELECTED_DIR} "
@@ -418,19 +460,26 @@ def validate_workflow() -> dict:
                             "--upstream-result tests=${{ needs.tests.result }} "
                             f"--plan-artifact {PLAN_ARTIFACT} "
                             f"--results-artifact-prefix {RESULTS_ARTIFACT_PREFIX}"},
-                    {"name": "aggregate the reused results", "if": REUSE_RESULTS,
+                    {"name": "aggregate the reused results", "if": f"{REUSE_RESULTS} && {IS_CODE}",
                      "run": f"python3 tools/run_tests.py aggregate --plan {RESULTS_DIR}/{PLAN_FILE} "
                             "--results-dir ${{ steps.verify.outputs.selected-dir }} "
                             f"--write-selected {SELECTED_DIR} "
                             "--upstream-result plan=${{ needs.plan.result }}"},
                     # The tree these results validate, for a later reuse.
-                    {"name": "record the tree", "if": "always()",
+                    {"name": "record the tree", "if": f"always() && {IS_CODE}",
                      "run": f"mkdir -p {SELECTED_DIR} && "
                             f"git rev-parse 'HEAD^{{tree}}' > {SELECTED_DIR}/{TREE_FILE}"},
                     # The run's per-atom durations, for
                     # tools/run_tests.py timings merge --into tools/test_timings.json.
-                    {"if": "always()", "uses": "actions/upload-artifact@v4",
+                    {"if": f"always() && {IS_CODE}", "uses": "actions/upload-artifact@v4",
                      "with": {"name": TIMINGS_ARTIFACT, "path": f"{SELECTED_DIR}/"}},
+                    # Last, and always(): the gate failing must not skip the
+                    # shard report above, and an unknown mode must fail. In the
+                    # skipped mode this is the only step that decides.
+                    {"name": "require the gate", "if": "always()",
+                     "run": "python3 tools/ci_changes.py require "
+                            "--changes ${{ needs.changes.result }} --docs ${{ needs.docs.result }} "
+                            f'--code "${{{{ {CHANGES_CODE_OUTPUT} }}}}"'},
                 ],
             },
             "package": {
@@ -738,7 +787,9 @@ WORKFLOWS = {
     "validate.yml": (validate_workflow,
                      "The required validation, called by ci.yml and main.yml. Its input tests-from-run is\n"
                      "empty except when main.yml reuses a pull request run (CI_MAIN_REUSE=on); then the\n"
-                     "shards are skipped and tests-result re-verifies that run's recorded results."),
+                     "shards are skipped and tests-result re-verifies that run's recorded results. A pull\n"
+                     "request that changes only documentation (tools/ci_changes.py) skips plan and tests;\n"
+                     "the docs job runs on every event and tests-result requires it."),
     "ci.yml": (ci_workflow, "Runs the required validation on pull requests. Milestone branches are\n"
                             "validated through their Draft PR."),
     "main.yml": (main_workflow,

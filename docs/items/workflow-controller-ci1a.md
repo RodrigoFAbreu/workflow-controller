@@ -10,7 +10,7 @@ One mechanism: change detection at job level. A cheap `changes` job reports whet
 
 ## Numbers (profile in [#317](https://github.com/RodrigoFAbreu/workflow-controller/issues/317))
 
-Docs-only pull requests (313, 314, 316) ran the same jobs as code pull requests: plan, six test shards of about 20 CPU-minutes each, package, `tests-result`; CI took 24.9, 25.6 and 25.8 minutes. About half of the recent pull requests touch no code. Expected saving: about 24 minutes on a docs-only pull request, nothing on a code pull request. Main still runs everything.
+Docs-only pull requests (313, 314, 316) ran the same jobs as code pull requests: plan, six test shards of about 20 CPU-minutes each, package, `tests-result`; CI took 24.9, 25.6 and 25.8 minutes. About a third of the recent pull requests touch no code: 19 of the last 60 first-parent commits of `main` are documentation-only under the final set. Expected saving: about 24 minutes on a docs-only pull request, nothing on a code pull request. Main still runs everything.
 
 ## Out of scope
 

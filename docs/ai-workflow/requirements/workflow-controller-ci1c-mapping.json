@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ci1c",
+  "requirements": {
+    "R1": {
+      "description": "The parallel-worker setting is measured on the real shards (speed, CPU, reliability) in a scratch clone, and a written rule decides adoption from the numbers",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The executor option for Controller workers is written, with the proof preserved, only if a setting passes the rule",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "The guides, the CI wiring and the item page record the result, the two undecided candidates and the pull request comparison",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    }
+  }
+}

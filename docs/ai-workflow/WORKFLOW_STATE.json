@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-ci1c",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -66208,6 +66208,292 @@
         },
         "evaluated_at": "2026-11-08T08:00:57Z",
         "workflow_release": "2.27.0"
+      }
+    },
+    "workflow-controller-ci1c": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-ci1c",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CI1C_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-ci1c-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci1c-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 5,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "065ca1ec106070dde4d3317cef037fa2696dd915",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "fbcd8e86d068d2b3fe1ad1625aab024094abbb695fafae1c67139573a9919580",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "fbcd8e86d068d2b3fe1ad1625aab024094abbb695fafae1c67139573a9919580",
+        "approved_review_content_id": "69201a2153cd2bae34b254d6db3002a273e92b4eb1b28e567f4fec8e4ad45921",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CI1C_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "70f8521a1d8babfcfb12d542f8e6a1a9dd83bf2d"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-ci1c-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0b1a895cdfc9fff4290d8719a5844313cdc14921"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-ci1c-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5b35148149f38e4b7078fb9ad43d884943ca382e"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-08T09:52:18Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "69201a2153cd2bae34b254d6db3002a273e92b4eb1b28e567f4fec8e4ad45921",
+            "ledger": {
+              "local": {
+                "bundle_id": "fbcd8e86d068d2b3fe1ad1625aab024094abbb695fafae1c67139573a9919580",
+                "verdict": "APPROVE",
+                "round": 5,
+                "verdict_sha256": "f4f715693714152413c0c7f0d311c0e1aa4d9910079b5393e591652f8045c28c",
+                "ledger_entry_sha256": "05a606d1323c5ec81a54351385fe461071fb9da04fd8d933ef87dab970039e63",
+                "run_ref": "session:local .ai-review/workflow-controller-ci1c/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "fbcd8e86d068d2b3fe1ad1625aab024094abbb695fafae1c67139573a9919580",
+                "verdict": "APPROVE",
+                "round": 5,
+                "verdict_sha256": "240ebe75d4ecf05ad35d3709f59efbd83ab65711ef5932db52ac279a1bec99d5",
+                "ledger_entry_sha256": "c721588922c05094e66e7480050e505e1583047558829230c4a1eb85174c18a4",
+                "run_ref": "codex:20261108T094830Z-c6ada22f",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-08T09:52:18Z",
+          "workflow_release": "2.27.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "69201a2153cd2bae34b254d6db3002a273e92b4eb1b28e567f4fec8e4ad45921",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "fbcd8e86d068d2b3fe1ad1625aab024094abbb695fafae1c67139573a9919580",
+          "verdict": "APPROVE",
+          "round": 5,
+          "completed_at": "2026-11-08T09:48:14Z",
+          "verdict_sha256": "f4f715693714152413c0c7f0d311c0e1aa4d9910079b5393e591652f8045c28c",
+          "run_ref": "session:local .ai-review/workflow-controller-ci1c/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "fbcd8e86d068d2b3fe1ad1625aab024094abbb695fafae1c67139573a9919580",
+          "verdict": "APPROVE",
+          "round": 5,
+          "completed_at": "2026-11-08T09:50:11Z",
+          "verdict_sha256": "240ebe75d4ecf05ad35d3709f59efbd83ab65711ef5932db52ac279a1bec99d5",
+          "run_ref": "codex:20261108T094830Z-c6ada22f",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 5,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 18,
+      "last_transition": "2026-11-08T09:52:18Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-08T09:46:33Z",
+        "consumed": {
+          "review_content_id": "791fee961adbb1272e8dc6eb5f02de7c485de0a1cd62df31b871b125c5cad06e",
+          "plan_revision": 4,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "69201a2153cd2bae34b254d6db3002a273e92b4eb1b28e567f4fec8e4ad45921",
+          "plan_revision": 5
+        },
+        "bound": {
+          "review_content_id": "69201a2153cd2bae34b254d6db3002a273e92b4eb1b28e567f4fec8e4ad45921",
+          "bundle_id": "fbcd8e86d068d2b3fe1ad1625aab024094abbb695fafae1c67139573a9919580",
+          "plan_revision": 5
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "2b9972e0b68afac4685cc86109afedac828e3b2277e2e843dc959759e6f0a359",
+        "791fee961adbb1272e8dc6eb5f02de7c485de0a1cd62df31b871b125c5cad06e",
+        "7f0fd8898016eccb67ff058086ddb6b99a477788e6598579749685516968c1cd",
+        "9ed0427b10bce2f7e245e0bbc975603e766874dd6f8c95169214d7075ab0f0a4"
+      ],
+      "optional_findings": {
+        "F-2d80448e51da": {
+          "digest": "2d80448e51da7018fdfb107c91fbe7f5eae117eb8ce9cb4661f114f8fcd189c7",
+          "text": "**O1. `run` is not a subcommand.** D6/CP2 add `--controller-workers` \"on `exec-shard` and `run`\". `tools/run_tests.py`'s `SUBCOMMANDS` are `exec-shard, plan, aggregate, timings, main-check`, and the local runner is the bare `run_tests.py [names...]`, which already runs several shards at once (`--jobs`). Name the local entry point exactly, and state its default so that local shards x workers do not oversubscribe the machine.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "7f0fd8898016eccb67ff058086ddb6b99a477788e6598579749685516968c1cd",
+              "verdict": "REVISE",
+              "at": "2026-11-08T09:34:11Z"
+            }
+          ]
+        },
+        "F-fcbb4753fe4b": {
+          "digest": "fcbb4753fe4bb014a70c7c8c48a907cec85d5a0e00b7752e95553a99e0511d49",
+          "text": "**O2. \"Byte-identical\" records cannot hold literally.** `started_at`, `ended_at`, `wall_seconds`, the per-atom `seconds` and `argv` differ between any two runs. State the CP2 test as \"identical except the timing fields (and `argv`)\".",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "7f0fd8898016eccb67ff058086ddb6b99a477788e6598579749685516968c1cd",
+              "verdict": "REVISE",
+              "at": "2026-11-08T09:34:11Z"
+            }
+          ]
+        },
+        "F-17a172824a56": {
+          "digest": "17a172824a56700a0f0cb91649fc05fdcf59e173226bd94fa2890e6229b356f9",
+          "text": "**O3. The exclusive shard.** `EXCLUSIVE_ATOMS` is empty today, but the planner keeps an `exclusive` shard for atoms that must run alone. D6 should state that a shard marked `exclusive` always runs with one worker (or that the option is refused for it).",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "7f0fd8898016eccb67ff058086ddb6b99a477788e6598579749685516968c1cd",
+              "verdict": "REVISE",
+              "at": "2026-11-08T09:34:11Z"
+            }
+          ]
+        },
+        "F-331f39ae4935": {
+          "digest": "331f39ae49357b38b63033d7c194f26ca924253e4668be6938115cb63178b930",
+          "text": "**O1. The record schema change is unstated, and it conflicts with \"N = 1 is identical to today's records\".** `validate_shard_result` (`tools/test_shards.py:520-537`) refuses unknown keys against `_RESULT_KEYS`/`_RESULT_KEYS_V2`. Adding `controller_workers` therefore needs either a schema version or an optional key, and records from before the change (reused or merged artifacts) must still validate. State which one, and whether an N = 1 record carries `controller_workers: 1` (then it is not identical to today's apart from timing fields and `argv`) or omits the key.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "9ed0427b10bce2f7e245e0bbc975603e766874dd6f8c95169214d7075ab0f0a4",
+              "verdict": "REVISE",
+              "at": "2026-11-08T09:37:57Z"
+            }
+          ]
+        },
+        "F-d594b2617f37": {
+          "digest": "d594b2617f37068e600d6d16383b9c1314e050d4093160adfa25a02aaf087ddf",
+          "text": "**O2. Name the per-worker directories under the shard's own directory.** D3's `<results>/worker-<k>/tmp` reads as the run's results directory, which is the `results_dir` that `shard_environment` and the local runner pass. With `--jobs` running several shards at once, shard 0's and shard 1's `worker-0` would share one `TMPDIR`, which is the shared-name collision D3 is looking for. Write `<results>/shard-<i>/worker-<k>/{tmp,state}`, and note that at N = 1 this moves the shard's `TMPDIR` from `shard-<i>/tmp`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "9ed0427b10bce2f7e245e0bbc975603e766874dd6f8c95169214d7075ab0f0a4",
+              "verdict": "REVISE",
+              "at": "2026-11-08T09:37:57Z"
+            }
+          ]
+        },
+        "F-f8ce84d540d5": {
+          "digest": "f8ce84d540d5636dae8abef62f9c151d80a686d137a557fa45953794ce931042",
+          "text": "**O1. \"Refused above the shard's atom count\" can break the bare local runner.** `python3 tools/run_tests.py [names...] --controller-workers 2` with a name selection that leaves a shard holding one Controller atom would be refused, and so would a local run whose shards differ in size. Consider clamping N to the shard's Controller atom count, as the `exclusive` shard already does (run with fewer workers, not an error), and keep the refusal for N below 1.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "2b9972e0b68afac4685cc86109afedac828e3b2277e2e843dc959759e6f0a359",
+              "verdict": "REVISE",
+              "at": "2026-11-08T09:41:17Z"
+            }
+          ]
+        },
+        "F-cddf3645299c": {
+          "digest": "cddf3645299cfc99e903d5c1a5ddc05c76820ad28ed6e9d8480be6a78400c824",
+          "text": "**O1. \"A leftover is reported by the leak scan's existing path\" names a path that reports processes, not directories.** The leak scan (`scan_marked_processes`, `tools/test_shards.py:1963-1967`) finds live processes that carry the shard marker. It has no way to report a worker `TMPDIR` or `XDG_STATE_HOME` that the executor fails to remove. State what happens when a worker directory cannot be removed (for example, a warning in the shard log naming the path, without failing the shard), and have CP2 test that case. The current wording reads as if a surviving directory were already covered.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "69201a2153cd2bae34b254d6db3002a273e92b4eb1b28e567f4fec8e4ad45921",
+              "verdict": "APPROVE",
+              "at": "2026-11-08T09:48:14Z"
+            }
+          ]
+        },
+        "F-c23d124efca2": {
+          "digest": "c23d124efca28fd6b7ae9da260a1c91e820fea9c54bd7fd59a5e2e5783a456d1",
+          "text": "**O1. Clarify directory-cleanup reporting in D3.** The statement that “a leftover is reported by the leak scan’s existing path” suggests directory leftovers are already detected. `scan_marked_processes` in `tools/test_shards.py` detects processes through `/proc`, not directories. Describe how an unsuccessful directory cleanup is reported, and optionally test that reporting in CP2.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "69201a2153cd2bae34b254d6db3002a273e92b4eb1b28e567f4fec8e4ad45921",
+              "verdict": "APPROVE",
+              "at": "2026-11-08T09:50:11Z"
+            }
+          ]
+        }
       }
     }
   }

@@ -743,6 +743,7 @@ class _SatisfyGateLifecycleHelpers:
     def records(self, life: Lifecycle) -> list[dict]:
         return [json.loads(path.read_text()) for path in sorted((life.runtime / "jobs").glob("*.json"))]
 
+
 class SatisfyGateLifecycleApprovalTest(_SatisfyGateLifecycleHelpers, unittest.TestCase):
     def test_a_run_passes_plan_technical_approval_and_acceptance_by_policy_without_a_stop(self) -> None:
         life = GateLifecycle(self)
@@ -1142,6 +1143,7 @@ class _PrDefectLoopLifecycleHelpers:
         self.assertEqual(life.row(), "38h")
         self.assertEqual(life.step()["status"], job.STATUS_FINISHED)
         self.assertEqual(life.phase(), "MILESTONE_COMPLETE")
+
 
 class PrDefectLoopLifecycleReopenTest(_PrDefectLoopLifecycleHelpers, unittest.TestCase):
     def test_a_red_pull_request_reopens_the_item_and_the_run_returns_to_acceptance(self) -> None:

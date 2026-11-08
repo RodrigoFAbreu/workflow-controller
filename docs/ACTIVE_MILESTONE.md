@@ -10,6 +10,13 @@ every moved body identical. CP2 refreshed `tools/test_timings.json` from three C
 measurements: longest-shard estimates 1439 s (6 shards), 1288 s (7), 1233 s (8); 7 is recommended and needs the owner's yes.
 Verification: `tools/check_docs.py` passes; the full suite's only failures are the three known environmental
 `fake_codex_contract` tests (the fake reads `~/.codex` config).
+The self-review corrected the guide and the item page, which said an eighth shard buys nothing (at eight the
+`acceptance_matrix` atom runs alone at 1120 s and the longest shard is 1233 s, 55 s below seven); the item page said
+three artifacts were merged, but the third (run 42446936171 on `main`) is byte for byte the second, so the timings fold two;
+it now records the owner's answer (asked on SignalHub during CP2, no answer within 30 minutes, so 6 stays) and the measured
+extra CPU time of the repeated snapshot drives (12 more drives, about 126 s locally, about 200 s of CI CPU). Three class
+definitions got their second blank line back. The D2 comparison was re-run at the head: every moved body is identical,
+except the class name in the two `ReportNotificationTest` bodies, and each sibling keeps the old method order.
 
 ## Previous milestone (CI1a)
 

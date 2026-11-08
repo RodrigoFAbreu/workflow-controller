@@ -1045,10 +1045,10 @@ ws.state_transaction(Path.cwd(), lambda s: state)
 
 
 class _TheFaultStopsHelpers:
-
     def gate_of(self, record: dict) -> str:
         self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED, record)
         return record["functional"]["gate"]
+
 
 class TheFaultStopsSandboxTest(_TheFaultStopsHelpers, _TesterCase):
     def test_each_cause_of_an_unavailable_tester_is_a_review_wait_with_nothing_recorded(self) -> None:

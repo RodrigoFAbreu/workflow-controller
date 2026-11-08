@@ -111,10 +111,11 @@ the artifacts to download (`results-<i>-attempt-<a>` holds the log,
 reproduction commands.
 
 What bounds the longest shard. The conformance `acceptance_matrix` suite is one
-atom (1119.7 s in the committed timings, times the lane contention of 1.15 on its
-shard, about 1288 s) and it is a floor below which the longest pull-request shard
-cannot go: it is not what sets the estimate at six shards (1439 s), but it equals
-the estimate at seven, so an eighth shard buys nothing for the longest shard. Cutting it
+atom (1119.7 s in the committed timings) and so a floor below which the longest
+pull-request shard cannot go; on a shard it shares with Controller tests the lane
+contention of 1.15 makes it about 1288 s. It is not what sets the estimate at six
+shards (1439 s); at seven it does (every shard about 1288 s), and at eight it runs
+alone while the longest shard is 1233 s, only 55 s below seven. Cutting it
 needs the suite's `shards` option, which belongs to the frozen Workflow content, so
 that is a separate upstream step and is not done here. The other atoms that stay whole
 are the single-test ones: the conformance `protocol`, `state` and `gate_policy` suites,

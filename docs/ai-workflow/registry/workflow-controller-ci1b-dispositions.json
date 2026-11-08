@@ -1,0 +1,86 @@
+{
+ "schema_version": 1,
+ "work_item_id": "workflow-controller-ci1b",
+ "dispositions": {
+  "F-77bb6c8152f4": {
+   "disposition": "fixed",
+   "note": "docs/ai-workflow/CONTROLLER_CI1B_PLAN.md D1 now says the six classes are above 200 s (the D5 ratchet limit) and adds that the test counts are the source's while the committed timings still recorded 9 and 8, which the CP2 refresh corrects."
+  },
+  "F-d94e54f94b9d": {
+   "disposition": "fixed",
+   "note": "Plan D4/CP2 merge the two or three latest qualifying artifacts oldest first and state the count. tools/test_timings.json was merged from two runs (42441435062, then 42443476424); docs/items/workflow-controller-ci1b.md states the count and why the third download (a main reuse run) was not folded."
+  },
+  "F-bb461052e1c6": {
+   "disposition": "fixed",
+   "note": "Plan D3 names both, and docs/guide/ci-and-releases.md ('What bounds the longest shard') names the acceptance_matrix atom as the pull-request floor with the 1.15 lane contention, and CatalogueDeterminismTest (1075.4 s) as the largest main.yml check, which CI_PLACEMENT keeps off the pull-request shards."
+  },
+  "F-10e039f0560f": {
+   "disposition": "fixed",
+   "note": "Plan D4 specifies samples: 1, and all fourteen new-class entries in tools/test_timings.json carry samples 1."
+  },
+  "F-b3f7663f5090": {
+   "disposition": "fixed",
+   "note": "CP1 lists tools/test_timings.json, and commit 4884b70 deletes the six stale entries from it (30 lines removed, no seconds added), so CommittedTimingsTest stays green at CP1's head."
+  },
+  "F-3c38d5778e1f": {
+   "disposition": "fixed",
+   "note": "Plan D6 bounds the SignalHub wait-answer at 1800 s with default 6; docs/items/workflow-controller-ci1b.md records that no answer came within the 30-minute bound, so CI_MAX_SHARDS stays 6 (tools/test_shards.py:212)."
+  },
+  "F-d3a7990e8483": {
+   "disposition": "fixed",
+   "note": "Plan D4 says the apportioned entries are computed by a short script kept outside the repository whose inputs and output the report records. The script exists and reproduces the fourteen committed entries exactly (checked at acceptance); the inputs themselves were not in the bundle, which F-eb34323ce69b tracks in #324, where they are now recorded."
+  },
+  "F-f259eb2a023d": {
+   "disposition": "fixed",
+   "note": "docs/ai-workflow/requirements/workflow-controller-ci1b-mapping.json R1 reads 'identical test bodies (apart from the one class name D1 names)'."
+  },
+  "F-dbeb0160a46a": {
+   "disposition": "fixed",
+   "note": "Plan D6 drops the module constant; tests/test_scenarios.py removes MAX_CI_SHARDS, renames the test to test_the_ci_plan_stays_within_the_shard_ceiling and compares with self.shards.CI_MAX_SHARDS. D6 names tests/test_test_shards.py:927 (assertEqual(shards.CI_MAX_SHARDS, 6)) as the guard."
+  },
+  "F-d643a7ff3bdf": {
+   "disposition": "fixed",
+   "note": "Plan D4 writes {seconds, samples: 1, tests} with tests the new class's method count; each new entry in tools/test_timings.json has the method count of its class (for example PrDefectLoopLifecycleReopenTest 2, SatisfyGateLifecycleRefusalTest 5, TheFaultStopsRecordTest 6)."
+  },
+  "F-cbc28650f951": {
+   "disposition": "fixed",
+   "note": "Plan D4 adopts the update_timings count rule. The apportioning took the first artifact observation outright for TheFaultStopsTest (168.209 s, committed 9 tests vs 11) and ReportTest (83.094 s, 8 vs 9) and folded the second; re-running the script reproduces the committed entries exactly."
+  },
+  "F-4514cd1d730e": {
+   "disposition": "fixed",
+   "note": "Same change as F-cbc28650f951: plan D4 matches the update_timings reset on a count mismatch, and the TheFaultStopsTest and ReportTest bases in tools/test_timings.json were derived that way (138.198 s and 103.243 s)."
+  },
+  "F-84c0db92c554": {
+   "disposition": "fixed",
+   "note": "CP2 now says 'the latest qualifying artifacts'. The main reuse run 42446936171, whose shard records are byte for byte those of 42443476424, was not folded; docs/items/workflow-controller-ci1b.md says so and the timings reproduce from the two distinct artifacts."
+  },
+  "F-cc1628aad1e1": {
+   "disposition": "dropped",
+   "reason": "The risk did not materialise: the CP2 merge observed IsolationTest and reset its count, so tools/test_timings.json now records tests.test_functional_lifecycle.IsolationTest with tests 1 and the ratchet passes. Reading the count from the committed file is consistent by design, because a merge updates the seconds and the count together."
+  },
+  "F-fcfda08fc110": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/324"
+  },
+  "F-dce8244460bb": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/324"
+  },
+  "F-605cecd0feda": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/324"
+  },
+  "F-ff034800cbc8": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/324"
+  },
+  "F-eb34323ce69b": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/324"
+  },
+  "F-038599eb356f": {
+   "disposition": "follow-up",
+   "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/324"
+  }
+ }
+}

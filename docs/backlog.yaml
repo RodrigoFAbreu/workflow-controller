@@ -454,7 +454,7 @@ items:
     detail: docs/items/workflow-controller-ci1a.md
   - id: workflow-controller-ci1b
     title: "CI: split the giant test atoms and refresh the shard timings"
-    status: next
+    status: done
     order: 78
     detail: docs/items/workflow-controller-ci1b.md
   - id: workflow-controller-ci1c

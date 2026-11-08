@@ -65107,6 +65107,122 @@
           "run_ref": "codex:20261107T230706Z-3d9b494d",
           "reviewer_model": "openai/gpt-6.1-sol"
         }
+      },
+      "gate_evidence": {
+        "functional": {
+          "flow-1": {
+            "flow_id": "flow-1",
+            "status": "passed",
+            "head": "05b10af382ac8d6b67622b19cadb54d548199333",
+            "ran_at": "2026-11-07T23:15:26Z",
+            "summary": {
+              "checklist_blob": "343e0e0d6c5ec8fe0c7c30036792fe1c6e0bf43e",
+              "text": "Ran 77 tests, OK"
+            },
+            "log_digest": "fc707026a4cc267e96f96a5e6300a43247ae1c0e2efb9b76cc4d800ae24e798e",
+            "run_ref": "controller:20261107T231408Z-0b02e6f0",
+            "reporter": "workflow-controller 1.27.10",
+            "identity": "40870f69e4f6f89011bc120f7ddc1fd84020f357e4c31f6e79163d317bba04ce",
+            "recorded_at": "2026-11-07T23:15:26Z"
+          },
+          "flow-2": {
+            "flow_id": "flow-2",
+            "status": "passed",
+            "head": "05b10af382ac8d6b67622b19cadb54d548199333",
+            "ran_at": "2026-11-07T23:15:26Z",
+            "summary": {
+              "checklist_blob": "343e0e0d6c5ec8fe0c7c30036792fe1c6e0bf43e",
+              "text": "Ran 105 tests, OK"
+            },
+            "log_digest": "dc8f2f91ea658a90db8eaf6f41b963f6a06b9159b031d1c615c9166b42dba48b",
+            "run_ref": "controller:20261107T231408Z-0b02e6f0",
+            "reporter": "workflow-controller 1.27.10",
+            "identity": "40870f69e4f6f89011bc120f7ddc1fd84020f357e4c31f6e79163d317bba04ce",
+            "recorded_at": "2026-11-07T23:15:27Z"
+          },
+          "flow-3": {
+            "flow_id": "flow-3",
+            "status": "passed",
+            "head": "05b10af382ac8d6b67622b19cadb54d548199333",
+            "ran_at": "2026-11-07T23:15:27Z",
+            "summary": {
+              "checklist_blob": "343e0e0d6c5ec8fe0c7c30036792fe1c6e0bf43e",
+              "text": "docs-only merge gave code=false (1 changed path(s), all documentation); tools.py merge gave code=true (tools.py is not documentation: everything runs)"
+            },
+            "log_digest": "0fb02e52e86221739ade0c662c28a349458e0fb5b25730759d33b6bfccf88d80",
+            "run_ref": "controller:20261107T231408Z-0b02e6f0",
+            "reporter": "workflow-controller 1.27.10",
+            "identity": "40870f69e4f6f89011bc120f7ddc1fd84020f357e4c31f6e79163d317bba04ce",
+            "recorded_at": "2026-11-07T23:15:27Z"
+          },
+          "flow-4": {
+            "flow_id": "flow-4",
+            "status": "passed",
+            "head": "05b10af382ac8d6b67622b19cadb54d548199333",
+            "ran_at": "2026-11-07T23:15:27Z",
+            "summary": {
+              "checklist_blob": "343e0e0d6c5ec8fe0c7c30036792fe1c6e0bf43e",
+              "text": "push and unset event both code=true; HEAD-less repo also code=true (git failure fails closed)"
+            },
+            "log_digest": "0b63f20631eaa3a0de92a0493fd80a9dc1aa11d2f72fe4f5baf45b5964d335a5",
+            "run_ref": "controller:20261107T231408Z-0b02e6f0",
+            "reporter": "workflow-controller 1.27.10",
+            "identity": "40870f69e4f6f89011bc120f7ddc1fd84020f357e4c31f6e79163d317bba04ce",
+            "recorded_at": "2026-11-07T23:15:27Z"
+          },
+          "flow-5": {
+            "flow_id": "flow-5",
+            "status": "passed",
+            "head": "05b10af382ac8d6b67622b19cadb54d548199333",
+            "ran_at": "2026-11-07T23:15:27Z",
+            "summary": {
+              "checklist_blob": "343e0e0d6c5ec8fe0c7c30036792fe1c6e0bf43e",
+              "text": "rc=0, rc=1, rc=1 as expected"
+            },
+            "log_digest": "751d3200cfb520d76ddbfe6f7a85ad4c6e014aaa51da02ee1b7703eea140aaf2",
+            "run_ref": "controller:20261107T231408Z-0b02e6f0",
+            "reporter": "workflow-controller 1.27.10",
+            "identity": "40870f69e4f6f89011bc120f7ddc1fd84020f357e4c31f6e79163d317bba04ce",
+            "recorded_at": "2026-11-07T23:15:27Z"
+          },
+          "flow-6": {
+            "flow_id": "flow-6",
+            "status": "passed",
+            "head": "05b10af382ac8d6b67622b19cadb54d548199333",
+            "ran_at": "2026-11-07T23:15:27Z",
+            "summary": {
+              "checklist_blob": "343e0e0d6c5ec8fe0c7c30036792fe1c6e0bf43e",
+              "text": "check_docs rc=0; backlog check rc=0 with the expected JSON line"
+            },
+            "log_digest": "a794c646fb41ce3f08431601918b76e8c77b27098490f25d748d571193923539",
+            "run_ref": "controller:20261107T231408Z-0b02e6f0",
+            "reporter": "workflow-controller 1.27.10",
+            "identity": "40870f69e4f6f89011bc120f7ddc1fd84020f357e4c31f6e79163d317bba04ce",
+            "recorded_at": "2026-11-07T23:15:27Z"
+          },
+          "flow-7": {
+            "flow_id": "flow-7",
+            "status": "passed",
+            "head": "05b10af382ac8d6b67622b19cadb54d548199333",
+            "ran_at": "2026-11-07T23:15:28Z",
+            "summary": {
+              "checklist_blob": "343e0e0d6c5ec8fe0c7c30036792fe1c6e0bf43e",
+              "text": "Guides state skip of plan/shards, set and code paths, main/doubt run everything; ci1a item has no 'about half'. Note: package job is unconditional (guide says it still runs), a looser wording in the checklist for flow-2 but tests pass."
+            },
+            "log_digest": "6017c2396fb97b223d73d0242c981a5de0ebc540027958d679a66426791ed5c9",
+            "run_ref": "controller:20261107T231408Z-0b02e6f0",
+            "reporter": "workflow-controller 1.27.10",
+            "identity": "40870f69e4f6f89011bc120f7ddc1fd84020f357e4c31f6e79163d317bba04ce",
+            "recorded_at": "2026-11-07T23:15:28Z"
+          }
+        },
+        "pr": null,
+        "pr_reported": null,
+        "pr_keys": {
+          "reopened_for": [],
+          "applied": [],
+          "ingest_seq": 0
+        }
       }
     }
   }

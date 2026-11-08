@@ -2,6 +2,17 @@
 
 ## Status
 
+**Implemented, awaiting review.** `workflow-controller-ci1b` (CI1b, issue
+[#317](https://github.com/RodrigoFAbreu/workflow-controller/issues/317)): the plan is `docs/ai-workflow/CONTROLLER_CI1B_PLAN.md`
+(revision 5), three checkpoints, all complete. CP1 split six multi-test classes along their test methods into fourteen, with
+every moved body identical. CP2 refreshed `tools/test_timings.json` from three CI artifacts, added the 200 s ratchet and kept
+`CI_MAX_SHARDS` at 6. CP3 updated `docs/guide/ci-and-releases.md`, `docs/guide/development.md` and the item page with the
+measurements: longest-shard estimates 1439 s (6 shards), 1288 s (7), 1233 s (8); 7 is recommended and needs the owner's yes.
+Verification: `tools/check_docs.py` passes; the full suite's only failures are the three known environmental
+`fake_codex_contract` tests (the fake reads `~/.codex` config).
+
+## Previous milestone (CI1a)
+
 **Complete.** `workflow-controller-ci1a` (CI1a, issue
 [#317](https://github.com/RodrigoFAbreu/workflow-controller/issues/317)): a pull request that changes only documentation
 skips the plan and the six test shards. The plan is `docs/ai-workflow/CONTROLLER_CI1A_PLAN.md` (revision 6). A `changes` job

@@ -2,7 +2,7 @@
 
 Item id: `workflow-controller-ci1b`.
 
-A `ci:` change with test-only edits. Not yet planned. Cut the few giant test atoms into smaller ones, refresh the timings, then raise the shard count. Complexity: medium. The planning rules apply: at most one new mechanism, releasable alone. Target for the three CI1 items together: PR CI under 20 minutes ([#317](https://github.com/RodrigoFAbreu/workflow-controller/issues/317), [CI time budget](../planning-rules.md#next-in-order-and-the-sizing-rules)).
+A `ci:` change with test-only edits. Implemented on the milestone branch (three checkpoints). Cut the few giant test atoms into smaller ones, refresh the timings, then raise the shard count. Complexity: medium. The planning rules apply: at most one new mechanism, releasable alone. Target for the three CI1 items together: PR CI under 20 minutes ([#317](https://github.com/RodrigoFAbreu/workflow-controller/issues/317), [CI time budget](../planning-rules.md#next-in-order-and-the-sizing-rules)).
 
 ## Scope
 
@@ -19,3 +19,11 @@ The docs-only skip (CI1a); parallel workers inside a shard (CI1c); a change to t
 ## Planning notes
 
 The rules that apply to this item (the sizing rule: at most one new mechanism, releasable alone) are on [Planning rules](../planning-rules.md#next-in-order-and-the-sizing-rules).
+
+## Measurements (CI1b)
+
+- **Split.** Six multi-test classes became fourteen classes along their test methods, with no assertion changed (the AST of every moved body matched the base, except the class name in the two `ReportNotificationTest` bodies): `PrDefectLoopLifecycleTest` into Reopen, Report and Stop; `SatisfyGateLifecycleTest` into Approval and Refusal; `OutcomesTest` into Evidence and Failure; `TheFaultStopsTest` into Record and Sandbox; `ReportTest` into Record, Refusal and Scope; `WaitTest` into Budget and Reports.
+- **Timings.** Merged from the `timings-ci-attempt` artifacts of three CI runs (42441435062, 42443476424, 42446936171), oldest first. The new classes' entries are apportioned from the old classes' folded base by local share (`{seconds, samples: 1, tests}`): lifecycle 90.7 / 117.4 / 138.2 s and 80.3 / 95.7 s, job 81.6 / 109.2 s and 50.2 / 88.0 s, report 34.2 / 32.7 / 36.3 s and 48.7 / 44.0 s. The next merge from CI replaces them with observed seconds.
+- **Planner estimates** (`run_tests.py plan --profile ci --ci-placement --max-shards N`, longest shard): 6 shards 1439 s, 7 shards 1288 s, 8 shards 1233 s (the shortest of the eight is 1120 s). Seven lowers the estimate by 151 s, so the 90 s rule of D6 holds, but raising the budget from 8 to 9 runners needs the owner's yes. `CI_MAX_SHARDS` stays 6 and **7 is recommended**. At seven the longest estimate equals the conformance `acceptance_matrix` atom (1119.7 s times the lane contention 1.15, about 1288 s), so an eighth shard buys nothing for the longest shard.
+- **Ratchet.** `CommittedTimingsTest` now fails for a multi-test class over 200 s, and a negative case proves the check can fail.
+- **Extra CPU time of the repeated snapshot drives** is not measured separately here; the pull request's own CI is the proof (D8), and the page will record the baseline and the pull request's run ids, timestamps and interval when the CI of this pull request has finished.

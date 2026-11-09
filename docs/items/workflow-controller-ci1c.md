@@ -66,3 +66,7 @@ Wall change of 2 workers against 1: shard 0 -27.8%, shard 4 -24.6%, shard 1 -31.
 - A larger runner: the owner's billing decision. The measured gain that would justify it: the shard floor, since the conformance lane (about 1120 s of shard 0) does not use workers and bounds the shard at about 21.5 minutes at planned scale.
 
 Reproduction: `python3 tools/run_tests.py plan --profile ci --ci-placement`, then `taskset -c 0,1,8,9 python3 tools/run_tests.py exec-shard --plan <plan.json> --shard <i> --results-dir results --run-attempt 1` with the experimental patch's worker count set in the environment.
+
+## CP2 (not needed)
+
+No setting passed D4 as written (see the verdicts above), so the option is not written and CP2 changes no source file. Reading (d) as limited to shards A and B would let two workers pass; that reading is for the reviewer and the owner, and adopting it needs a plan amendment that reopens CP2.

@@ -10,6 +10,11 @@ failure or leak; the CPU rise is +5% to +22% on five shards but +32.7% on shard 
 workers fail D4(d) and CP2 would commit nothing; three workers fail the CPU limit on shards 0 and 4. The reading of (d) is
 left to the reviewer and the owner. No source file changed.
 
+CP2 is recorded as not needed: the plan writes the option only if CP1 records a setting that passes D4, and read as written
+no setting does (two workers fail (d) on shard 1, three fail it on shards 0 and 4), so CP2 changes no file. If the reviewer or
+owner reads (d) as meant for shards A and B only, two workers pass and CP2 is reopened by a plan amendment. CP3 then records
+the negative result in the guides and the item page.
+
 ## Previous milestone (CI1b)
 
 **Complete.** `workflow-controller-ci1b` (CI1b, issue

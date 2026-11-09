@@ -260,10 +260,10 @@ Measured on the run of PR #46, which added the conformance lane:
 | Runner-minutes | about 69.5 | about 63.0 |
 
 Parallel workers inside a shard were measured and are not used. Two worker
-processes for the Controller lane cut the shard wall by 24 to 46 percent on all
-six shards in a pinned scratch run, but the CPU time rose by 32.7 percent on one
+processes for the Controller lane cut the shard wall by 27 to 47 percent on all
+six shards in a pinned scratch run, but the CPU time rose by 36.7 percent on one
 shard, over the 25 percent limit fixed before the measurement, and three workers
-failed it on two. The conformance lane does not use workers and bounds the
+failed it on both shards they were measured on. The conformance lane does not use workers and bounds the
 longest shard. The numbers, the rule and the reading of it left to the owner are
 in the [item page](../items/workflow-controller-ci1c.md#measurements-cp1).
 

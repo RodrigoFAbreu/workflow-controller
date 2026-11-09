@@ -187,9 +187,11 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   [How a shard runs](ci-and-releases.md#how-a-shard-runs).
 - **Workers.** A shard runs its Controller tests in one process; there is no
   option for several. Two and three workers were measured and not adopted (the
-  CPU rise on one shard passed the limit set beforehand); how it was measured
-  and the result are in
-  [the CI1c item page](../items/workflow-controller-ci1c.md#measurements-cp1).
+  CPU rise passed the limit set beforehand: on one shard for two workers, on
+  both shards measured for three); how it was measured, with the patch and
+  commands to reproduce it, and the result are in
+  [the CI1c item page](../items/workflow-controller-ci1c.md#measurements-cp1)
+  and its [reproduction page](../items/workflow-controller-ci1c-reproduction.md).
 - **Proof.** A run passes only if every planned test ran exactly once and
   passed; a missing, extra, duplicated or substituted test id fails the
   run and is named. The summary states the check's verdict either way

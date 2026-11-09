@@ -5,9 +5,11 @@
 **In progress.** `workflow-controller-ci1c` (CI1c, issue
 [#317](https://github.com/RodrigoFAbreu/workflow-controller/issues/317)): plan `docs/ai-workflow/CONTROLLER_CI1C_PLAN.md`
 (revision 5), three checkpoints. CP1 is complete: the measurements are in `docs/items/workflow-controller-ci1c.md`. Two
-workers cut the shard wall by 24-46% on every shard and leave the six-shard maximum at 514 s against 712 s, with no worker-only
-failure or leak; the CPU rise is +5% to +22% on five shards but +32.7% on shard 1, over D4's 25% limit. Read literally, two
-workers fail D4(d) and CP2 would commit nothing; three workers fail the CPU limit on shards 0 and 4. The reading of (d) is
+workers (atoms divided by the profile's estimates, after a review found the first patch split them by count and those runs
+were discarded and measured again) cut the shard wall by 27-47% on every shard and leave the six-shard maximum at 516 s against
+712 s, with no worker-only failure or leak; the CPU rise is +5% to +18% on five shards but +36.7% on shard 1, over D4's 25% limit.
+The patch, wrapper and commands are on `docs/items/workflow-controller-ci1c-reproduction.md`. Read literally, two
+workers fail D4(d) and CP2 would commit nothing; three workers fail the CPU limit on shards 0 (+25.9%) and 4 (+39.5%). The reading of (d) is
 left to the reviewer and the owner. No source file changed.
 
 CP2 is recorded as not needed: the plan writes the option only if CP1 records a setting that passes D4, and read as written

@@ -277,6 +277,29 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   its own. Check a new test of
   this kind with `taskset -c 0,1` and two or three copies started together.
 
+## Running signal tests safely
+
+`os.killpg(1, SIGKILL)` is `kill(-1, SIGKILL)`: it signals every process the user may signal and ends the whole desktop
+session. A test that records a fake process with pid and group `1` and mocks only the liveness check did this four times
+on 2026-11-09. Two layers stop it:
+
+- The Controller's own code never signals a group that is not a worker group (`runtime.signalable_group`: an integer
+  above 1 that is not this process's own group), so a damaged or fake record reaches no signal.
+- `tests/__init__.py` installs a guard in every test process: `os.kill` and `os.killpg` refuse a real signal to pid or
+  group `1`, `0` or `-1` with an `AssertionError`. Signal `0` and every other target pass through, and a test that mocks
+  `os.kill`/`os.killpg` replaces the guard. A command run through `subprocess` (`kill -9 -1`) is not covered.
+
+A test that must send real signals to a broad target, and any run of a suite you do not trust yet, goes in an isolated
+PID namespace, where a stray `kill(-1)` reaches only the processes inside it:
+
+```bash
+unshare -Urpf --mount-proc python3 -m unittest tests.test_worker
+```
+
+Inside the namespace the process is `root` (a test that expects an unwritable directory to stay unwritable fails) and its
+init does not reap zombies (a test that waits for a killed group to vanish can fail); both are artifacts of the
+namespace, not of the code under test. Never replace a mock with a real signal to make a test "more real".
+
 ## Documentation checks
 
 `tools/check_docs.py` keeps the documentation true without a network or a

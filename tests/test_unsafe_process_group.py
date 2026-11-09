@@ -13,6 +13,7 @@ import signal
 import unittest
 from unittest import mock
 
+import tests
 from controller import job, review, runtime, worker
 
 UNSAFE = (None, True, False, -1, 0, 1)
@@ -95,6 +96,35 @@ class UnsafeGroupNeverReachesTheOsTest(unittest.TestCase):
                 mock.patch.object(job, "_scan_record_owned", return_value=([], True)):
             job._end_review_group(record, mock.sentinel.root)
         self.killpg.assert_called_once_with(424242, signal.SIGKILL)
+
+
+class TestProcessSignalGuardTest(unittest.TestCase):
+    """``tests/__init__.py`` makes ``os.kill``/``os.killpg`` refuse a real signal to pid or group 1, 0 or -1.
+    The guard is tested through a recorder in place of the real call, never by signalling for real."""
+
+    def guarded(self, name: str = "kill"):
+        calls: list[tuple[int, int]] = []
+        return tests._guard_signal(lambda target, sig: calls.append((target, sig)), name), calls
+
+    def test_a_real_signal_to_an_unsafe_target_is_refused_before_it_reaches_the_call(self) -> None:
+        for name in ("kill", "killpg"):
+            for target in tests.UNSAFE_SIGNAL_TARGETS:
+                with self.subTest(name=name, target=target):
+                    guarded, calls = self.guarded(name)
+                    with self.assertRaises(AssertionError):
+                        guarded(target, signal.SIGKILL)
+                    self.assertEqual(calls, [])
+
+    def test_the_liveness_probe_and_an_ordinary_target_pass_through(self) -> None:
+        guarded, calls = self.guarded()
+        guarded(1, 0)
+        guarded(424242, signal.SIGKILL)
+        guarded(-424242, signal.SIGTERM)
+        self.assertEqual(calls, [(1, 0), (424242, signal.SIGKILL), (-424242, signal.SIGTERM)])
+
+    def test_every_test_process_has_the_guard_installed(self) -> None:
+        for fn in (os.kill, os.killpg):
+            self.assertTrue(hasattr(fn, "__wrapped__"), fn)
 
 
 if __name__ == "__main__":

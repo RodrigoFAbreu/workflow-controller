@@ -66219,7 +66219,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci1c-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci1c-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 5,
       "implementation_revision": 3,
       "functional_review_round": null,
@@ -66332,7 +66332,96 @@
           "workflow_release": "2.27.0"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "5586a46b2ed00c6ce5bf6cb9ad99ae4313ff8a731660ebcde667b28d2726a818",
+        "approved_review_content_id": "4ebc972c55c4ab5b95127635b6d7cbf73a059b2982943eb251fb945e504e1a1e",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-ci1c-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1459283d60300f9541ab778b9c2f3201fa738df6"
+          },
+          {
+            "path": "docs/guide/ci-and-releases.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "77c44b0f6f60b6bc2493064afb942f9a65730a36"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "29125047d24186c50a49349bdce0bf6f386879e2"
+          }
+        ],
+        "reviewed_content_commit": "a8bcb8ffed97bd88ad15551fd80f7b906877d04e",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-09T09:24:06Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "4ebc972c55c4ab5b95127635b6d7cbf73a059b2982943eb251fb945e504e1a1e",
+            "ledger": {
+              "local": {
+                "bundle_id": "5586a46b2ed00c6ce5bf6cb9ad99ae4313ff8a731660ebcde667b28d2726a818",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "ec70d19b4cde590e344c583396fc1b0e8016469f62d264cd3d69ca9063136a23",
+                "ledger_entry_sha256": "e9fc1fb29ec8f207ff463c3282ec39e2edcd2233b3dd4ecceb3a0031e0b4ccd2",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-ci1c/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "5586a46b2ed00c6ce5bf6cb9ad99ae4313ff8a731660ebcde667b28d2726a818",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "4dcb8fde77339630d0cc7cc6e952a46da10712f104d5942f129ea4dfe74d4d29",
+                "ledger_entry_sha256": "912aa4a5f996c9a7f8eac6c4eb37de2e8097ffa6543c638e411db6978b5983f2",
+                "run_ref": "codex:20261109T091947Z-d3f63798",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-09T09:24:06Z",
+          "workflow_release": "2.27.0"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "69201a2153cd2bae34b254d6db3002a273e92b4eb1b28e567f4fec8e4ad45921",
@@ -66363,12 +66452,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 3,
-          "external": 1
+          "local": 4,
+          "external": 2
         }
       },
-      "state_revision": 32,
-      "last_transition": "2026-11-09T09:15:58Z",
+      "state_revision": 35,
+      "last_transition": "2026-11-09T09:24:06Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -66604,20 +66693,84 @@
               "at": "2026-11-09T06:44:22Z"
             }
           ]
+        },
+        "F-b277c3b4c457": {
+          "digest": "b277c3b4c457a32c6eb72a46ccb76c016348662dff444d5626adc245d235efbc",
+          "text": "**O1. The review round numbering is inconsistent.** `docs/ACTIVE_MILESTONE.md:8` says the measurements \"were repeated in review round 2\", and the item page's \"Superseded measurements\" says they \"were the item's measurements until review round 2\". `IMPLEMENTATION_SUMMARY.md` files the same work under \"Round 3 of review (`a8bcb8f`)\", and the finding it answers is the round-3 external review. Use one numbering (\"review round 3\") in both pages.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "4ebc972c55c4ab5b95127635b6d7cbf73a059b2982943eb251fb945e504e1a1e",
+              "verdict": "APPROVE",
+              "at": "2026-11-09T09:19:21Z"
+            }
+          ]
+        },
+        "F-ea405cbb1bf3": {
+          "digest": "ea405cbb1bf3404bf0818fcd2a592470d041575bb3e064f622ecb21bef263f34",
+          "text": "**O2. Stale lines remain in the bundle narrative.** `REVIEW_REQUEST.md` still says \"This is revision 2, after review round 1\" and calls round 2 \"a same-content republication\", although the header says revision 3. `TEST_RESULTS.md` names the current records both at `~/.cache/ci1c-v3-HFZr7l/runs` (a scratch directory) and at `~/.cache/ci1c-scratch/records-2026-11-09-v3/`. Only the saved copy is durable, so name only that one.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "4ebc972c55c4ab5b95127635b6d7cbf73a059b2982943eb251fb945e504e1a1e",
+              "verdict": "APPROVE",
+              "at": "2026-11-09T09:19:21Z"
+            }
+          ]
+        },
+        "F-323b75de4044": {
+          "digest": "323b75de404467ad0dd540c28773ec8bcd0203d1eb926321d118b01d5bade0fa",
+          "text": "**O3. The worker-only failure might be a real test-robustness defect.** Both failures are `_assert_no_worker_outlived` (`tests/test_resume.py`), where a killed worker's process group survives the 15 s wait under higher load. The item page leaves tracing it as \"a new item\" if the owner wants it. Consider filing it as an issue, so the observation is not lost when the item closes. It can also affect CI under runner load, with or without workers.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "4ebc972c55c4ab5b95127635b6d7cbf73a059b2982943eb251fb945e504e1a1e",
+              "verdict": "APPROVE",
+              "at": "2026-11-09T09:19:21Z"
+            }
+          ]
+        },
+        "F-6a8414b72173": {
+          "digest": "6a8414b72173a5e910555df1f9e6bf2485f6c564ace7de0083e5c57066cd36a6",
+          "text": "**O1. Clarify the stopping-rule narrative.** The reproduction driver at `docs/items/workflow-controller-ci1c-reproduction.md:167` completes all three rounds despite the first two-worker run failing. Explain that subsequent runs completed after the setting was already vetoed. This does not change the rejection decision; the failure remains recorded and neither setting was extended.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "4ebc972c55c4ab5b95127635b6d7cbf73a059b2982943eb251fb945e504e1a1e",
+              "verdict": "APPROVE",
+              "at": "2026-11-09T09:22:18Z"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "35c6574d1f8f92ae61f7daad82590e456df86b3e4e10e5263ce023d68b2da9d4",
+        "review_content_id": "4ebc972c55c4ab5b95127635b6d7cbf73a059b2982943eb251fb945e504e1a1e",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "7422c0fb93c2e1fe738a1ebb25dd2d033994570e011db067d21c75d8a262823f",
+          "bundle_id": "5586a46b2ed00c6ce5bf6cb9ad99ae4313ff8a731660ebcde667b28d2726a818",
           "verdict": "APPROVE",
-          "round": 3,
-          "completed_at": "2026-11-09T06:37:53Z",
-          "verdict_sha256": "4b192331eeb392a4f4f6593ff6a4797a6d836e597afeb35bdcdbcf36edb336e0",
-          "run_ref": "session:local .ai-review/workflow-controller-ci1c/feedback/REVIEW_FEEDBACK.md",
+          "round": 4,
+          "completed_at": "2026-11-09T09:19:21Z",
+          "verdict_sha256": "ec70d19b4cde590e344c583396fc1b0e8016469f62d264cd3d69ca9063136a23",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-ci1c/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
-        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "5586a46b2ed00c6ce5bf6cb9ad99ae4313ff8a731660ebcde667b28d2726a818",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-11-09T09:22:18Z",
+          "verdict_sha256": "4dcb8fde77339630d0cc7cc6e952a46da10712f104d5942f129ea4dfe74d4d29",
+          "run_ref": "codex:20261109T091947Z-d3f63798",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
       }
     }
   }

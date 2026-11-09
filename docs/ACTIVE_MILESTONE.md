@@ -470,58 +470,53 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-ci1b` (CI1b, issue [#317](https://github.com/RodrigoFAbreu/workflow-controller/issues/317)),
-implementation revision 1, plan `docs/ai-workflow/CONTROLLER_CI1B_PLAN.md` (revision 5). The change splits six multi-test classes
-along their test methods into fourteen (`tests/test_protocol_lifecycle.py`, `tests/test_protocol_job.py`, `tests/test_pr_report.py`),
-refreshes `tools/test_timings.json` from real CI artifacts, adds a 200 s ratchet in `tests/test_test_shards.py`, keeps `CI_MAX_SHARDS`
-at 6 and updates the guides and the item page. There is no user-visible command. Every flow runs offline: no network, no real `gh`
-(the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the system directories, and no
-write inside the read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write only to
-the scratch `TMPDIR`.
+Item `workflow-controller-ci1c` (CI1c, issue [#317](https://github.com/RodrigoFAbreu/workflow-controller/issues/317)),
+implementation revision 3, plan `docs/ai-workflow/CONTROLLER_CI1C_PLAN.md` (revision 5). The item is an investigation with a
+negative result: parallel test workers inside a shard were measured and not adopted. No source, test or workflow file changed
+since the base commit `065ca1e`; the change is documentation only (`docs/guide/ci-and-releases.md`, `docs/guide/development.md`,
+`docs/items/workflow-controller-ci1c.md`, the new `docs/items/workflow-controller-ci1c-reproduction.md`). There is no
+user-visible command. Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or
+`ssh`, a `PATH` of the sandbox's `bin/` and the system directories, and no write inside the read-only product clone. Run from
+the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write only to the scratch `TMPDIR`.
 
 Setup: `export TMPDIR=$(mktemp -d)`. No data to seed.
 
-**Flow 1: The ratchet and the committed timings.**
-Run `python3 -B -m unittest tests.test_test_shards.CommittedTimingsTest 2>&1 | tail -3`.
-Expected: `Ran 5 tests` and `OK`, including `test_no_multi_test_class_atom_exceeds_the_splittable_limit` and the negative case
-`test_the_splittable_limit_check_fails_on_a_synthetic_giant`.
+**Flow 1: No code changed.**
+Run `git diff --stat 065ca1e HEAD -- . ':!docs'`.
+Expected: no output (nothing outside `docs/` changed, so no test, tool or workflow file).
 
-**Flow 2: The shard planner and the scenario ceiling.**
-Run `python3 -B -m unittest tests.test_test_shards tests.test_scenarios 2>&1 | tail -3` (a few minutes).
-Expected: `OK`; every planned test id runs exactly once; the scenario-inventory test follows `shards.CI_MAX_SHARDS`.
+**Flow 2: The plan is unchanged.**
+Run `python3 -B tools/run_tests.py plan --profile ci --ci-placement --output $TMPDIR/p.json`.
+Expected: rc 0 and `plan_digest` `1663e78f3cccedc713b19925f4cfce5eeefb24645f0a2e7e43c1f78e7651bcb1`, `shard_count` 6 (the digest
+the reproduction page requires).
 
-**Flow 3: The split classes still run.**
-Run `python3 -B -m unittest tests.test_protocol_lifecycle tests.test_protocol_job tests.test_pr_report 2>&1 | tail -3` (several minutes).
-Expected: `OK`; no failure or error in the fourteen new classes.
-
-**Flow 4: The split changed no test body.**
-Compare `git show b1e8b32:<file>` with the working tree for the three modules: parse both with `ast`, and for every test method name
-compare `ast.dump` of its body (scratch script under `$TMPDIR`, run with `python3 -I -B`).
-Expected: each method name appears once across the new classes with an identical body, except the two `ReportNotificationTest`
-bodies, whose only difference is the class name in the `ReportTest(...)` call.
-
-**Flow 5: The offline plans for 6, 7 and 8 shards.**
-For N in 6 7 8 run `python3 -B tools/run_tests.py plan --profile ci --ci-placement --max-shards N --output $TMPDIR/plan-N.json`, then
-read the largest `estimate_seconds` among `shards` in each file.
-Expected: rc 0 each; longest estimates about 1439 s (6), 1288 s (7) and 1233 s (8); the constant `CI_MAX_SHARDS` in
-`tools/test_shards.py` is still 6.
-
-**Flow 6: Generated workflows and documentation.**
+**Flow 3: Generated workflows and documentation.**
 Run `python3 -B tools/ci_workflows.py --check; echo rc=$?` and `python3 -B tools/check_docs.py; echo rc=$?`.
-Expected: `rc=0` each (the workflows need no regeneration).
+Expected: `rc=0` each (links, anchors such as `#measurements-cp1`, and the task-page commands all resolve).
 
-**Flow 7: The guides and the item page state the facts.**
-Read the shard-count and "What bounds the longest shard" passages of `docs/guide/ci-and-releases.md`, the timings passage of
-`docs/guide/development.md` and `docs/items/workflow-controller-ci1b.md`.
-Expected: they give the 1439 / 1288 / 1233 s estimates, say 7 shards is recommended but needs the owner's yes (6 stays), name
-`acceptance_matrix` as the floor and `CatalogueDeterminismTest` as the largest `main.yml` check, list the unsplit single-test atoms,
-describe the 200 s ratchet, and say the timings fold two artifacts (the third is a duplicate of the second).
+**Flow 4: The guides state the negative result.**
+Read the paragraph after the runner table in `docs/guide/ci-and-releases.md` ("Parallel workers inside a shard...") and the
+**Workers** bullet in `docs/guide/development.md`.
+Expected: both say workers were measured and not used; 2 workers cut the wall 29% and 36% but a run failed (a killed worker's
+process group still present after 15 s), 3 workers failed a run and raised CPU by 30% and 41%, over the 25% limit; the conformance
+lane bounds the longest shard; both link to the item page's measurements.
 
-**Known limitations / out of scope.** The pull request's own CI time versus the baseline is recorded after the merge (D8); the
-shard count stays 6 pending the owner's answer; single-test atoms and the frozen Workflow `acceptance_matrix` suite are not split;
-CI1c (#317). The full suite is not a flow: three `fake_codex_contract` tests fail in a sandbox that reads `~/.codex` config
-(environmental) and `test_functional_sandbox` has a known CI flake (#206).
+**Flow 5: The item page is consistent.**
+Read `docs/items/workflow-controller-ci1c.md` (Measurements, Superseded measurements, D5, CP2, CP3).
+Expected: the table matches the guides (shard 0: 2 workers -28.6% wall / +16.7% CPU with 1 failed run; 3 workers -26.4% / +29.7%;
+shard 4: 2 workers -35.9% / +16.0%; 3 workers -50.1% / +41.1% with 1 failed run); the earlier measurements are labelled superseded,
+not the result; CP2 is "not needed"; test selection is not built and a larger runner waits for the owner.
+
+**Flow 6: The reproduction page is self-sufficient.**
+Read `docs/items/workflow-controller-ci1c-reproduction.md`.
+Expected: the set-up, the patch (scratch clone only, never committed), `runone.py`, the drivers and `CI1C_WORKERS` are given; the
+digest in the set-up equals Flow 2's.
+
+**Known limitations / out of scope.** The measurements were made on a 16-thread desktop pinned to four threads, so only ratios
+transfer to CI; the shard-count question and the second and third candidates (test selection, a larger runner) are not part of
+this item; tracing the process-group assertion would be a new item. The full suite is not a flow: three `fake_codex_contract`
+tests fail in a sandbox that reads `~/.codex` config (environmental) and `test_functional_sandbox` has a known CI flake (#206).
 
 ## Next action
 
-`/milestone-plan` for `workflow-controller-ci1b` (CI: split the giant test atoms and refresh the shard timings), the item `python3 scripts/workflow_backlog.py next` returns.
+Functional review of `workflow-controller-ci1c` (see the checklist above), then `/accept-milestone`.

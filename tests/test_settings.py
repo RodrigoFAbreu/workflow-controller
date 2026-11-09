@@ -1100,7 +1100,7 @@ class RoutingHarnessTest(_TempSettings):
         self.assertEqual(_read(self.path)["routing"], {"default": {}, "roles": {}})
 
     def test_an_unsupported_pair_in_the_file_is_exit_20_through_load_fill_and_the_cli(self) -> None:
-        for section in ({"roles": {"review-plan": {"model": "m", "harness": "codex"}}},
+        for section in ({"roles": {"milestone-plan": {"model": "m", "harness": "codex"}}},
                         {"default": {"harness": "codex"}}):
             with self.subTest(section=section):
                 self.path.unlink(missing_ok=True)
@@ -1122,7 +1122,7 @@ class RoutingHarnessTest(_TempSettings):
 
     def test_the_same_value_in_a_routing_config_file_is_exit_20(self) -> None:
         path = self.dir / "routing.json"
-        _write(path, {"schema_version": 1, "roles": {"review-plan": {"harness": "codex"}}})
+        _write(path, {"schema_version": 1, "roles": {"milestone-plan": {"harness": "codex"}}})
         with self.assertRaises(RoutingConfigError):
             routing.load_routing_config(path)
 

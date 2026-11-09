@@ -298,10 +298,14 @@ def parse_role_assignment(text: str) -> tuple[str, str]:
 
 
 #: The adapter role the Controller launches each routing role as: the
-#: functional tester is its own, every other routing role is a lifecycle
-#: worker session. Held equal to :data:`ROLES` by a test.
+#: functional tester and the two local review roles are their own, every other
+#: routing role is a lifecycle worker session. Held equal to :data:`ROLES` by a
+#: test.
+LOCAL_REVIEW_ROLES: tuple[str, ...] = (REVIEW_PLAN, REVIEW_IMPLEMENTATION)
 ADAPTER_ROLE: Mapping[str, str] = MappingProxyType({
-    role: harness.FUNCTIONAL_TESTER if role == FUNCTIONAL_TESTER else harness.WORKER for role in ROLE_ROUTES
+    role: (harness.FUNCTIONAL_TESTER if role == FUNCTIONAL_TESTER
+           else harness.LOCAL_REVIEWER if role in LOCAL_REVIEW_ROLES else harness.WORKER)
+    for role in ROLE_ROUTES
 })
 
 

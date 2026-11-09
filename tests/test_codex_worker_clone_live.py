@@ -117,7 +117,7 @@ class LiveCloneLandingTest(unittest.TestCase):
         roles = {role: {"harness": FIXTURE, "model": review.DEFAULT_MODEL, "effort": review.DEFAULT_EFFORT}
                  for role in sorted(routing.ROLES) if routing.ADAPTER_ROLE[role] == harness.WORKER}
         with mock.patch.object(harness, "ADAPTERS", {**harness.ADAPTERS, FIXTURE: fixture}), \
-                mock.patch.object(worker_launch, "LAUNCHERS", {**worker_launch.LAUNCHERS, FIXTURE: LiveLauncher(commands)}), \
+                mock.patch.object(worker_launch, "LAUNCHERS", {**worker_launch.LAUNCHERS, (FIXTURE, harness.WORKER): LiveLauncher(commands)}), \
                 mock.patch.object(job, "CODEX_WORKTREE_PREPARER", codex_worker_tree.prepare), \
                 mock.patch.object(job, "CODEX_LANDER", codex_worker_landing.land), \
                 mock.patch.object(job, "CODEX_HOME_RESOLVER", operator_codex_home):

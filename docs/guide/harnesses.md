@@ -68,8 +68,8 @@ that declares it.
 <!-- harness-table:begin -->
 | Harness | `reviewer.harness` | Family | Roles | Restricts subagents | Restricts tools | Usage | Captured with | Build verification | Unknown version refused | Models | Efforts |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `claude-code` | `claude` | anthropic | `worker`, `reviewer`, `functional-tester` | yes | yes | reported exactly by the harness | 2.1.296 (Claude Code) | `verify-claude` | yes | `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5`, `claude-fable-5-1`, `opus`, `sonnet`, `haiku` | `low`, `medium`, `high`, `xhigh`, `max` |
-| `codex` | `codex` | openai | `reviewer`, `functional-tester` | yes | yes | computed from the harness's output | codex-cli 0.163.0 | `verify-codex` | yes | `gpt-6.1-sol` | `high`, `xhigh` |
+| `claude-code` | `claude` | anthropic | `worker`, `local-reviewer`, `reviewer`, `functional-tester` | yes | yes | reported exactly by the harness | 2.1.296 (Claude Code) | `verify-claude` | yes | `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5`, `claude-fable-5-1`, `opus`, `sonnet`, `haiku` | `low`, `medium`, `high`, `xhigh`, `max` |
+| `codex` | `codex` | openai | `local-reviewer`, `reviewer`, `functional-tester` | yes | yes | computed from the harness's output | codex-cli 0.163.0 | `verify-codex` | yes | `gpt-6.1-sol` | `high`, `xhigh` |
 
 | Routing role | Runs as | `claude-code` | `codex` |
 | --- | --- | --- | --- |
@@ -77,8 +77,8 @@ that declares it.
 | `milestone-implement-self-review` | `worker` | yes | no |
 | `apply-plan-review` | `worker` | yes | no |
 | `apply-implementation-review` | `worker` | yes | no |
-| `review-plan` | `worker` | yes | no |
-| `review-implementation` | `worker` | yes | no |
+| `review-plan` | `local-reviewer` | yes | yes |
+| `review-implementation` | `local-reviewer` | yes | yes |
 | `milestone-plan` | `worker` | yes | no |
 | `record-manual-plan-review` | `worker` | yes | no |
 | `record-manual-implementation-review` | `worker` | yes | no |
@@ -90,6 +90,7 @@ that declares it.
 | `functional-tester` | `functional-tester` | yes | yes |
 
 - `worker`: runs a Workflow command (plan, implement, apply a review) as a background job
+- `local-reviewer`: reviews a plan or an implementation in the lifecycle (the local stage), read-only, and records the verdict
 - `reviewer`: reviews a plan or an implementation and returns a verdict
 - `functional-tester`: runs the functional-review checklist in a sandbox with a shell only
 <!-- harness-table:end -->

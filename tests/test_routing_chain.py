@@ -49,7 +49,8 @@ def refused(entry: dict, default: dict | None = None) -> RoutingConfigError:
 def codex_registry() -> mock._patch:
     """``codex`` also takes the worker role, with Claude's models and efforts."""
     patched = dataclasses.replace(
-        harness.CODEX, roles=(harness.WORKER, harness.REVIEWER), models=harness.CLAUDE_CODE.models,
+        harness.CODEX, roles=(harness.WORKER, harness.LOCAL_REVIEWER, harness.REVIEWER),
+        models=harness.CLAUDE_CODE.models,
         efforts=harness.CLAUDE_CODE.efforts)
     return mock.patch.object(harness, "ADAPTERS", {harness.CLAUDE_CODE.name: harness.CLAUDE_CODE,
                                                    patched.name: patched})
@@ -149,8 +150,8 @@ class RefusedTest(unittest.TestCase):
 
     def test_the_harness_is_judged_for_the_role(self) -> None:
         self.check([{"harness": "nope", "model": "m"}], "fallback[1].harness", "nope")
-        # ``codex`` is a reviewer only in the shipped registry.
-        self.check([{"harness": "codex", "model": "m"}], "fallback[1].harness", "codex", entry=1, role=ROLE)
+        # ``codex`` declares ``local-reviewer`` (h4e2b), so it is no longer refused for a local review role.
+        routing.check_role_harness(ROLE, "codex")
 
     def test_a_repeated_fallback_entry(self) -> None:
         self.check([dict(SONNET), dict(SONNET)], "fallback[2]", "repeats", entry=2)

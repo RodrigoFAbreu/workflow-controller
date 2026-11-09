@@ -48,13 +48,14 @@ class _ChainCase(tug._UsageCase):
     def setUp(self) -> None:
         super().setUp()
         extra = dataclasses.replace(harness.CODEX, name=OTHER, reviewer_name=None, family="google",
-                                    roles=(harness.WORKER,), models=harness.CLAUDE_CODE.models,
+                                    roles=(harness.WORKER, harness.LOCAL_REVIEWER), models=harness.CLAUDE_CODE.models,
                                     efforts=harness.CLAUDE_CODE.efforts)
         self.enterContext(unittest.mock.patch.object(
             harness, "ADAPTERS", {CLAUDE: harness.CLAUDE_CODE, OTHER: extra}))
         self.second = _Launcher()
         self.enterContext(unittest.mock.patch.object(
-            worker_launch, "LAUNCHERS", {**worker_launch.LAUNCHERS, OTHER: self.second}))
+            worker_launch, "LAUNCHERS", {**worker_launch.LAUNCHERS, (OTHER, harness.WORKER): self.second,
+                                          (OTHER, harness.LOCAL_REVIEWER): self.second}))
         self.gate_calls: list[tuple[str, str]] = []
 
     def pgate(self, limits: usage.Limits | None = None):
@@ -128,7 +129,7 @@ class ChainStepTest(_ChainCase):
         self.assert_no_record()
 
     def test_an_unavailable_first_entry_is_skipped(self) -> None:
-        launchers = {OTHER: self.second}
+        launchers = {(OTHER, harness.WORKER): self.second, (OTHER, harness.LOCAL_REVIEWER): self.second}
         with unittest.mock.patch.object(worker_launch, "LAUNCHERS", launchers):
             record = self.cstep(chain_options(SECOND_OTHER), self.pgate())
         self.assertEqual(record["worker_route"]["selection"]["skipped"],
@@ -173,3 +174,24 @@ class TelemetryDimensionsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReviewRoleProbeTest(unittest.TestCase):
+    """h4e2b, D1: the chain probe resolves a launcher for the entry's adapter role and checks no Codex build."""
+
+    def entry(self, role: str, name: str) -> routing.ResolvedRoute:
+        return routing.ResolvedRoute(role=role, model="m", effort=None, single_agent=False,
+                                         model_source="default", effort_source="default", harness=name)
+
+    def test_codex_is_launchable_for_a_review_role_and_not_for_a_worker_role(self) -> None:
+        self.assertIsNone(job._launcher_error(self.entry("review-plan", "codex")))
+        self.assertIsNone(job._launcher_error(self.entry("review-implementation", "codex")))
+        self.assertIsInstance(job._launcher_error(self.entry("milestone-plan", "codex")), HarnessRoleError)
+
+    def test_an_entry_undeclared_or_unregistered_for_the_role_is_skipped_by_the_probe(self) -> None:
+        chain = [self.entry("review-plan", "codex"), self.entry("review-plan", "claude-code")]
+        with unittest.mock.patch.object(worker_launch, "LAUNCHERS",
+                                        {("claude-code", harness.LOCAL_REVIEWER): worker_launch.ClaudeCodeLauncher()}):
+            selected = job.route_select.select(chain, job._launcher_error, job._chain_admit(None))
+        self.assertEqual(selected.route.harness, "claude-code")
+        self.assertEqual([(p, h) for p, h, _ in selected.skipped], [(0, "codex")])

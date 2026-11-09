@@ -337,7 +337,8 @@ class RealDirectoryTest(unittest.TestCase):
 class WiringTest(unittest.TestCase):
     def test_codex_still_declares_no_worker_role_and_launchers_are_unchanged(self) -> None:
         self.assertNotIn(harness.WORKER, harness.CODEX.roles)
-        self.assertEqual(set(worker_launch.LAUNCHERS), {a.name for a in harness.ADAPTERS.values() if harness.WORKER in a.roles})
+        self.assertEqual({k for k in worker_launch.LAUNCHERS if k[1] == harness.WORKER},
+                         {(a.name, harness.WORKER) for a in harness.ADAPTERS.values() if harness.WORKER in a.roles})
 
     def test_nothing_in_controller_imports_the_module_but_the_package_init_and_the_codex_worker_launch(self) -> None:
         # H4b2: the Codex worker launch is the one consumer (it renders the command it launches).

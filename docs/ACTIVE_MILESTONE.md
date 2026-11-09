@@ -2,6 +2,16 @@
 
 ## Status
 
+**In progress.** `workflow-controller-h4e2b` (H4e2b, issue [#315](https://github.com/RodrigoFAbreu/workflow-controller/issues/315)):
+plan `docs/ai-workflow/CONTROLLER_H4E2B_PLAN.md` (revision 2), four checkpoints. CP1 is complete: `harness.LOCAL_REVIEWER` is
+the adapter role of `review-plan` and `review-implementation` (`routing.ADAPTER_ROLE`, `routing.LOCAL_REVIEW_ROLES`), both
+adapters declare it, and `worker_launch.LAUNCHERS` is keyed by `(adapter, role)` with `CodexReviewLauncher` (whose `launch`
+raises) for `(codex, local-reviewer)`, so `codex` is routable for the two review roles and still refused for every worker
+role. `review_mode.worker_families` counts both roles, and the chain probe takes the entry's adapter role. The default
+is unchanged. Verified with the narrow modules of the plan's CP1 list. CP2 (the job branch and the recovery sites) is next.
+
+## Previous milestone (CI1c)
+
 **Complete.** `workflow-controller-ci1c` (CI1c, issue
 [#317](https://github.com/RodrigoFAbreu/workflow-controller/issues/317)): plan `docs/ai-workflow/CONTROLLER_CI1C_PLAN.md`
 (revision 5), three checkpoints. CP1 is complete: the measurements are in `docs/items/workflow-controller-ci1c.md`. They were

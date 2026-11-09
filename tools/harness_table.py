@@ -29,6 +29,7 @@ FIX_COMMAND = "python3 tools/harness_table.py --write"
 
 ROLE_WORDING = {
     harness.WORKER: "runs a Workflow command (plan, implement, apply a review) as a background job",
+    harness.LOCAL_REVIEWER: "reviews a plan or an implementation in the lifecycle (the local stage), read-only, and records the verdict",
     harness.REVIEWER: "reviews a plan or an implementation and returns a verdict",
     harness.FUNCTIONAL_TESTER: "runs the functional-review checklist in a sandbox with a shell only",
 }

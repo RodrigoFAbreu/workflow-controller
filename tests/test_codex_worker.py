@@ -424,12 +424,12 @@ class LauncherTest(LaunchFixture):
         fixture = dataclasses.replace(harness.CODEX, name="codex-fixture", reviewer_name=None,
                                       roles=(harness.WORKER,))
         adapters = {**harness.ADAPTERS, fixture.name: fixture}
-        launchers = {**worker_launch.LAUNCHERS, fixture.name: cw.CodexLauncher()}
+        launchers = {**worker_launch.LAUNCHERS, (fixture.name, harness.WORKER): cw.CodexLauncher()}
         with mock.patch.object(harness, "ADAPTERS", adapters), mock.patch.object(worker_launch, "LAUNCHERS", launchers):
             self.assertIsInstance(worker_launch.for_harness("codex-fixture"), cw.CodexLauncher)
 
     def test_the_real_registrations_are_unchanged(self) -> None:
-        self.assertEqual(set(worker_launch.LAUNCHERS), {harness.CLAUDE_CODE.name})
+        self.assertNotIn((harness.CODEX.name, harness.WORKER), worker_launch.LAUNCHERS)
         self.assertNotIn(harness.WORKER, harness.CODEX.roles)
 
 

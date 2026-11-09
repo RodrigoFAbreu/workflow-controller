@@ -6599,11 +6599,17 @@ def _worker_route(decision: Decision, work_item: Any, options: routing.RoutingOp
     return options.resolve(role)
 
 
+def _adapter_role(route: routing.ResolvedRoute) -> str:
+    """The adapter role ``route``'s role is launched as (h4e2b, D1)."""
+    return routing.ADAPTER_ROLE[route.role]
+
+
 def _launcher_error(entry: routing.ResolvedRoute) -> BaseException | None:
     """The chain probe for "unavailable": the error ``for_harness`` raises
-    for an entry whose launcher cannot be resolved, else ``None``."""
+    for an entry whose launcher cannot be resolved for the entry's adapter
+    role, else ``None``. It checks no Codex build (h4e2b, D1)."""
     try:
-        worker_launch.for_harness(entry.harness)
+        worker_launch.for_harness(entry.harness, _adapter_role(entry))
     except ControllerError as exc:
         return exc
     return None
@@ -8664,7 +8670,7 @@ def _execute_step_locked(
         # H3: the routed harness's launcher, resolved with the route and
         # before anything is recorded, so an unlaunchable harness leaves no
         # record.
-        launcher = worker_launch.for_harness(route.harness)
+        launcher = worker_launch.for_harness(route.harness, _adapter_role(route))
 
         # Usage budget (CP3, D7): admitted against the budget now, with the
         # route known and before any record exists, so a hold leaves nothing
@@ -8687,7 +8693,7 @@ def _execute_step_locked(
         if selected.outcome == route_select.UNAVAILABLE:
             raise selected.error
         route, token = selected.route, selected.token
-        launcher = worker_launch.for_harness(selected.route.harness)
+        launcher = worker_launch.for_harness(selected.route.harness, _adapter_role(selected.route))
         selection_block = {
             "position": selected.position, "length": len(chain),
             "skipped": [{"position": p, "harness": h, "cause": c} for p, h, c in selected.skipped],

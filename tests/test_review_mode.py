@@ -418,7 +418,8 @@ class JobChoiceTest(rj._ReviewCase):
             self.assertIsNone(job._review_mode_signal(self.life.inspect()))
 
 
-WORKER_ROLES = sorted(role for role, adapter_role in routing.ADAPTER_ROLE.items() if adapter_role == harness.WORKER)
+WORKER_ROLES = sorted(role for role, adapter_role in routing.ADAPTER_ROLE.items()
+                      if adapter_role in (harness.WORKER, harness.LOCAL_REVIEWER))
 SIGNALS = (None, "lowering_only", "no_policy", "lowering_plus_invalid_file")
 
 
@@ -426,8 +427,8 @@ def codex_workers(roles: list[str]) -> tuple[mock._patch, routing.RoutingOptions
     """A registry whose ``codex`` also takes the worker role (with Claude's models and efforts so every route
     validates), and the routing sending ``roles`` to it."""
     patched = dataclasses.replace(
-        harness.CODEX, roles=(harness.WORKER, harness.REVIEWER), models=harness.CLAUDE_CODE.models,
-        efforts=harness.CLAUDE_CODE.efforts)
+        harness.CODEX, roles=(harness.WORKER, harness.LOCAL_REVIEWER, harness.REVIEWER),
+        models=harness.CLAUDE_CODE.models, efforts=harness.CLAUDE_CODE.efforts)
     registry = {harness.CLAUDE_CODE.name: harness.CLAUDE_CODE, patched.name: patched}
     patch = mock.patch.object(harness, "ADAPTERS", registry)
     patch.start()
@@ -508,6 +509,24 @@ class WorkerFamiliesTest(unittest.TestCase):
                 self.assertIn("more than one family (anthropic, openai)", chosen.reason)
                 self.assertFalse(review_mode.needs_signal(mode, None, workers))
         self.assertEqual(choose(MODE_MANUAL, reviewer("codex"), "plan", None, workers).kind, "gate")
+
+    def test_a_codex_local_review_role_with_a_codex_external_reviewer_is_the_mixed_lane(self) -> None:
+        # h4e2b, D1: the local review roles run as ``local-reviewer`` and stay among the counted roles.
+        for role, stage in (("review-plan", "plan"), ("review-implementation", "implementation")):
+            options = routing.RoutingOptions(
+                cli_role_harnesses={role: "codex"}, cli_role_models={role: "gpt-6.1-sol"},
+                cli_role_efforts={role: "high"})
+            with self.subTest(role=role):
+                workers = review_mode.worker_families(options)
+                self.assertEqual(workers, frozenset({"anthropic", "openai"}))
+                for mode in (MODE_AUTO, MODE_CROSS_MODEL, MODE_SINGLE_PROVIDER):
+                    chosen = choose(mode, reviewer("codex"), stage, signal("lowering_only"), workers)
+                    self.assertEqual(chosen.kind, "refused")
+                    self.assertIn("more than one family (anthropic, openai)", chosen.reason)
+                reason = review_mode.mixed_lane_reason(options, reviewer("codex"), stage)
+                self.assertIn(f"the {stage} stage's local review role {role} runs on codex (openai)", reason)
+                self.assertIn("reviewer.harness is codex (openai)", reason)
+                self.assertEqual(choose(MODE_MANUAL, reviewer("codex"), stage, None, workers).kind, "gate")
 
     def test_the_job_follows_the_routing(self) -> None:
         patch, options = codex_workers(WORKER_ROLES)

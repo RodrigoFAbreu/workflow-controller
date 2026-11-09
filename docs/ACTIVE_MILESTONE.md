@@ -15,6 +15,9 @@ no setting does (two workers fail (d) on shard 1, three fail it on shards 0 and 
 owner reads (d) as meant for shards A and B only, two workers pass and CP2 is reopened by a plan amendment. CP3 then records
 the negative result in the guides and the item page.
 
+CP3 is complete: the guides and the item page record the negative result and the D5 decisions; no code or workflow file
+changed. `python3 tools/check_docs.py` passes.
+
 ## Previous milestone (CI1b)
 
 **Complete.** `workflow-controller-ci1b` (CI1b, issue

@@ -70,3 +70,12 @@ Reproduction: `python3 tools/run_tests.py plan --profile ci --ci-placement`, the
 ## CP2 (not needed)
 
 No setting passed D4 as written (see the verdicts above), so the option is not written and CP2 changes no source file. Reading (d) as limited to shards A and B would let two workers pass; that reading is for the reviewer and the owner, and adopting it needs a plan amendment that reopens CP2.
+
+## CP3 (the negative result)
+
+No code or workflow file changed. The guides ([How a shard runs](../guide/ci-and-releases.md#how-a-shard-runs) and the
+development guide's shards entry) say in one paragraph that the measurements did not support workers and point here.
+D8's pull request comparison does not apply, since nothing was adopted: this pull request changes documentation and the
+item records only. The D5 decisions stand as written above: no test selection is built, and a larger runner waits for the
+owner. The reading of D4(d) is open: if it applies to shards A and B only, two workers pass and a plan amendment reopens
+CP2 and CP3 with the option written.

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-h4e2b",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -66998,6 +66998,247 @@
         },
         "evaluated_at": "2026-11-09T09:54:33Z",
         "workflow_release": "2.27.0"
+      }
+    },
+    "workflow-controller-h4e2b": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-h4e2b",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_H4E2B_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-h4e2b-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4e2b-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 2,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "8ae70961dcb8fa358102fb76b3033aad5658defb",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "25561b5a731cb317782a46a91342bfdcb1255cb6b5f6f00b10f71728d5586861",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "25561b5a731cb317782a46a91342bfdcb1255cb6b5f6f00b10f71728d5586861",
+        "approved_review_content_id": "3020cfe8a45a1672d0bba879d4c410f716f11689435d0f4fddb0d0987e2c956c",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_H4E2B_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1c5c2e056d4c450e0a589f691faeda926ab769d3"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-h4e2b-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ef0751721112985d1cb8050fcff3e1a1481acc2b"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-h4e2b-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "76afe32df8dda0acad56aafbe1361fb5b102f2c0"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-09T14:57:30Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "3020cfe8a45a1672d0bba879d4c410f716f11689435d0f4fddb0d0987e2c956c",
+            "ledger": {
+              "local": {
+                "bundle_id": "25561b5a731cb317782a46a91342bfdcb1255cb6b5f6f00b10f71728d5586861",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "fc1528af4e18417841d105c5b7d5447e134f29ae01ec01eafd6d10e81907d8c5",
+                "ledger_entry_sha256": "7d91148cccae7c91a064db0d56978baec71152199c3713d3c8c395db70a558c2",
+                "run_ref": "session:local .ai-review/workflow-controller-h4e2b/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "25561b5a731cb317782a46a91342bfdcb1255cb6b5f6f00b10f71728d5586861",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "4653e44596df615ae5d3980f0d85e1d025e7ae8af02664379dea3815de541605",
+                "ledger_entry_sha256": "6ff826db603597066147cf58cb50cddebf4b78bec09bb26f883bd8a9b3d5d99d",
+                "run_ref": "codex:20261109T145400Z-4c800e57",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-09T14:57:30Z",
+          "workflow_release": "2.27.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "3020cfe8a45a1672d0bba879d4c410f716f11689435d0f4fddb0d0987e2c956c",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "25561b5a731cb317782a46a91342bfdcb1255cb6b5f6f00b10f71728d5586861",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-09T14:53:15Z",
+          "verdict_sha256": "fc1528af4e18417841d105c5b7d5447e134f29ae01ec01eafd6d10e81907d8c5",
+          "run_ref": "session:local .ai-review/workflow-controller-h4e2b/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "25561b5a731cb317782a46a91342bfdcb1255cb6b5f6f00b10f71728d5586861",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-09T14:56:10Z",
+          "verdict_sha256": "4653e44596df615ae5d3980f0d85e1d025e7ae8af02664379dea3815de541605",
+          "run_ref": "codex:20261109T145400Z-4c800e57",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 2,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 9,
+      "last_transition": "2026-11-09T14:57:30Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-09T15:12:00Z",
+        "consumed": {
+          "review_content_id": "9d9942163cd672e9f9e2f51229593f529f3c8470cd2a990b9fe5af61e6a95aff",
+          "plan_revision": 1,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "3020cfe8a45a1672d0bba879d4c410f716f11689435d0f4fddb0d0987e2c956c",
+          "plan_revision": 2
+        },
+        "bound": {
+          "review_content_id": "3020cfe8a45a1672d0bba879d4c410f716f11689435d0f4fddb0d0987e2c956c",
+          "bundle_id": "25561b5a731cb317782a46a91342bfdcb1255cb6b5f6f00b10f71728d5586861",
+          "plan_revision": 2
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "9d9942163cd672e9f9e2f51229593f529f3c8470cd2a990b9fe5af61e6a95aff"
+      ],
+      "optional_findings": {
+        "F-c65792f6bcc0": {
+          "digest": "c65792f6bcc0cc89fd9f8f8545607634cab7b74476145598ea859d9b53162768",
+          "text": "**O1. Wrong decision cross-reference.** D1 says the `codex` adapter is \"launched by D2's branch\"; the branch is D3's.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "9d9942163cd672e9f9e2f51229593f529f3c8470cd2a990b9fe5af61e6a95aff",
+              "verdict": "REVISE",
+              "at": "2026-11-09T14:49:17Z"
+            }
+          ]
+        },
+        "F-0fe677e854e0": {
+          "digest": "0fe677e854e052f510520151671f795769fb1e7d6cd443cd090b33f29351ca8c",
+          "text": "**O2. Two copies of a refused verdict.** `run_review` already writes the composed verdict to `reviews/<job id>-verdict.md` under the runtime root (`controller/codex_review_role.py:508`) through an atomic write with no stated mode. D3's `CodexReviewRecordRefused` row keeps it as `review-verdicts/<job id>.md` with mode 0600. Say whether the new file replaces the existing one (moved and chmodded) or is a second copy, and what removes the other.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "9d9942163cd672e9f9e2f51229593f529f3c8470cd2a990b9fe5af61e6a95aff",
+              "verdict": "REVISE",
+              "at": "2026-11-09T14:49:17Z"
+            }
+          ]
+        },
+        "F-3fb578f31901": {
+          "digest": "3fb578f31901d47a50dd9114fd767d703e328d3306c2dbfadc4b6c6a12226f95",
+          "text": "**O1. The refused verdict file is not removed by anything.** D3's `CodexReviewRecordRefused` row says the kept `reviews/<job id>-verdict.md` \"is removed with the job's other runtime leftovers, as `reviews/` is\". No code removes files under `<runtime>/reviews/`. `codex_review_role.py` removes only the clone and `last-message.md`, and the external review keeps its `reviews/<job id>-verdict-<n>.md` files (`review.retain_pending_verdict`). `run_review` writes the file on every ending past the parse, not only on a refusal. State that the file is kept, as the external review's verdicts are. Then neither CP2 nor D8's pages will claim a removal that does not exist, or add one.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "3020cfe8a45a1672d0bba879d4c410f716f11689435d0f4fddb0d0987e2c956c",
+              "verdict": "APPROVE",
+              "at": "2026-11-09T14:53:15Z"
+            }
+          ]
+        },
+        "F-b4dfbf6d5f44": {
+          "digest": "b4dfbf6d5f44260f81df080295f0e8829f4404a4255b1aa063da15cf7bf4241a",
+          "text": "**O2. The weekly hold setting is named by its field, not by the setting the operator sets.** D7 says the Codex reading is \"held by the existing `weekly_pause_at_percent`\". For the Codex provider, the setting is `usage.codex_weekly_pause_at_percent` (`controller/settings.py:151`), which fills the limits' `weekly_pause_at_percent` field. The cost table on `docs/guide/harnesses.md` should name the setting.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "3020cfe8a45a1672d0bba879d4c410f716f11689435d0f4fddb0d0987e2c956c",
+              "verdict": "APPROVE",
+              "at": "2026-11-09T14:53:15Z"
+            }
+          ]
+        },
+        "F-fe436448e501": {
+          "digest": "fe436448e501bc59850b32c93fd9006f34d45503c87256e41fd0b147af0ca70c",
+          "text": "**O1. Include the new role’s generator wording in CP1 or CP4.** `tools/harness_table.py` requires a `ROLE_WORDING` entry for every declared adapter role, but neither checkpoint lists that file. An in-memory check using the planned declarations fails with `ValueError: no wording for the adapter role 'local-reviewer'`. Add the supporting wording entry so D8’s table regeneration succeeds.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "3020cfe8a45a1672d0bba879d4c410f716f11689435d0f4fddb0d0987e2c956c",
+              "verdict": "APPROVE",
+              "at": "2026-11-09T14:56:10Z"
+            }
+          ]
+        }
       }
     }
   }

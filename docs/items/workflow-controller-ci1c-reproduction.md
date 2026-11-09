@@ -205,5 +205,5 @@ done; done
 echo STAGE2B-COMPLETE
 ```
 
-`driver1.sh` and `driver2.sh` also start 2- and 3-worker runs; those were made with the first, count-based version of the patch and are discarded (see the item page). Only their 1-worker runs are used. The 1-worker runs are not repeated: with one worker the patch changes nothing, so they are the baseline for
+`driver1.sh` and `driver2.sh` also start 2- and 3-worker runs; those were made with the first, count-based version of the patch and are discarded (see the item page). Only their 1-worker runs are used. Their 2- and 3-worker tags (`s<s>-n2-r<r>`, `s<s>-n3-r<r>`) are the tags the re-measurement drivers use, and `runone.py` skips a tag whose `runs/<tag>/done` exists: either apply the corrected patch before running `driver1.sh` and `driver2.sh`, which then produce the whole table by themselves, or move those 2- and 3-worker run directories to `discarded/count-based/` before running the re-measurement drivers. The 1-worker runs are not repeated: with one worker the patch changes nothing, so they are the baseline for
 both versions of the patch.

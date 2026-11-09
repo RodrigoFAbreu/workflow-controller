@@ -17,7 +17,15 @@ drift ending and the post-spawn exception handler call `codex_review_role.recove
 review record never reaches the worker reconciler. A refused record keeps the one verdict file at mode 0600 (new primitive
 `runtime.restrict_to_owner`, in `runtime.py` where the write-containment scan wants it) and names its path and SHA-256.
 `tests/test_job_codex_review.py` (46 tests, both stages) covers every row of both tables; the Codex-worker job modules pass
-unchanged. CP3 (the adversarial tests of the routed path) is next.
+unchanged. CP3 is complete: `tests/test_codex_review_safety.py` (39 tests, both stages) drives `execute_step` with the real
+`run_review`, the real recorder and the fake `codex` through every case of D5 (inputs, hooks, crafted refs, forged headers,
+armour in both directions) and asserts the managed tree, index, refs and state unchanged, the clone gone and no armour line
+in the record or any runtime file; `CASES` fails a cause of `codex_review_role.CAUSES` without a test. Two cases end earlier
+than the plan's text says: a managed `hook.*` key makes the Workflow's protocol read refuse (`WorkflowReleaseChangedError`,
+nothing decided or launched) before H4e's `managed_hooks_configured` is reached (that check is tested on its own), and an
+armour line added to a bundle file is blocked at the decision by the Workflow's bundle fingerprint (`GATE_BLOCKED`); an
+armoured file named as an input is the role's own `credential_input` refusal. CP4 (the live proof, the cost table and the
+pages) is next.
 
 ## Previous milestone (CI1c)
 

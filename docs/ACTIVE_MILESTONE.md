@@ -24,8 +24,12 @@ in the record or any runtime file; `CASES` fails a cause of `codex_review_role.C
 than the plan's text says: a managed `hook.*` key makes the Workflow's protocol read refuse (`WorkflowReleaseChangedError`,
 nothing decided or launched) before H4e's `managed_hooks_configured` is reached (that check is tested on its own), and an
 armour line added to a bundle file is blocked at the decision by the Workflow's bundle fingerprint (`GATE_BLOCKED`); an
-armoured file named as an input is the role's own `credential_input` refusal. CP4 (the live proof, the cost table and the
-pages) is next.
+armoured file named as an input is the role's own `credential_input` refusal. CP4 is complete:
+`tests/test_codex_review_live.py` is the opt-in live proof (one Codex turn per stage through `execute_step`; collects and skips
+offline, command on `docs/guide/development.md`). It has not been run, so `tests/harness_contract/codex/review_role.txt` does
+not exist and the cost table on `docs/guide/harnesses.md` reads `not measured` in every measured cell, with the formulas and
+the price file's date. The pages state what is selectable, the status of each ending and that the default is unchanged; the
+item page records the live-proof status. `tools/check_docs.py` and `tools/harness_table.py --check` pass.
 
 ## Previous milestone (CI1c)
 

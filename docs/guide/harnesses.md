@@ -391,9 +391,10 @@ outlives its killed Controller, and `resume` ends it).
 
 ### The review recorder and the read-only run of the two local review roles
 
-H4e2 ([#312](https://github.com/RodrigoFAbreu/workflow-controller/issues/312)) adds two building blocks. **No role is routed
-to either until H4e2b** (split off in [#315](https://github.com/RodrigoFAbreu/workflow-controller/issues/315)), so nothing an
-operator can select changes.
+H4e2 ([#312](https://github.com/RodrigoFAbreu/workflow-controller/issues/312)) adds two building blocks, and H4e2b
+([#315](https://github.com/RodrigoFAbreu/workflow-controller/issues/315)) lets routing select them. The routing is below
+the two blocks; **the default is unchanged**: with no routing config, setting or `--role-harness`, both roles run on
+`claude-code` and every Claude job record is as before.
 
 - **The recorder** (`controller/review_recorder.py`) records a local review verdict (`LOCAL_MODEL_PLAN_REVIEW` or
   `LOCAL_MODEL_IMPLEMENTATION_REVIEW`) in the managed repository through the Workflow's own writers, run from the installed
@@ -423,8 +424,66 @@ operator can select changes.
   `CodexReviewRecordRefused` (the verdict is in the evidence), `CodexReviewRecordPending` (an implementation `REVISE` whose
   commit refused: the feedback and state are written, the next role commits the pending entry) and `CodexReviewRecorded`.
   `recover` ends a record holding the `codex_review` block on `resume`, `--abandon` and a drifted Workflow release
-  (`CodexReviewNotRecorded`, `CodexReviewRecordInterrupted`, `OperatorAbandoned`, `workflow_release_changed`); wiring it into
-  the job's recovery sites is H4e2b.
+  (`CodexReviewNotRecorded`, `CodexReviewRecordInterrupted`, `OperatorAbandoned`, `workflow_release_changed`); the job
+  calls it at every recovery site (see below).
+
+#### Routing the two local review roles to Codex
+
+`review-plan` and `review-implementation` run as the adapter role `local-reviewer`, which both adapters declare, so
+`--role-harness review-plan=codex` (or a routing config, or a `review-plan` fallback chain naming `codex`) is accepted
+with a model and an effort the adapter lists (`gpt-6.1-sol`, `high` or `xhigh`); a Claude-only model or no effort is
+refused as for any Codex route. `codex` is still refused for every other worker role: the launcher registry is keyed by
+`(adapter, role)` and holds `(codex, local-reviewer)` (`CodexReviewLauncher`, which never spawns) but not `(codex, worker)`.
+The usage gate is asked on the Codex provider for such a route, on the single-route and on the chain path. The independence
+check (`review_mode.worker_families`) counts the two review roles, so a Codex local stage with a Codex external reviewer
+still meets the mixed-lane stop and names the collision.
+
+A routed review runs `run_review` in place of the launch, inside the job's own record (the `codex_review` block, the
+`worker_outcome`, the `usage` and `usage_record` from the Codex rollouts). It needs a protocol decision; without one the job
+is `FAILED` with `WorkerNotStarted`. The managed repository is written only by the recorder, and no landing runs. The status
+of each ending:
+
+| ending | job status and what the record says |
+| --- | --- |
+| `CodexReviewRecorded` | worker outcome success; the Workflow's `reconcile` judges the phase (`FINISHED` when it moved as expected) |
+| `CodexReviewRecordPending` | as `CodexReviewRecorded`; the evidence names `recorder_commit_pending` and says the next role commits the entry |
+| `CodexReviewNotStarted` | `FAILED` with `WorkerNotStarted` and the cause; nothing started, nothing to resume |
+| `CodexReviewWorkerFailed` | worker outcome failure with the launcher's subtype; `usage_limit` takes the existing wait path, `sandbox_breach` is `FAILED` |
+| `CodexReviewRefused` | `FAILED`, the deny-set cause in the evidence, nothing recorded, no line of an armoured block in the record |
+| `ReviewStateIdentityChanged` | `FAILED`, nothing recorded; the next run decides again |
+| `workflow_release_changed` | `FAILED` with `WORKFLOW_RELEASE_CHANGED_REASON`, nothing recorded |
+| `CodexReviewRecordRefused` | `FAILED`, the Workflow's class as the cause; the composed verdict is kept once at `reviews/<job id>-verdict.md` (mode 0600) and its path and SHA-256 are in the evidence, so the operator can record it by hand |
+
+The recovery sites (`resume` of a launched record, `abandon`, a drifted Workflow release and the post-spawn exception
+handler) call `recover`, record nothing again and leave no clone: `CodexReviewNotRecorded` (stage `preparing`) is
+`INTERRUPTED`; `CodexReviewRecordInterrupted` (stage `recording`) takes `reconcile`'s judgement of the phase; a `recorded`
+stage takes the row of its stored result; `OperatorAbandoned` is the job's own abandoned outcome. A review record never
+reaches the worker reconciler. The routed path is proved adversarially through the job in `tests/test_codex_review_safety.py`
+(credentials, symlinks and special files, submodules, hooks, crafted refs, forged headers; one test per cause of the deny set).
+
+**The live proof** is opt-in and operator-run: `CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest tests.test_codex_review_live -v`
+(one real Codex turn per stage, skipped on `CI`). Its measured result belongs in `tests/harness_contract/codex/review_role.txt`.
+**It has not been run yet** (it spends the operator's Codex usage), so that file does not exist and no figure below is measured.
+
+#### What a Codex review round costs
+
+One local review round per stage. A figure is filled in only from the live proof's measurement, never estimated; until the
+operator runs the proof every measured cell reads `not measured` (reason: the live proof was not run, so no token count
+exists). Costs are API list-price equivalents at `controller/prices.json` (read 2026-11-03), not what a subscription charges.
+
+| stage | input tokens | cached-input tokens | output tokens | cost at `gpt-6.1-sol` rates | same tokens at the Claude reviewer's rates | worst case of a loop (6 local rounds) | percent of the Codex weekly reading for one job |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| plan | not measured | not measured | not measured | not measured | not measured | not measured | not measured |
+| implementation | not measured | not measured | not measured | not measured | not measured | not measured | not measured |
+
+The formulas, which need only the measured tokens: round cost = `input x input rate + cached-input x cache_read rate +
+output x output rate`, with the rates of `gpt-6.1-sol` (2.0, 0.1 and 10.0 USD per million tokens) or of the Claude model
+the review is routed to (`claude-opus-5-5`: 4.0, 0.2 and 20.0). The worst case of a loop is the round cost times the local
+round cap (6 by default, `review.round_cap` and its local split set it). The weekly hold applies to the Codex provider's own
+reading (`usage.PROVIDER_CODEX`, held by `usage.codex_weekly_pause_at_percent`, 95 by default): a loop pauses when that
+reading reaches the cap, so the number of rounds before the hold is `(cap - reading now) / (percent of one job)`. The
+percent of one job comes from the usage reading before and after the live run, and reads `not measured` where the proof had
+no reading.
 
 ## The shared command renderer
 

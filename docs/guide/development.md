@@ -185,6 +185,14 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   CI and locally), so it lasts as long as its longer lane and the planner
   balances by that; see
   [How a shard runs](ci-and-releases.md#how-a-shard-runs).
+- **Workers.** A shard runs its Controller tests in one process; there is no
+  option for several. Two and three workers were measured and not adopted: a
+  run with workers failed a test in each setting, which ends the setting, and
+  three workers also passed the CPU limit set beforehand (+29.7% and +41.1%
+  on the two shards measured). How it was measured, with the patch and
+  commands to reproduce it, and the result are in
+  [the CI1c item page](../items/workflow-controller-ci1c.md#measurements-cp1)
+  and its [reproduction page](../items/workflow-controller-ci1c-reproduction.md).
 - **Proof.** A run passes only if every planned test ran exactly once and
   passed; a missing, extra, duplicated or substituted test id fails the
   run and is named. The summary states the check's verdict either way

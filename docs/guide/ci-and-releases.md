@@ -259,6 +259,14 @@ Measured on the run of PR #46, which added the conformance lane:
 | Peak Linux runners | 6 | 6 |
 | Runner-minutes | about 69.5 | about 63.0 |
 
+Parallel workers inside a shard were measured and are not used. In a pinned scratch run with the
+one-worker baseline interleaved, two worker processes for the Controller lane cut the wall of the two shards measured by
+29 and 36 percent, but one run failed (a killed worker's process group was still present after 15 seconds), which the
+reliability rule treats as the end of the setting. Three workers failed a run as well and raised the CPU time by 30 and 41
+percent, over the 25 percent limit fixed before the measurement. The conformance lane does not use workers and bounds the
+longest shard. The numbers and the rule are in the
+[item page](../items/workflow-controller-ci1c.md#measurements-cp1).
+
 ### Re-running failed jobs
 
 GitHub's "Re-run failed jobs" counts. Each attempt uploads its own

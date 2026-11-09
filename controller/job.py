@@ -3204,7 +3204,7 @@ def _end_review_group(record: Mapping, root: Path) -> None:
                 f"{_unverifiable_guidance(job_id, assessment, root)}",
                 evidence={"job_id": job_id, "worker_liveness": assessment.to_dict()})
         pgid = worker_process.get("pgid")
-        if assessment.verdict == worker.ACTIVE and isinstance(pgid, int) and not isinstance(pgid, bool) and pgid > 0:
+        if assessment.verdict == worker.ACTIVE and runtime.signalable_group(pgid):
             worker._kill_drained_group(pgid)
     deadline = time.monotonic() + _REVIEW_KILL_SETTLE_SECONDS
     while True:

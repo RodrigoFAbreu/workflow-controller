@@ -180,6 +180,20 @@ def write_bytes(runtime_root: Path, rel_path: str | os.PathLike, data: bytes) ->
     return _atomic_write(runtime_root, rel_path, data)
 
 
+def restrict_to_owner(runtime_root: Path, rel_path: str | os.PathLike) -> Path:
+    """Set ``<runtime_root>/<rel_path>`` to mode ``0o600`` (a regular file, containment-checked, symlinks
+    refused). For a file written by :func:`write_bytes` that holds content only the operator should read (a
+    composed review verdict kept for a hand-recording, workflow-controller-h4e2b D3)."""
+    full_path = runtime_root / rel_path
+    _assert_contained(runtime_root, full_path)
+    fd = os.open(full_path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        os.fchmod(fd, 0o600)
+    finally:
+        os.close(fd)
+    return full_path
+
+
 def create_json(runtime_root: Path, rel_path: str | os.PathLike, obj: dict) -> Path:
     """Create ``<runtime_root>/<rel_path>`` holding ``obj`` as canonical
     JSON, with ``O_EXCL`` semantics: an existing file is a

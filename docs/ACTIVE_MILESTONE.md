@@ -8,7 +8,16 @@ the adapter role of `review-plan` and `review-implementation` (`routing.ADAPTER_
 adapters declare it, and `worker_launch.LAUNCHERS` is keyed by `(adapter, role)` with `CodexReviewLauncher` (whose `launch`
 raises) for `(codex, local-reviewer)`, so `codex` is routable for the two review roles and still refused for every worker
 role. `review_mode.worker_families` counts both roles, and the chain probe takes the entry's adapter role. The default
-is unchanged. Verified with the narrow modules of the plan's CP1 list. CP2 (the job branch and the recovery sites) is next.
+is unchanged. Verified with the narrow modules of the plan's CP1 list. CP2 is complete: `job._launch_job` takes a review branch
+(`job._run_codex_review`) before the Codex worker's when the launcher is a `CodexReviewLauncher`; it runs
+`codex_review_role.run_review` inside the job's record (the `codex_review` block through `on_progress`, `worker_process` on the
+spawn, `worker_outcome`, `usage` and `usage_record` from the rollouts) and `job._codex_review_fields` maps each ending to its
+status (D3's table; the Workflow's `reconcile` judges a recorded ending). `resume` (`_reconcile_codex_review`), `abandon`, the
+drift ending and the post-spawn exception handler call `codex_review_role.recover`, record nothing again and leave no clone; a
+review record never reaches the worker reconciler. A refused record keeps the one verdict file at mode 0600 (new primitive
+`runtime.restrict_to_owner`, in `runtime.py` where the write-containment scan wants it) and names its path and SHA-256.
+`tests/test_job_codex_review.py` (46 tests, both stages) covers every row of both tables; the Codex-worker job modules pass
+unchanged. CP3 (the adversarial tests of the routed path) is next.
 
 ## Previous milestone (CI1c)
 

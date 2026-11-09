@@ -9,8 +9,11 @@ Nothing here is part of the Controller; the patch is for a scratch clone only an
 
 1. Make a scratch directory with `mktemp -d` and a clone of base commit `065ca1e` inside it as `clone/`. Never use the
    working tree.
-2. Plan the CI profile once, from inside the clone: `python3 tools/run_tests.py plan --profile ci --ci-placement` (write
-   its JSON to `plan.json` next to `clone/`). The plan digest must match the one in the item page's plan.
+2. Plan the CI profile once, from inside the clone:
+   `python3 tools/run_tests.py plan --profile ci --ci-placement --output ../plan.json`. Redirecting the command's
+   standard output does not work: without `--output` it prints only the digest, the shard count and the shard
+   indexes, not the plan. The digest it prints must be
+   `1663e78f3cccedc713b19925f4cfce5eeefb24645f0a2e7e43c1f78e7651bcb1`.
 3. Apply the patch below inside the clone (`git apply`).
 4. Put `runone.py` and the drivers next to `clone/`. Edit nothing else.
 
@@ -29,18 +32,22 @@ One run: `python3 runone.py <shard> <workers> <tag>`. It writes `runs/<tag>/summ
 
 ## The patch (`tools/test_shards.py`, scratch clone only)
 
-It divides the Controller atoms with the planner's own `assign_atoms`, **using each atom's estimated seconds from
-`tools/test_timings.json`** (scaled per test when the recorded test count differs, and the profile's mean seconds per test
-for an atom the profile does not know), as `estimate_atoms` does. An earlier version of this patch read the profile entry as
-a number, but every entry is a dictionary, so every atom got the same estimate and the atoms were split by count; those runs
-are discarded (see the item page).
+It divides the Controller atoms with the planner's own `assign_atoms`, **over the planner's own estimates**: it builds
+the inventory with `build_inventory`, loads the committed profile with `load_timings` and calls `estimate_atoms` on the
+shard's Controller atoms (so an atom the profile does not know gets its test count times the mean seconds per test of
+its module, with conformance entries left out, exactly as in a plan), then converts to milliseconds as `build_plan`
+does. This is the third version of the patch. The first read each profile entry as a number and split by count; the
+second used the profile's seconds but, for an atom the profile does not know, the mean over every entry including
+conformance ones (7.919 s for the four tests of `tests.test_release_tools.DynamicVersionWheelTest` against the
+planner's 0.568 s). Both are superseded and their runs are reported separately in the item page. The parent builds the
+inventory before it forks, which is about one second more wall time at 2 and 3 workers.
 
 ```diff
 diff --git a/tools/test_shards.py b/tools/test_shards.py
-index 3da1022..c0e96c4 100644
+index 3da1022..fb92498 100644
 --- a/tools/test_shards.py
 +++ b/tools/test_shards.py
-@@ -1916,6 +1916,41 @@ def execute_shard(plan: Mapping, index: int, results_dir: Path, repo_root: Path
+@@ -1916,6 +1916,37 @@ def execute_shard(plan: Mapping, index: int, results_dir: Path, repo_root: Path
          if units is not None:
              controller = [(key, suite) for key, suite in units if suite is not None]
              concurrent = plan["parameters"].get("conformance_lane", True)
@@ -48,14 +55,10 @@ index 3da1022..c0e96c4 100644
 +            _kids = []
 +            if _nw > 1 and controller:
 +                import pickle, tempfile as _tf
-+                _prof = json.load(open(Path(repo_root) / "tools/test_timings.json"))["atoms"]
-+                _mean = sum(v["seconds"] for v in _prof.values()) / max(1, sum(v["tests"] for v in _prof.values()))
-+                _est = []
-+                for k, su in controller:
-+                    _n = su.countTestCases()
-+                    _kn = _prof.get(k)
-+                    _sec = (_kn["seconds"] if _kn["tests"] == _n else _kn["seconds"] / _kn["tests"] * _n) if _kn else _n * _mean
-+                    _est.append(max(1, int(1000 * _sec)))
++                _inv = {x.key: x for x in build_inventory(Path(repo_root)).atoms}
++                _prof = load_timings(Path(repo_root) / CI_TIMINGS)
++                _eat = estimate_atoms([_inv[k] for k, su in controller], [_prof])
++                _est = [max(1, _milliseconds(_eat[k])) for k, su in controller]
 +                _parts = [p for p in assign_atoms(_est, min(_nw, len(controller))) if p]
 +                for _i, _part in enumerate(_parts):
 +                    _out = Path(results_dir) / f"worker-{index}-{_i}.pkl"
@@ -82,7 +85,7 @@ index 3da1022..c0e96c4 100644
              for stale in [*results_dir.glob(f"lane-{index}.*"), *results_dir.glob(f"lane-{index}-*")]:
                  stale.unlink(missing_ok=True)  # an aborted run's lane files
              lane = _ConformanceLane(
-@@ -1925,7 +1960,21 @@ def execute_shard(plan: Mapping, index: int, results_dir: Path, repo_root: Path
+@@ -1925,7 +1956,21 @@ def execute_shard(plan: Mapping, index: int, results_dir: Path, repo_root: Path
              try:
                  if lane.keys:
                      lane.start()
@@ -153,10 +156,10 @@ if __name__ == "__main__":
     run(int(sys.argv[1]), int(sys.argv[2]), sys.argv[3], *( [Path(sys.argv[4])] if len(sys.argv) > 4 else []))
 ```
 
-## The drivers
+## The driver
 
-Stage 1 (three interleaved rounds of 1, 2 and 3 workers on shards 0 and 4; the 1-worker runs of this stage and of the next
-are the baseline of the table):
+The measurement the item page reports is one driver: three rounds, each of 1, 2 and 3 workers on shards 0 and 4, in
+this order, so that every setting, the 1-worker baseline included, is measured in the same hours (D2, D4(b)):
 
 ```bash
 #!/bin/bash
@@ -167,43 +170,16 @@ done; done; done
 echo STAGE1-COMPLETE
 ```
 
-Stage 2 (rounds 4 to 9 of 1 and 2 workers on shards 0 and 4, then three rounds on shards 1, 2, 3 and 5):
+D2 extends only a setting that still passes after the three rounds, and D3 ends a setting at its first failure. Both
+settings ended in these rounds, so the extension to 9 runs and the runs on shards 1, 2, 3 and 5 were not made (see the
+item page). For a setting that did pass, the extension is the same loop over rounds 4 to 9 for 1 worker and that
+setting, then three rounds of 1 worker and that setting on each of shards 1, 2, 3 and 5, with the 1-worker runs
+interleaved in the same loop.
 
-```bash
-#!/bin/bash
-cd "$(dirname "$0")"
-for r in 4 5 6 7 8 9; do for s in 0 4; do for n in 1 2; do
-  python3 runone.py $s $n "s${s}-n${n}-r${r}" || echo "FAILED s${s}-n${n}-r${r}"
-done; done; done
-for r in 1 2 3; do for s in 1 2 3 5; do for n in 1 2; do
-  python3 runone.py $s $n "s${s}-n${n}-r${r}" || echo "FAILED s${s}-n${n}-r${r}"
-done; done; done
-echo STAGE2-COMPLETE
-```
+### Superseded drivers
 
-Re-measurement with the corrected split (3 interleaved rounds of 2 and 3 workers on shards 0 and 4), then the extension of
-2 workers, the only setting that still passed:
-
-```bash
-#!/bin/bash
-cd "$(dirname "$0")"
-for r in 1 2 3; do for n in 2 3; do for s in 0 4; do
-  python3 runone.py $s $n "s${s}-n${n}-r${r}" || echo "FAILED s${s}-n${n}-r${r}"
-done; done; done
-echo STAGE1B-COMPLETE
-```
-
-```bash
-#!/bin/bash
-cd "$(dirname "$0")"
-for r in 4 5 6 7 8 9; do for s in 0 4; do
-  python3 runone.py $s 2 "s${s}-n2-r${r}" || echo "FAILED s${s}-n2-r${r}"
-done; done
-for r in 1 2 3; do for s in 1 2 3 5; do
-  python3 runone.py $s 2 "s${s}-n2-r${r}" || echo "FAILED s${s}-n2-r${r}"
-done; done
-echo STAGE2B-COMPLETE
-```
-
-`driver1.sh` and `driver2.sh` also start 2- and 3-worker runs; those were made with the first, count-based version of the patch and are discarded (see the item page). Only their 1-worker runs are used. Their 2- and 3-worker tags (`s<s>-n2-r<r>`, `s<s>-n3-r<r>`) are the tags the re-measurement drivers use, and `runone.py` skips a tag whose `runs/<tag>/done` exists: either apply the corrected patch before running `driver1.sh` and `driver2.sh`, which then produce the whole table by themselves, or move those 2- and 3-worker run directories to `discarded/count-based/` before running the re-measurement drivers. The 1-worker runs are not repeated: with one worker the patch changes nothing, so they are the baseline for
-both versions of the patch.
+Earlier measurements took the 1-worker runs on a different day from the worker runs. Their drivers are not repeated
+here; their numbers are in the item page's superseded section. They were stage 1 and stage 2 (1, 2 and 3 workers, then
+1 and 2 workers, with the count-based first patch) and two re-measurement drivers that ran only 2 and 3 workers with the
+second patch against the earlier 1-worker runs. A review found that this broke the interleaving that D2 and D4(b)
+require.

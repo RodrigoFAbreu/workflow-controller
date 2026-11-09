@@ -4,21 +4,17 @@
 
 **In progress.** `workflow-controller-ci1c` (CI1c, issue
 [#317](https://github.com/RodrigoFAbreu/workflow-controller/issues/317)): plan `docs/ai-workflow/CONTROLLER_CI1C_PLAN.md`
-(revision 5), three checkpoints. CP1 is complete: the measurements are in `docs/items/workflow-controller-ci1c.md`. Two
-workers (atoms divided by the profile's estimates, after a review found the first patch split them by count and those runs
-were discarded and measured again) cut the shard wall by 27-47% on every shard and leave the six-shard maximum at 516 s against
-712 s, with no worker-only failure or leak; the CPU rise is +5% to +18% on five shards but +36.7% on shard 1, over D4's 25% limit.
-The patch, wrapper and commands are on `docs/items/workflow-controller-ci1c-reproduction.md`. Read literally, two
-workers fail D4(d) and CP2 would commit nothing; three workers fail the CPU limit on shards 0 (+25.9%) and 4 (+39.5%). The reading of (d) is
-left to the reviewer and the owner. No source file changed.
+(revision 5), three checkpoints. CP1 is complete: the measurements are in `docs/items/workflow-controller-ci1c.md`. They were
+repeated in review round 2 with the atoms divided by the planner's own `estimate_atoms` and with the 1-worker baseline
+interleaved with every worker setting (the earlier ones are kept apart as superseded). Two workers cut the wall of shards 0 and
+4 by 28.6% and 35.9% at +16.7% and +16.0% CPU, but one run failed in the first round (a killed worker's process group was
+still there after 15 s), and D3 ends a setting at its first failure. Three workers also failed one run and missed the CPU limit
+(+29.7% on shard 0, +41.1% on shard 4). No setting passes D4, so CP2 changes no file and the negative result stands; the
+reading of D4(d) no longer decides it. The patch, wrapper, driver and set-up are on
+`docs/items/workflow-controller-ci1c-reproduction.md`. No source file changed.
 
-CP2 is recorded as not needed: the plan writes the option only if CP1 records a setting that passes D4, and read as written
-no setting does (two workers fail (d) on shard 1, three fail it on shards 0 and 4), so CP2 changes no file. If the reviewer or
-owner reads (d) as meant for shards A and B only, two workers pass and CP2 is reopened by a plan amendment. CP3 then records
-the negative result in the guides and the item page.
-
-CP3 is complete: the guides and the item page record the negative result and the D5 decisions; no code or workflow file
-changed. `python3 tools/check_docs.py` passes.
+CP2 is recorded as not needed. CP3 is complete: the guides and the item page record the negative result and the D5
+decisions; no code or workflow file changed. `python3 tools/check_docs.py` passes.
 
 ## Previous milestone (CI1b)
 

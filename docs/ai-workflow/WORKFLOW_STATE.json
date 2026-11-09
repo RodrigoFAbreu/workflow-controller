@@ -66219,7 +66219,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci1c-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci1c-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 5,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -66363,12 +66363,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 2,
-          "external": 0
+          "local": 3,
+          "external": 1
         }
       },
-      "state_revision": 29,
-      "last_transition": "2026-11-09T06:35:11Z",
+      "state_revision": 31,
+      "last_transition": "2026-11-09T06:44:22Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -66562,7 +66562,62 @@
               "at": "2026-11-09T06:33:41Z"
             }
           ]
+        },
+        "F-6fa549c3dde0": {
+          "digest": "6fa549c3dde06215a43e8ead79d4788b8fa96efce17e922d9099233cdf4af5ed",
+          "text": "**O1. The bundle narrative's head lines are stale.** `IMPLEMENTATION_SUMMARY.md` still says \"Content head `7e5cc2f` (the self-review fix); the generation record `038397b`\", and it has no entry for review round 2 (I1's corrected figures, O1's driver-tag rule in `fbd7b02`). `TEST_RESULTS.md` says \"head: `7e5cc2f`\". The checks it names were run at `7e5cc2f`, which is accurate for the full suite, but the narrow checks were re-run later. Name the current content head (`fbd7b02`) and add a round-2 line to the summary.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "35c6574d1f8f92ae61f7daad82590e456df86b3e4e10e5263ce023d68b2da9d4",
+              "verdict": "APPROVE",
+              "at": "2026-11-09T06:37:53Z"
+            }
+          ]
+        },
+        "F-57da689fc5eb": {
+          "digest": "57da689fc5ebbe2df2d5a5c7fc84cede2ce66b4fc889424dd0d256d9a33f300a",
+          "text": "**O2. The item page's \"Scope\" section still describes the pre-plan method.** It says the runs are \"pinned with `taskset -c 0-3`\", with \"separate `TMPDIR` and `HOME` per worker\" and \"CPU use from `/usr/bin/time -v`\". The approved plan rejects all three (D1: `/usr/bin/time` is absent and `0-3` overstates the gain; D3: `HOME` stays inherited), and the Measurements section below it uses `taskset -c 0,1,8,9`, `getrusage` and an inherited `HOME`. A reader who stops at \"Scope\" gets the wrong method. Add one line saying the Measurements section supersedes it, or bring the three phrases into line.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "35c6574d1f8f92ae61f7daad82590e456df86b3e4e10e5263ce023d68b2da9d4",
+              "verdict": "APPROVE",
+              "at": "2026-11-09T06:37:53Z"
+            }
+          ]
+        },
+        "F-a0756f182d4f": {
+          "digest": "a0756f182d4f45054009e5e6e2476f8ea87ca1bf787ed21f72bc2346c03aaca6",
+          "text": "**O1. Make the plan-writing command explicit.** Reproduction setup step 2 should use `python3 tools/run_tests.py plan --profile ci --ci-placement --output ../plan.json`. The command currently shown prints only the digest, shard count and indexes; redirecting that JSON does not produce a valid execution plan.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "35c6574d1f8f92ae61f7daad82590e456df86b3e4e10e5263ce023d68b2da9d4",
+              "verdict": "REVISE",
+              "at": "2026-11-09T06:44:22Z"
+            }
+          ]
         }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "35c6574d1f8f92ae61f7daad82590e456df86b3e4e10e5263ce023d68b2da9d4",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "7422c0fb93c2e1fe738a1ebb25dd2d033994570e011db067d21c75d8a262823f",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-11-09T06:37:53Z",
+          "verdict_sha256": "4b192331eeb392a4f4f6593ff6a4797a6d836e597afeb35bdcdbcf36edb336e0",
+          "run_ref": "session:local .ai-review/workflow-controller-ci1c/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

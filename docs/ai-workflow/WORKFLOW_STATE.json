@@ -66219,7 +66219,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci1c-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci1c-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "APPLYING_REVIEW_FEEDBACK",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 5,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -66367,8 +66367,8 @@
           "external": 0
         }
       },
-      "state_revision": 28,
-      "last_transition": "2026-11-09T06:33:41Z",
+      "state_revision": 29,
+      "last_transition": "2026-11-09T06:35:11Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

@@ -8,8 +8,8 @@ the recorder's ``check`` values, so the vendor, model, round and identity are th
 role's claim. Nothing is landed and nothing is copied back from the clone. Every path ends in one :class:`Ending`
 and the clone is removed on each.
 
-Nothing calls :func:`run_review` outside its tests: no role is routed to it until H4e2b. :func:`recover` is what a
-job's recovery site will call for a record holding the ``codex_review`` block; this module does not import
+:mod:`controller.job` calls :func:`run_review` for a local review role routed to ``codex`` (H4e2b, D3) and
+:func:`recover` at every recovery site of a record holding the ``codex_review`` block (D4); this module does not import
 ``codex_worker_landing``.
 """
 

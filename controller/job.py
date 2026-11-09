@@ -8943,6 +8943,14 @@ def _codex_home() -> Path:
 CODEX_HOME_RESOLVER: Callable[[], Path] = _codex_home
 
 
+def _is_codex_review_route(route: routing.ResolvedRoute) -> bool:
+    """Whether ``route`` is a local review role routed to Codex (workflow-controller-h4e2b, D1, D3): keyed on the
+    route's role and harness, never on the launcher's type alone. Such a route takes the review branch
+    (:func:`_run_codex_review`), never the Codex worker's."""
+    return (route.role in routing.LOCAL_REVIEW_ROLES
+            and adapters.get(route.harness).name == adapters.CODEX.name)
+
+
 def _is_codex_launcher(launcher: Any) -> bool:
     """Whether the route's launcher is the Codex worker's (H4c1, D2): on the launcher object, not a harness name."""
     return isinstance(launcher, codex_worker.CodexLauncher)
@@ -9337,6 +9345,7 @@ def _run_codex_review(
                     "code": WORKER_NOT_STARTED_CODE, "error": ending.cause, "message": ending.evidence.get("message"),
                     "evidence": {k: v for k, v in dict(ending.evidence).items() if k != "message"}},
                 "updated_at": _now()}, event="worker_not_started", details={"error": ending.cause})
+            state["record"] = failed
             _run_job_ended(run_id, job_id, STATUS_FAILED, failed)
             return failed
         if (record.get("worker_state") or {}).get("state") != worker.ENDED:
@@ -9346,8 +9355,8 @@ def _run_codex_review(
                 runtime_root, job_id, {**record, "status": STATUS_COMPLETED}, event="completed",
                 details={"outcome": result.outcome, "exit_code": result.returncode})
         fields = _codex_review_fields(ending, record, managed_repo=managed_repo, runtime_root=runtime_root)
-        ended = _codex_review_terminal(record, fields, runtime_root=runtime_root, job_id=job_id,
-                                       event=_final_event(fields["status"]))
+        ended = state["record"] = _codex_review_terminal(record, fields, runtime_root=runtime_root, job_id=job_id,
+                                                         event=_final_event(fields["status"]))
         _run_job_ended(run_id, job_id, ended["status"], ended)
         return ended
 
@@ -9362,10 +9371,12 @@ def _run_codex_review(
     except KeyboardInterrupt:
         raise
     except Exception:
-        # The handler of a run that stopped part-way: the block's stage says what `recover` judges (D4).
-        with contextlib.suppress(Exception):
-            ended = recovered(state["record"])
-            _run_job_ended(run_id, job_id, ended["status"], ended)
+        # The handler of a run that stopped part-way: the block's stage says what `recover` judges (D4). A record
+        # already terminal (something raised after the terminal write) is never recovered and written again.
+        if state["record"].get("status") not in TERMINAL_STATUSES:
+            with contextlib.suppress(Exception):
+                ended = recovered(state["record"])
+                _run_job_ended(run_id, job_id, ended["status"], ended)
         raise
     finally:
         if ticker is not None:
@@ -9540,8 +9551,9 @@ def _launch_job(
                 "evidence": currency.evidence(),
             }, protocol_decision.DECISION_STALE_AT_LAUNCH)
 
-    if isinstance(launcher, worker_launch.CodexReviewLauncher):
-        # H4e2b (D3): a routed review runs `run_review` in place of the launch, before the Codex worker's branch.
+    if _is_codex_review_route(route):
+        # H4e2b (D1, D3): a routed review runs `run_review` in place of the launch, before the Codex worker's branch,
+        # keyed on the route's role and harness, never on the launcher's type alone.
         return _run_codex_review(
             managed_repo, runtime_root=runtime, run_id=run_id, job_id=job_id, record=record, decision=decision,
             route=route, timeout=resolved_timeout, pre_state=pre_state, worker_streams=worker_streams,

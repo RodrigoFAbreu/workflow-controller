@@ -479,7 +479,7 @@ exists). Costs are API list-price equivalents at `controller/prices.json` (read 
 The formulas, which need only the measured tokens: round cost = `input x input rate + cached-input x cache_read rate +
 output x output rate`, with the rates of `gpt-6.1-sol` (2.0, 0.1 and 10.0 USD per million tokens) or of the Claude model
 the review is routed to (`claude-opus-5-5`: 4.0, 0.2 and 20.0). The worst case of a loop is the round cost times the local
-round cap (6 by default, `review.round_cap` and its local split set it). The weekly hold applies to the Codex provider's own
+round cap (6 by default; the `review.local_round_cap` setting or `--review-local-round-cap` sets it). The weekly hold applies to the Codex provider's own
 reading (`usage.PROVIDER_CODEX`, held by `usage.codex_weekly_pause_at_percent`, 95 by default): a loop pauses when that
 reading reaches the cap, so the number of rounds before the hold is `(cap - reading now) / (percent of one job)`. The
 percent of one job comes from the usage reading before and after the live run, and reads `not measured` where the proof had

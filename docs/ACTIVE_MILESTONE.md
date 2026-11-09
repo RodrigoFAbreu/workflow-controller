@@ -31,6 +31,15 @@ not exist and the cost table on `docs/guide/harnesses.md` reads `not measured` i
 the price file's date. The pages state what is selectable, the status of each ending and that the default is unchanged; the
 item page records the live-proof status. `tools/check_docs.py` and `tools/harness_table.py --check` pass.
 
+All four checkpoints are implemented. The self-review fixed five things. The review branch was keyed on the launcher's
+type, which D1 rules out: it is now keyed on the route's role and harness (`job._is_codex_review_route`, with a test). An
+exception raised after the terminal write (the run's end mirror) made the handler recover the record a second time from its
+pre-terminal copy: it now recovers only a record that is not yet terminal (a test fails without the guard). The cost section
+named the deprecated `review.round_cap` where `review.local_round_cap` applies. The item page's planning notes still said
+"Not yet planned". The module docstrings of `codex_worker` and `codex_review_role` still said no role is routed to the run.
+The full suite then found two `tests/test_cli.py` tests that used `review-plan=codex` as the refused case; they now use the
+worker role `milestone-plan`, and a new test parses `codex` for both review roles.
+
 ## Previous milestone (CI1c)
 
 **Complete.** `workflow-controller-ci1c` (CI1c, issue

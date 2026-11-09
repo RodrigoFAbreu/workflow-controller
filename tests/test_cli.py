@@ -841,6 +841,15 @@ class RoutingOptionsParserTest(unittest.TestCase):
         self.assertEqual(args.role_harness, {"review-plan": "claude-code", "functional-tester": "claude-code"})
         self.assertEqual(dict(cli._routing_options(args).cli_role_harnesses), args.role_harness)
 
+    def test_a_local_review_role_parses_with_the_codex_harness(self) -> None:
+        # h4e2b (D1): the two local review roles run as `local-reviewer`, which codex declares.
+        for role in ("review-plan", "review-implementation"):
+            args = cli.build_parser().parse_args([
+                "--role-harness", f"{role}=codex", "--role-model", f"{role}=gpt-6.1-sol",
+                "--role-effort", f"{role}=high", "step", "/target"])
+            route = cli._routing_options(args).resolve(role)
+            self.assertEqual((route.harness, route.model, route.effort), ("codex", "gpt-6.1-sol", "high"))
+
     def test_the_defaults_are_no_overrides(self) -> None:
         args = cli.build_parser().parse_args(["step", "/target"])
         for name in ("model", "effort", "role_model", "role_effort", "role_harness", "routing_config"):
@@ -858,7 +867,8 @@ class RoutingOptionsParserTest(unittest.TestCase):
             "harness assigned twice": ["--role-harness", "review-plan=claude-code",
                                        "--role-harness", "review-plan=claude-code"],
             "unknown role harness": ["--role-harness", "nobody=claude-code"],
-            "codex harness": ["--role-harness", "review-plan=codex"],
+            # A worker role still cannot be routed to codex (h4e2b, D1: only the two local review roles can).
+            "codex harness": ["--role-harness", "milestone-plan=codex"],
             "reviewer alias harness": ["--role-harness", "review-plan=claude"],
             "harness no equals": ["--role-harness", "review-plan"],
             "empty model": ["--model="],
@@ -3370,13 +3380,14 @@ class SettingsWiringTest(_StepFixture, unittest.TestCase):
     def test_an_unsupported_harness_in_the_settings_file_exits_20_before_any_job_record(self) -> None:
         job.execute_step = self._orig_execute_step  # the real one: nothing may reach it
         self.settings_path.parent.mkdir(parents=True)
-        self.settings_path.write_text('{"routing": {"roles": {"review-plan": {"harness": "codex"}}}}')
+        # A worker role: the two local review roles can be routed to codex since h4e2b (D1).
+        self.settings_path.write_text('{"routing": {"roles": {"milestone-plan": {"harness": "codex"}}}}')
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
             code = cli.main(["--runtime-dir", str(self.runtime_root), "--workflow-manager", str(self.stub_manager),
                              "--settings", str(self.settings_path), "step", str(self.repo)])
         self.assertEqual(code, cli.EXIT_FAIL_CLOSED, err.getvalue())
-        self.assertIn("routing.roles.review-plan.harness", err.getvalue())
+        self.assertIn("routing.roles.milestone-plan.harness", err.getvalue())
         self.assertEqual(list(self.runtime_root.glob("jobs/*.json")), [])
 
     def test_non_positive_flags_are_usage_errors(self) -> None:

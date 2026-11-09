@@ -561,6 +561,22 @@ class RecoveryTests:
         self.assertTrue((self.root / FEEDBACK).is_file())
         self.assert_valid(record)
 
+    def test_an_exception_after_the_terminal_write_is_never_recovered_again(self) -> None:
+        # The handler recovers only a record that stopped part-way: once the terminal record is written, a later
+        # exception (here the run's end mirror) re-raises and leaves that one terminal record as it is.
+        self.script(message=message("APPROVE"))
+        real_recover = crr.recover
+        with mock.patch.object(job, "_run_job_ended", side_effect=RuntimeError("fault")), \
+                mock.patch.object(crr, "recover", side_effect=real_recover) as recover, \
+                self.assertRaises(RuntimeError):
+            self.step()
+        record = self.only_record()
+        self.assertEqual(record["status"], job.STATUS_FINISHED)
+        self.assertNotIn("reconciled_at", record)
+        recover.assert_not_called()
+        self.assertFalse(self.layout.worktree.exists())
+        self.assert_valid(record)
+
 
 class PlanJobTests(RowTests, UsageTests, RecoveryTests, ReviewJobCase):
     STAGE = "plan"
@@ -579,6 +595,19 @@ class RecordKindTests(unittest.TestCase):
         self.assertFalse(job._is_codex_review_record({"kind": job.REVIEW_KIND, "schema_version": job.REVIEW_SCHEMA_VERSION,
                                                       "codex_review": {}}))
         self.assertFalse(job._is_codex_worker_record({"codex_review": {"stage": "recorded"}}))
+
+    def test_the_review_branch_is_keyed_on_the_routes_role_and_harness(self) -> None:
+        # D1: the role and the harness choose the review branch, never the launcher's type alone.
+        def route(role: str, harness_name: str) -> routing.ResolvedRoute:
+            return routing.ResolvedRoute(role=role, model=None, effort=None, single_agent=False,
+                                         model_source="default", effort_source="default", harness=harness_name)
+        for role in routing.LOCAL_REVIEW_ROLES:
+            self.assertTrue(job._is_codex_review_route(route(role, "codex")))
+            self.assertFalse(job._is_codex_review_route(route(role, "claude-code")))
+            self.assertFalse(job._is_codex_review_route(route(role, "claude")))
+        for role in routing.ADAPTER_ROLE:
+            if role not in routing.LOCAL_REVIEW_ROLES:
+                self.assertFalse(job._is_codex_review_route(route(role, "codex")), role)
 
 
 if __name__ == "__main__":

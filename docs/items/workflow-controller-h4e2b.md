@@ -32,4 +32,4 @@ Run `CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest tests.test_codex_revie
 
 ## Planning notes
 
-Not yet planned. The rules that apply (the sizing rule: at most one new mechanism, releasable alone) are on [Planning rules](../planning-rules.md#next-in-order-and-the-sizing-rules).
+Planned in `docs/ai-workflow/CONTROLLER_H4E2B_PLAN.md`. The rules that apply (the sizing rule: at most one new mechanism, releasable alone) are on [Planning rules](../planning-rules.md#next-in-order-and-the-sizing-rules).

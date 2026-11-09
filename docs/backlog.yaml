@@ -459,7 +459,7 @@ items:
     detail: docs/items/workflow-controller-ci1b.md
   - id: workflow-controller-ci1c
     title: "CI: measure parallel test workers inside a shard"
-    status: next
+    status: done
     order: 79
     detail: docs/items/workflow-controller-ci1c.md
   - id: workflow-controller-h4e2b

@@ -2,7 +2,7 @@
 
 ## Status
 
-**In progress.** `workflow-controller-ci1c` (CI1c, issue
+**Complete.** `workflow-controller-ci1c` (CI1c, issue
 [#317](https://github.com/RodrigoFAbreu/workflow-controller/issues/317)): plan `docs/ai-workflow/CONTROLLER_CI1C_PLAN.md`
 (revision 5), three checkpoints. CP1 is complete: the measurements are in `docs/items/workflow-controller-ci1c.md`. They were
 repeated in review round 2 with the atoms divided by the planner's own `estimate_atoms` and with the 1-worker baseline
@@ -15,6 +15,10 @@ reading of D4(d) no longer decides it. The patch, wrapper, driver and set-up are
 
 CP2 is recorded as not needed. CP3 is complete: the guides and the item page record the negative result and the D5
 decisions; no code or workflow file changed. `python3 tools/check_docs.py` passes.
+
+The milestone is implemented, functionally reviewed and accepted by policy (PR #325, checks green at the approved head).
+
+Next action: `/milestone-plan` for `workflow-controller-h4e2b` (Codex worker, step 5c: route the two review roles, safety tests and live proof), the item `python3 scripts/workflow_backlog.py next` returns.
 
 ## Previous milestone (CI1b)
 

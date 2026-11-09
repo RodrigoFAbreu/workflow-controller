@@ -1,0 +1,70 @@
+{
+  "dispositions": {
+    "F-059b81643419": {
+      "disposition": "fixed"
+    },
+    "F-17a172824a56": {
+      "disposition": "fixed"
+    },
+    "F-2d80448e51da": {
+      "disposition": "fixed"
+    },
+    "F-323b75de4044": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/326"
+    },
+    "F-331f39ae4935": {
+      "disposition": "fixed"
+    },
+    "F-4a4490074e35": {
+      "disposition": "fixed"
+    },
+    "F-57da689fc5eb": {
+      "disposition": "fixed"
+    },
+    "F-6a8414b72173": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6736713231"
+    },
+    "F-6fa549c3dde0": {
+      "disposition": "fixed"
+    },
+    "F-a0756f182d4f": {
+      "disposition": "fixed"
+    },
+    "F-b277c3b4c457": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6736713231"
+    },
+    "F-b48494959a66": {
+      "disposition": "fixed",
+      "note": "docs/guide/development.md's Workers bullet no longer says the CPU rise passed the limit on one shard: rewritten in 5622900 and a8bcb8f, it now says a run with workers failed a test in each setting and that three workers passed the CPU limit on both measured shards (+29.7% and +41.1%), matching the item page's settled figures."
+    },
+    "F-c0cac2d57653": {
+      "disposition": "fixed",
+      "note": "fbd7b02 stated the tag rule on docs/items/workflow-controller-ci1c-reproduction.md (runone.py skips a tag whose runs/<tag>/done exists; apply the corrected patch first or move the old tags aside); a8bcb8f then replaced the separate re-measurement drivers with one interleaved driver whose s<s>-n<n>-r<r> tags are its own, listing the old drivers only as superseded, so no tag collision remains."
+    },
+    "F-c23d124efca2": {
+      "disposition": "dropped",
+      "reason": "D6 (the --controller-workers option and its worker directories) was not implemented because no worker setting passed D4 in CP1, so the cleanup-reporting wording the plan still carries describes code that was never written; the result is recorded on the item page."
+    },
+    "F-cddf3645299c": {
+      "disposition": "dropped",
+      "reason": "D6 (the --controller-workers option and its worker directories) was not implemented because no worker setting passed D4 in CP1, so the cleanup-reporting wording the plan still carries describes code that was never written; the result is recorded on the item page."
+    },
+    "F-d594b2617f37": {
+      "disposition": "fixed"
+    },
+    "F-ea405cbb1bf3": {
+      "disposition": "fixed"
+    },
+    "F-f8ce84d540d5": {
+      "disposition": "fixed"
+    },
+    "F-fcbb4753fe4b": {
+      "disposition": "fixed"
+    }
+  },
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ci1c"
+}

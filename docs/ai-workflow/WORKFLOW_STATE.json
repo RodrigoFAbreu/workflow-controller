@@ -66219,7 +66219,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci1c-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci1c-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 5,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -66363,12 +66363,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 1,
+          "local": 2,
           "external": 0
         }
       },
-      "state_revision": 27,
-      "last_transition": "2026-11-09T06:30:21Z",
+      "state_revision": 28,
+      "last_transition": "2026-11-09T06:33:41Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -66532,6 +66532,34 @@
               "review_content_id": "48ede9d6cc4f68fab5ad6d1e80bfe429e326370369892f5a66f3cce56bdc63f6",
               "verdict": "REVISE",
               "at": "2026-11-09T02:26:36Z"
+            }
+          ]
+        },
+        "F-c0cac2d57653": {
+          "digest": "c0cac2d57653ac67d203b0f63ef97db4bab36a36be758856518df40c187aa438",
+          "text": "**O1. The reproduction drivers skip finished tags, so the re-measurement drivers do nothing in a directory where `driver1.sh`/`driver2.sh` have already run.** `runone.py` returns early when `runs/<tag>/done` exists. The re-measurement drivers reuse the tags `s<s>-n2-r<r>`/`s<s>-n3-r<r>`, and the count-based runs had to be moved to `discarded/count-based/` before they could run. A reader who applies the corrected patch can get the whole table from `driver1.sh` and `driver2.sh` alone, or must move the old tags aside before running the re-measurement drivers. The page says neither, so state one of them.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "35c6574d1f8f92ae61f7daad82590e456df86b3e4e10e5263ce023d68b2da9d4",
+              "verdict": "REVISE",
+              "at": "2026-11-09T06:33:41Z"
+            }
+          ]
+        },
+        "F-4a4490074e35": {
+          "digest": "4a4490074e35054c2d5c5cf163404f93b8b040a436718ce2490d17ab83276512",
+          "text": "**O2. Stale figures remain in the bundle's narrative.** `IMPLEMENTATION_SUMMARY.md`'s \"Open for the reviewer and the owner\" still gives shard 1's CPU rise as +32.7%. It is +36.7% after the re-measurement. `TEST_RESULTS.md` is headed \"implementation revision 1\".",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "35c6574d1f8f92ae61f7daad82590e456df86b3e4e10e5263ce023d68b2da9d4",
+              "verdict": "REVISE",
+              "at": "2026-11-09T06:33:41Z"
             }
           ]
         }

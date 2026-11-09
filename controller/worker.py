@@ -278,6 +278,8 @@ def _kill_process_group(pid: int) -> None:
         pgid = os.getpgid(pid)
     except ProcessLookupError:
         return
+    if not runtime.signalable_group(pgid):
+        return
     try:
         os.killpg(pgid, signal.SIGKILL)
     except ProcessLookupError:
@@ -301,7 +303,10 @@ def _kill_drained_group(pgid: int) -> None:
     nothing. ``pgid`` is the leader's pid (``start_new_session=True``), and
     Linux never reuses a pid that still names a process group, so the
     signal cannot reach an unrelated group. Tolerates the group already
-    being empty."""
+    being empty. A ``pgid`` that is not a worker group (1 or lower, or this process's own group; see
+    :func:`runtime.signalable_group`) is never signalled: ``killpg(1, ...)`` ends the whole session."""
+    if not runtime.signalable_group(pgid):
+        return
     try:
         os.killpg(pgid, signal.SIGKILL)
     except ProcessLookupError:
@@ -2168,7 +2173,10 @@ def _proc_root() -> Path:
 
 
 def _killpg(pgid: int, sig: int) -> None:
-    """``os.killpg`` (a patchable seam for the ``killpg`` form)."""
+    """``os.killpg`` (a patchable seam for the ``killpg`` form). A real signal (not the ``0`` probe) to a group
+    that is not a worker group is refused as ``ProcessLookupError``, the answer for a group that is not there."""
+    if sig and not runtime.signalable_group(pgid):
+        raise ProcessLookupError(pgid)
     os.killpg(pgid, sig)
 
 

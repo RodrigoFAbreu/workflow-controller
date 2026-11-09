@@ -14,6 +14,14 @@ points at a fresh, empty temporary directory, so a Codex reading taken in
 the suite (the ``usage`` subcommand defaults to ``$CODEX_HOME``, else
 ``~/.codex``) never reads the operator's Codex sessions
 (``tests.test_usage``'s guard reads it).
+
+A third guard (issue #329, after ``os.killpg(1, SIGKILL)`` -- ``kill(-1, SIGKILL)`` -- ended the desktop session
+four times on 2026-11-09): ``os.kill`` and ``os.killpg`` refuse a real signal whose target is pid or group ``1``,
+``0`` or ``-1`` (every process the user may signal, init, or the caller's own group) with an ``AssertionError``, in
+every test process. Signal ``0`` (a liveness probe) and every other target pass through, and a test that replaces
+``os.kill``/``os.killpg`` with a mock replaces the guard with it. It is a second layer, not a sandbox: a command run
+by ``subprocess`` (``kill -9 -1``) is not covered, so a test that needs real signals to a broad target belongs in an
+isolated PID namespace (``docs/guide/development.md``, "Running signal tests safely").
 """
 
 import atexit
@@ -42,3 +50,23 @@ for _name in ("SIGNALHUB_URL", "SIGNALHUB_API_KEY", "SIGNALHUB_API_KEY_FILE"):
 ISOLATED_SIGNALHUB_CONFIG_DIR = tempfile.mkdtemp(prefix="workflow-controller-tests-signalhub-")
 os.environ["SIGNALHUB_CONFIG_DIR"] = ISOLATED_SIGNALHUB_CONFIG_DIR
 atexit.register(shutil.rmtree, ISOLATED_SIGNALHUB_CONFIG_DIR, ignore_errors=True)
+
+
+#: The targets a real signal must never reach from a test: ``-1`` (every process the user may signal), ``0`` (the
+#: caller's own group), ``1`` (init, or group ``1`` for ``killpg``).
+UNSAFE_SIGNAL_TARGETS = (-1, 0, 1)
+
+
+def _guard_signal(real, name):
+    def guarded(target, sig):
+        if sig and target in UNSAFE_SIGNAL_TARGETS:
+            raise AssertionError(f"os.{name}({target}, {sig}) refused: it could signal every process of the "
+                                 f"user and end the desktop session (tests/__init__.py)")
+        return real(target, sig)
+    guarded.__name__ = name
+    guarded.__wrapped__ = real
+    return guarded
+
+
+os.kill = _guard_signal(os.kill, "kill")
+os.killpg = _guard_signal(os.killpg, "killpg")

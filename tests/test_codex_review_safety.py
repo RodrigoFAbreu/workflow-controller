@@ -27,7 +27,7 @@ from controller import codex_review_role as crr, codex_worker as cw, job, routin
 from controller.errors import WorkflowReleaseChangedError  # noqa: E402
 from tests.test_codex_review_role import ARMOUR, message  # noqa: E402
 from tests.test_job_codex_review import ReviewJobCase  # noqa: E402
-from tests.test_review_recorder import FEEDBACK, STATE  # noqa: E402
+from tests.test_review_recorder import FEEDBACK, STATE, WID  # noqa: E402
 
 #: Each cause of ``crr.CAUSES`` and the test method (on ``SafetyTests``) that drives it through the job.
 CASES = {
@@ -52,7 +52,9 @@ class SafetyCase(ReviewJobCase):
 
     def digest(self) -> tuple:
         return (self.snapshot(), _git(self.root, "ls-files", "-s"), _git(self.root, "rev-parse", "HEAD"),
-                _git(self.root, "write-tree"))
+                _git(self.root, "write-tree"),
+                # the content of an already dirty tracked file, which the status line does not show (review O1)
+                _git(self.root, "diff", "HEAD"))
 
     def refused_through_the_job(self, record: dict, code: str, cause: str, before: tuple) -> None:
         """A refusal: FAILED, the deny-set cause named, nothing recorded, the clone gone, no armour held."""
@@ -133,7 +135,12 @@ class SafetyTests:
     def test_an_armour_line_in_the_bundle_never_reaches_a_codex(self) -> None:
         """The bundle is fingerprinted by the Workflow, so an edited bundle is blocked at the decision, before the
         role; an armoured file named as an input is the role's own refusal (above). Either way nothing starts."""
-        request = next((self.root / ".ai-review").rglob("REVIEW_REQUEST.md"))
+        # The bound bundle, named: another ``REVIEW_REQUEST.md`` may sit beside it (``plan-inputs/``, review I2).
+        request = self.root / ".ai-review" / WID / "current" / "REVIEW_REQUEST.md"
+        decoy = self.root / ".ai-review" / WID / "plan-inputs" / "REVIEW_REQUEST.md"
+        decoy.parent.mkdir(parents=True, exist_ok=True)
+        decoy.write_text("an unrelated request\n")
+        self.assertTrue(request.is_file(), request)
         request.write_text(request.read_text() + f"\n{ARMOUR}\n")
         self.script(message=message("APPROVE"))
         before = self.digest()

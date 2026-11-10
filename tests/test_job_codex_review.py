@@ -379,6 +379,22 @@ class RowTests:
         self.assertNotIn("jobs/job1/worker.stdout", self.holders(marker))
         self.assertNotIn("jobs/job1/worker.stderr", self.holders(marker))
 
+    def test_a_nonzero_exit_keeps_the_verdict_text_out_of_the_diagnostic_detail(self) -> None:
+        """Review round 5, I1: a failed run's ``stream_diagnosis.detail`` is a stdout/stderr tail; the marker is in no
+        field of the returned record, the persisted record or any runtime file, and the failure classification stays."""
+        marker = "UNIQUE-VERDICT-MARKER-9d3a6"
+        text = message("APPROVE", extra=" " + marker)
+        self.script(message=text, stdout=text, exit=1,
+                    stderr="OpenAI Codex v0.162.1\nuser\nreview it\ncodex\n" + text + "\ntokens used\n")
+        record = self.step()
+        self.assertNotIn(marker, json.dumps(record, default=str))
+        persisted = (self.runtime / "jobs/job1.json").read_text()
+        self.assertNotIn(marker, persisted)
+        self.assertEqual(self.holders(marker), [])
+        diagnosis = record["worker"]["stream_diagnosis"]
+        self.assertEqual(diagnosis["subtype"], cw.SUBTYPE_EXIT)
+        self.assertIn("OpenAI Codex v0.162.1", diagnosis["detail"])
+
 
 class UsageTests:
     """The usage gate of a routed review: the Codex provider on both paths, a hold leaves no record."""

@@ -395,7 +395,27 @@ def _emptied(result: worker.WorkerResult) -> worker.WorkerResult:
 def without_message(result: worker.WorkerResult) -> worker.WorkerResult:
     """``result`` with its final message (the verdict) emptied, for the job record's ``worker`` block (review I1)."""
     fields = {f.name: getattr(result, f.name) for f in dataclasses.fields(result)}
-    return worker.WorkerResult(**{**fields, "result": ""})
+    return worker.WorkerResult(**{**fields, "result": "", "stream_diagnosis": _diagnosis_without_message(result)})
+
+
+def _diagnosis_without_message(result: worker.WorkerResult) -> dict | None:
+    """``result.stream_diagnosis`` with the final message kept out of ``detail`` (review round 5, I1). A non-zero
+    exit's detail is the tail of stdout and stderr, so it is rebuilt from the streams as :func:`without_message_streams`
+    leaves them (the cut tail can start inside a message line, which a line match would miss); any other detail drops
+    the lines that are lines of the message. The classification (``subtype``, outcome) is untouched."""
+    if result.stream_diagnosis is None:
+        return None
+    diagnosis = dict(result.stream_diagnosis)
+    if diagnosis.get("subtype") == codex_worker.SUBTYPE_EXIT:
+        stdout, stderr = without_message_streams(result)
+        text = (stdout + stderr).strip()[-codex_worker.DETAIL_CHARS:]
+        diagnosis["detail"] = text or f"codex exec exited {result.returncode}"
+    else:
+        message_lines = {line.strip() for line in (result.stdout or "").splitlines()} - {""}
+        kept = [line for line in str(diagnosis.get("detail") or "").splitlines(keepends=True)
+                if line.strip() not in message_lines]
+        diagnosis["detail"] = "".join(kept)
+    return diagnosis
 
 
 def without_message_streams(result: worker.WorkerResult) -> tuple[str, str]:

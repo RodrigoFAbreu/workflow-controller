@@ -455,7 +455,9 @@ of each ending:
 | `CodexReviewRecordRefused` | `FAILED`, the Workflow's class as the cause; the composed verdict is kept once at `reviews/<job id>-verdict.md` (mode 0600) and its path and SHA-256 are in the evidence, so the operator can record it by hand |
 
 A routed review keeps the verdict text nowhere else: the job's `worker.stdout` is empty (non-`--json` `codex exec` prints
-only the final message there) and `worker.stderr` keeps the banner and transcript without the lines of the final message.
+only the final message there) and `worker.stderr` keeps the banner and transcript without the lines of the final message. Only those lines are dropped: the
+transcript's intermediate agent messages and command output stay, so a draft of the verdict that Codex printed earlier
+can still appear in `worker.stderr`.
 
 The recovery sites (`resume` of a launched record, `abandon`, a drifted Workflow release and the post-spawn exception
 handler) call `recover`, record nothing again and leave no clone: `CodexReviewNotRecorded` (stage `preparing`) is

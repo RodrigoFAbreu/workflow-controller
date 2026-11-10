@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import dataclasses
 import subprocess
+from collections.abc import Collection
 from pathlib import Path
 from typing import Any
 
@@ -90,9 +91,11 @@ def _refuse(cause: str, message: str, **evidence: Any) -> CodexTreeError:
 
 
 def check_managed(managed_repo: Any, layout: codex_worker_sandbox.WorkerLayout, base: str, *,
-                  read_only: bool = False) -> str:
+                  read_only: bool = False, allow_dirty: Collection[str] | None = None) -> str:
     """D2's refusals, in order, with no write anywhere. Returns the managed branch's name. With ``read_only`` (a job
-    that lands nothing, ``workflow-controller-h4e2`` D2) only the ``managed_tree_not_clean`` refusal is skipped."""
+    that lands nothing, ``workflow-controller-h4e2`` D2) only the ``managed_tree_not_clean`` refusal is skipped. With
+    ``allow_dirty`` (a carry, ``workflow-controller-h4e3`` D5) the refusal is skipped only when every dirty path is
+    one of those paths."""
     root = Path(managed_repo.root)
     runner = scrubbed_runner(layout.base, no_optional_locks=True)
     try:
@@ -107,7 +110,9 @@ def check_managed(managed_repo: Any, layout: codex_worker_sandbox.WorkerLayout, 
                           base=base)
         changes = gitrepo.tracked_changes(root, runner=runner, no_optional_locks=True)
         untracked = gitrepo.untracked_files(root, runner=runner, no_optional_locks=True)
-        if (changes or untracked) and not read_only:
+        unaccounted = [path for path in [gitrepo.status_path(entry) for entry in changes] + untracked
+                       if allow_dirty is None or path not in allow_dirty]
+        if unaccounted and not read_only:
             raise _refuse("managed_tree_not_clean", "the managed repository has uncommitted changes, which a clone "
                           "cannot receive and a landing could not return", tracked_changes=changes,
                           untracked=untracked)
@@ -158,13 +163,14 @@ def managed_dirty(managed_repo: Any, layout: codex_worker_sandbox.WorkerLayout) 
 
 
 def prepare(managed_repo: Any, layout: codex_worker_sandbox.WorkerLayout, base: str, *,
-            read_only: bool = False) -> Prepared:
+            read_only: bool = False, allow_dirty: Collection[str] | None = None) -> Prepared:
     """D1 and D2: refuse unless the managed branch is clean and at ``base``, then make the private clone at
     ``layout.worktree`` and return it. A clone partly made is removed before the error is raised. With ``read_only``
     a dirty managed tree is not refused (the clone is made from the commit, a read-only job lands nothing) and its
-    dirty paths are returned in :attr:`Prepared.dirty`; every other refusal stands."""
+    dirty paths are returned in :attr:`Prepared.dirty`; every other refusal stands. With ``allow_dirty`` (the carry's
+    set, ``workflow-controller-h4e3`` D5) a dirty tree is accepted only when every dirty path is in it."""
     root = Path(managed_repo.root)
-    branch = check_managed(managed_repo, layout, base, read_only=read_only)
+    branch = check_managed(managed_repo, layout, base, read_only=read_only, allow_dirty=allow_dirty)
     dirty = managed_dirty(managed_repo, layout) if read_only else None
     clone = layout.worktree
     runner = scrubbed_runner(layout.base)

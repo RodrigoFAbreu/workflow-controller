@@ -11,13 +11,16 @@ Controller never imports Workflow code into its own process and decides no
 state field: the ledger, phase, binding, counts and optional findings are
 written by the Workflow's code against its own validators.
 
-Two operations, each a function here:
+Four operations, each a function here (the last two are the carry's, ``workflow-controller-h4e3`` D4 and D6a):
 
 - :func:`check` runs before any launch and writes nothing;
 - :func:`record` takes the path of a composed verdict file and makes the
   command's write set. It is the only operation that passes
   ``real_index=True``, because the commit an implementation ``REVISE``
   makes needs the target's own index.
+
+- :func:`commit_pending` commits a pending ``APPLYING_REVIEW_FEEDBACK`` entry through the Workflow's own committer;
+- :func:`carry_state` replaces one work item's entry of the state file, inside the Workflow's ``state_transaction``.
 
 A refusal of the Workflow is a :class:`RecorderResult` with ``ok`` false and
 one cause of :data:`CAUSES`. The runner's own errors
@@ -56,6 +59,7 @@ CAUSES = (
     "workflow_release_changed",
     "recorder_commit_pending",
     "workflow_refused",
+    "carry_managed_changed",
 )
 
 #: Where the driver sits among the sources (``run_in_private_copy`` writes
@@ -293,11 +297,54 @@ def do_record(root, stage, wid, verdict_file):
     return answer
 
 
+def do_commit_pending(root, wid):
+    mods = modules()
+    probe(mods)
+    try:
+        committed = mods["workflow_state"].commit_pending_applying_review_feedback_entry(root, wid, attribution=())
+    except Exception as exc:
+        raise Refuse("recorder_commit_pending", type(exc).__name__, str(exc))
+    return {"ok": True, "committed": committed}
+
+
+def do_carry_state(root, wid, payload_file):
+    mods = modules()
+    probe(mods)
+    ws = mods["workflow_state"]
+    payload = json.loads(Path(payload_file).read_bytes().decode("utf-8"))
+    before, after = payload["before"], payload["after"]
+
+    def mutator(current):
+        entry = current["work_items"].get(wid)
+        if entry == after:
+            return current
+        if entry != before:
+            raise Refuse("carry_managed_changed", None, f"the entry of {wid} in the state file is not the one carried in")
+        fresh = dict(current)
+        fresh["work_items"] = {**current["work_items"], wid: after}
+        return fresh
+
+    try:
+        current = json.loads((root / "docs/ai-workflow/WORKFLOW_STATE.json").read_text(encoding="utf-8"))
+        if current["work_items"].get(wid) == after:
+            return {"ok": True, "written": False}
+        ws.state_transaction(root, mutator)
+    except Refuse:
+        raise
+    except Exception as exc:
+        raise refuse_from(exc)
+    return {"ok": True, "written": True}
+
+
 def main(argv):
     operation, stage, wid = argv[0], argv[1], argv[2]
     root = Path.cwd()
     try:
-        if operation == "check":
+        if operation == "commit_pending":
+            answer = do_commit_pending(root, wid)
+        elif operation == "carry_state":
+            answer = do_carry_state(root, wid, argv[3])
+        elif operation == "check":
             answer = {"ok": True, **do_check(root, stage, wid)}
         else:
             answer = do_record(root, stage, wid, argv[3])
@@ -390,6 +437,46 @@ def check(root: Path, stage: str, work_item_id: str, *, timeout: float | None = 
     answer = _run(root, scripts, "check", [stage, work_item_id], work_item_id=work_item_id,
                   real_index=False, timeout=timeout)
     return _result(answer, {"digests": dict(scripts.digests)})
+
+
+def _check_digests(root: Path, digests: Mapping[str, str] | None) -> tuple[RecorderResult | None, protocol.ScriptSet]:
+    scripts = _scripts(root)
+    if digests is None:
+        return None, scripts
+    changed = sorted(key for key in {*digests, *scripts.digests} if digests.get(key) != scripts.digests.get(key))
+    if changed:
+        return RecorderResult(False, "workflow_release_changed", "WorkflowReleaseChangedError",
+                              f"the Workflow scripts changed since the decision ({', '.join(changed)}); nothing was "
+                              f"written", {"changed_scripts": changed}), scripts
+    return None, scripts
+
+
+def commit_pending(root: Path, work_item_id: str, *, digests: Mapping[str, str] | None = None,
+                   timeout: float | None = None) -> RecorderResult:
+    """Commit a pending ``APPLYING_REVIEW_FEEDBACK`` entry of ``work_item_id`` through the Workflow's
+    ``commit_pending_applying_review_feedback_entry`` (D4 of ``workflow-controller-h4e3``). ``values["committed"]`` is
+    the new commit, or ``None`` when there was nothing to commit. With ``digests`` a script set that differs is
+    ``workflow_release_changed``, before anything is written. A Workflow refusal is ``recorder_commit_pending``."""
+    refusal, scripts = _check_digests(root, digests)
+    if refusal is not None:
+        return refusal
+    answer = _run(root, scripts, "commit_pending", ["-", work_item_id], work_item_id=work_item_id,
+                  real_index=True, timeout=timeout)
+    return _result(answer, {})
+
+
+def carry_state(root: Path, work_item_id: str, payload_path: Path, *, digests: Mapping[str, str] | None = None,
+                timeout: float | None = None) -> RecorderResult:
+    """Replace ``work_item_id``'s entry of the state file inside the Workflow's ``state_transaction`` (D6a). The
+    file at ``payload_path`` holds ``{"before": <the carried-in entry>, "after": <the worker's entry>}``; the write is
+    refused as ``carry_managed_changed`` when the freshly read entry is neither, and is a no-op (``values["written"]``
+    false) when it already equals ``after``. Every other work item's entry is kept as it is read under the lock."""
+    refusal, scripts = _check_digests(root, digests)
+    if refusal is not None:
+        return refusal
+    answer = _run(root, scripts, "carry_state", ["-", work_item_id, str(payload_path)], work_item_id=work_item_id,
+                  real_index=False, timeout=timeout)
+    return _result(answer, {})
 
 
 def record(root: Path, stage: str, work_item_id: str, verdict_path: Path, *, state_identity: str,

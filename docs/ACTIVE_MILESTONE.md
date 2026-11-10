@@ -9,9 +9,19 @@ plan `docs/ai-workflow/CONTROLLER_H4E3_PLAN.md` (revision 9), five checkpoints. 
 adapter role of the two apply roles (`routing.ADAPTER_ROLE`, `routing.LOCAL_APPLY_ROLES`), both adapters declare it,
 `worker_launch.LAUNCHERS` holds `(claude-code, local-applier)` (the Claude launcher) and `(codex, local-applier)` (the real
 `CodexLauncher`), `(codex, worker)` stays unregistered, and `review_mode.worker_families` counts the three roles. The default is
-unchanged. The carry itself (CP2) and the job branch that uses it (CP3) are not written yet, so a Codex route for an apply role
-reaches the plain Codex worker path until CP3; the pages follow in CP5. Verified with the narrow modules of the plan's CP1 list
-and `tools/harness_table.py --check`.
+unchanged. CP2 is complete: `controller/codex_carry.py` is the carry (D3 to D7): `CarrySet` is derived from the managed state
+(the plan role's plan, registry, mapping, artifacts and state file; none for the implementation role), `check_dirty` refuses a
+dirty path outside it (`carry_foreign_dirt`), `commit_pending` makes D4's commit through the Workflow's writer and returns the
+carry base (D4a), `carry_in` reads every member without following a link before any clone is made, writes them into the clone made
+by `codex_worker_tree.prepare(allow_dirty=...)` and reproduces the intent-to-add set, `check_out` runs D6's checks in D6's order
+(one cause each) and writes nothing, `write_out` writes only the changed members atomically through the new
+`runtime.write_carried_file` with the state file last through the recorder's new `carry_state` operation (D6a: only this item's
+entry, inside the Workflow's `state_transaction`), and `recover` finishes or ends a carry by stage (D7). `review_recorder` gained
+the `commit_pending` and `carry_state` operations, `gitrepo` the intent-to-add helpers. The job branch that uses the carry (CP3)
+is not written yet, so a Codex route for an apply role still reaches the plain Codex worker path until CP3; the pages follow in
+CP5. Verified with the narrow modules of the plan's CP2 list (`tests.test_codex_carry`, `tests.test_codex_worker_tree`,
+`tests.test_review_recorder`, `tests.test_package_structure`, `tests.test_write_containment`), including a run of the
+Workflow's own plan-stage generator and verifier in a carried plan clone.
 
 ## Previous milestone (H4e2b)
 

@@ -277,6 +277,24 @@ def untracked_files(repo_root: Path, *, runner: Runner | None = None, no_optiona
     return [path for path in out.split("\0") if path]
 
 
+def status_path(entry: str) -> str:
+    """The path of a ``git status --porcelain`` entry (the two status letters and a space come first)."""
+    return entry[3:]
+
+
+def intent_to_add_paths(repo_root: Path, *, runner: Runner | None = None, no_optional_locks: bool = False) -> list[str]:
+    """The paths the index holds as intent-to-add (``git add -N``), which a porcelain status reports as `` A``;
+    sorted."""
+    return sorted(status_path(entry) for entry, _source in
+                  _status_records(repo_root, runner, no_optional_locks=no_optional_locks) if entry[:2] == " A")
+
+
+def add_intent_to_add(repo_root: Path, paths: Sequence[str], *, runner: Runner | None = None) -> None:
+    """``git add -N`` for exactly ``paths`` (each a literal pathspec); nothing for an empty list."""
+    if paths:
+        _git(repo_root, ["add", "-N", "--", *(f":(literal){path}" for path in paths)], runner)
+
+
 #: What :func:`tracked_change_digests` records for the worktree fields of a
 #: path deleted from the worktree.
 DELETED_MARKER = "deleted"

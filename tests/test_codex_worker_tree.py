@@ -77,6 +77,25 @@ class Fixture(unittest.TestCase):
         return path
 
 
+class AllowDirtyTest(Fixture):
+    """`prepare(allow_dirty=...)` (`workflow-controller-h4e3` D5): the clone is made from the commit when the given set
+    accounts for every dirty path, and the clean-tree refusal stands otherwise."""
+
+    def test_a_dirty_tree_is_accepted_only_when_every_dirty_path_is_in_the_set(self) -> None:
+        (self.root / "src.txt").write_text("two\n")
+        (self.root / "new.txt").write_text("x\n")
+        self.assertRefused("managed_tree_not_clean", allow_dirty=["src.txt"])
+        self.assertRefused("managed_tree_not_clean", allow_dirty=[])
+        prepared = self.prepare(allow_dirty=["src.txt", "new.txt"])
+        self.assertEqual((prepared.path / "src.txt").read_text(), "one\n")
+        self.assertFalse((prepared.path / "new.txt").exists())
+
+    def test_the_other_refusals_stand_and_a_clean_tree_needs_no_set(self) -> None:
+        git(self.root, "checkout", "-q", "-b", "other")
+        self.assertRefused("managed_branch_moved", base="0" * 40, allow_dirty=["src.txt"])
+        self.assertEqual(self.prepare(allow_dirty=[]).base, self.base)
+
+
 class CloneShapeTest(Fixture):
     def test_the_clone_is_a_separate_repository_with_nothing_connecting_it_back(self) -> None:
         prepared = self.prepare()

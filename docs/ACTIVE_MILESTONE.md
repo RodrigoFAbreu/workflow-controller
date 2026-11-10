@@ -2,7 +2,7 @@
 
 ## Status
 
-**In progress.** `workflow-controller-h4e2b` (H4e2b, issue [#315](https://github.com/RodrigoFAbreu/workflow-controller/issues/315)):
+**Complete.** `workflow-controller-h4e2b` (H4e2b, issue [#315](https://github.com/RodrigoFAbreu/workflow-controller/issues/315)):
 plan `docs/ai-workflow/CONTROLLER_H4E2B_PLAN.md` (revision 2), four checkpoints. CP1 is complete: `harness.LOCAL_REVIEWER` is
 the adapter role of `review-plan` and `review-implementation` (`routing.ADAPTER_ROLE`, `routing.LOCAL_REVIEW_ROLES`), both
 adapters declare it, and `worker_launch.LAUNCHERS` is keyed by `(adapter, role)` with `CodexReviewLauncher` (whose `launch`
@@ -39,6 +39,10 @@ named the deprecated `review.round_cap` where `review.local_round_cap` applies. 
 "Not yet planned". The module docstrings of `codex_worker` and `codex_review_role` still said no role is routed to the run.
 The full suite then found two `tests/test_cli.py` tests that used `review-plan=codex` as the refused case; they now use the
 worker role `milestone-plan`, and a new test parses `codex` for both review roles.
+
+The milestone is implemented, functionally reviewed and accepted by policy (PR #327, checks green at the approved head).
+
+Next action: `/milestone-plan` for `workflow-controller-h4e3` (Codex worker, step 5d: apply-plan-review and apply-implementation-review on Codex), the item `python3 scripts/workflow_backlog.py next` returns.
 
 ## Previous milestone (CI1c)
 

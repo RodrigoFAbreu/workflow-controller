@@ -464,7 +464,7 @@ items:
     detail: docs/items/workflow-controller-ci1c.md
   - id: workflow-controller-h4e2b
     title: "Codex worker, step 5c: route the two review roles, safety tests and live proof"
-    status: next
+    status: done
     order: 80
     depends_on: [workflow-controller-h4e2]
     detail: docs/items/workflow-controller-h4e2b.md

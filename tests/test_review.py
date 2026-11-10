@@ -374,6 +374,44 @@ class RegistryAndContractTest(unittest.TestCase):
             self.assertIn(name, review.TOOL_ALLOWLIST)
             self.assertNotIn(name, review.DISABLED_FEATURES)
 
+    def launch_listing(self, capture_name: str) -> str:
+        """What the launch's own ``codex features list --disable ...`` prints: every feature of the disable set
+        reads ``false`` unless Codex reports it ``removed`` (a removed feature cannot be switched off)."""
+        text = (CODEX_CAPTURES / capture_name).read_text()
+        removed = review.removed_features(text)
+        out = []
+        for line in text.splitlines():
+            parts = line.split()
+            if len(parts) >= 3 and parts[0] in review.DISABLED_FEATURES and parts[0] not in removed:
+                line = line.rsplit(None, 1)[0] + " false"
+            out.append(line)
+        return "\n".join(out)
+
+    def test_the_whole_0_167_0_launch_listing_passes_the_drift_check(self):
+        # realtime_conversation is on the disable set but 0.167.0 reports it ``removed`` and true even with
+        # --disable (issue #331): the check accepts it as inert instead of refusing every Codex review.
+        listing = self.launch_listing("features_list.0.167.0.txt")
+        self.assertIn("realtime_conversation", review.removed_features(listing))
+        self.assertIn("realtime_conversation", review.DISABLED_FEATURES)
+        review.check_features(listing)
+
+    def test_a_removed_feature_outside_the_disable_set_and_the_allowlist_still_refuses(self):
+        listing = self.launch_listing("features_list.0.167.0.txt") + "\nsome_new_removed_thing  removed  true"
+        with self.assertRaises(ReviewLaunchRefusedError) as raised:
+            review.check_features(listing)
+        self.assertEqual(raised.exception.evidence["entry"], "some_new_removed_thing")
+
+    def test_a_disabled_feature_that_is_not_removed_and_still_reads_true_still_refuses(self):
+        # on a Codex that still has the feature, ``--disable`` makes it read false; one that reads true is drift
+        listing = "\n".join(
+            "realtime_conversation                    stable             true"
+            if line.split()[:1] == ["realtime_conversation"] else line
+            for line in self.launch_listing("features_list.0.163.0.txt").splitlines())
+        self.assertNotIn("realtime_conversation", review.removed_features(listing))
+        with self.assertRaises(ReviewLaunchRefusedError) as raised:
+            review.check_features(listing)
+        self.assertEqual(raised.exception.evidence["entry"], "realtime_conversation")
+
     def test_the_capture_is_in_the_repository(self):
         self.assertTrue(FEATURES_CAPTURE.is_file())
 

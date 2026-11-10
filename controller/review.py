@@ -979,12 +979,23 @@ def parse_features(text: str) -> dict[str, bool]:
     return features
 
 
+def removed_features(text: str) -> frozenset[str]:
+    """The features ``codex features list`` reports with the stage ``removed``: inert, and no ``--disable`` switches
+    one off (``codex-cli 0.167.0`` reports ``realtime_conversation  removed  true`` even with
+    ``--disable realtime_conversation``)."""
+    return frozenset(parts[0] for line in text.splitlines()
+                     if len(parts := line.split()) >= 3 and parts[1] == "removed" and parts[-1] in ("true", "false"))
+
+
 def check_features(listing: str) -> None:
     """The drift check: refuse when a feature is reported enabled that is not
     on the allowlist (a feature a Codex upgrade added or turned on stops the
-    review until a person extends the allowlist or the disable set)."""
+    review until a person extends the allowlist or the disable set). A feature of the disable set that Codex
+    now reports ``removed`` and still ``true`` is inert and cannot be switched off, so it is accepted; the same
+    feature on a Codex that still has it is switched off by ``--disable`` and reads ``false``."""
+    inert = removed_features(listing) & set(DISABLED_FEATURES)
     for name, enabled in sorted(parse_features(listing).items()):
-        if enabled and name not in TOOL_ALLOWLIST:
+        if enabled and name not in TOOL_ALLOWLIST and name not in inert:
             raise _refuse(f"the feature {name!r} is enabled and is not allowlisted", check="features", entry=name)
 
 

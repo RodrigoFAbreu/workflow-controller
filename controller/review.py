@@ -1279,6 +1279,8 @@ def _drain(proc: "subprocess.Popen[bytes]") -> tuple[bytes, bytes]:
 
 
 def _kill_group(pgid: int) -> None:
+    if not runtime.signalable_group(pgid):
+        return
     with contextlib.suppress(ProcessLookupError, PermissionError):
         os.killpg(pgid, signal.SIGKILL)
 

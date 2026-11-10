@@ -34,6 +34,15 @@ _ENV_HOME = "WORKFLOW_CONTROLLER_HOME"
 _RUNTIME_KIND_SOURCE = "source"
 
 
+def signalable_group(pgid: object) -> bool:
+    """Whether ``pgid`` may be handed to ``os.killpg`` with a signal. ``killpg(1, sig)`` is ``kill(-1, sig)``,
+    which signals every process the user may signal: it ends the whole desktop session. Group 0 is the caller's
+    own group and a negative id is not a group, so only an integer above 1 that is not this process's own group
+    is a worker group (``start_new_session=True`` makes the leader's pid, never 1, the group id). A fake record
+    (a test's ``{"pid": 1, "pgid": 1}``) or a damaged job record must reach no signal."""
+    return (isinstance(pgid, int) and not isinstance(pgid, bool) and pgid > 1 and pgid != os.getpgrp())
+
+
 def _is_git_repository(path: Path) -> bool:
     """Whether ``path`` is (inside) a Git working tree, checked by asking
     Git rather than by looking for ``.git`` directly -- a worktree's own

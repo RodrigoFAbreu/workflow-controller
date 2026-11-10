@@ -67009,7 +67009,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-h4e2b-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4e2b-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 2,
       "implementation_revision": 3,
       "functional_review_round": null,
@@ -67157,12 +67157,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 2,
+          "local": 3,
           "external": 1
         }
       },
-      "state_revision": 23,
-      "last_transition": "2026-11-10T03:44:52Z",
+      "state_revision": 24,
+      "last_transition": "2026-11-10T04:08:06Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -67309,6 +67309,20 @@
               "review_content_id": "9e6a240020e6e817bba8191e9aefe3b49f8796a8af631b3050b8c2c674593059",
               "verdict": "REVISE",
               "at": "2026-11-10T03:23:50Z"
+            }
+          ]
+        },
+        "F-1e857251cdd5": {
+          "digest": "1e857251cdd5d0255daf149cd817bf1fa97f6cb73c1c51d175bb8dd996194332",
+          "text": "**O1.** `tests/fake_codex.py` prints nothing on stdout by default, while real `codex exec` prints the final message there (`stderr_shapes.txt`). If the fake's default stdout were the `-o` message, every routed-review and Codex-worker test would run against the real stream shape, and gaps like I1 would show up without a dedicated test.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "5afd3b0072f947e548ad289617cdc23e48c2dd4c7552de42acc04c169a5d2e4a",
+              "verdict": "REVISE",
+              "at": "2026-11-10T04:08:06Z"
             }
           ]
         }

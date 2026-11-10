@@ -67009,7 +67009,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-h4e2b-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4e2b-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 2,
       "implementation_revision": 4,
       "functional_review_round": null,
@@ -67157,12 +67157,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 3,
+          "local": 4,
           "external": 1
         }
       },
-      "state_revision": 25,
-      "last_transition": "2026-11-10T04:27:24Z",
+      "state_revision": 26,
+      "last_transition": "2026-11-10T04:47:43Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -67323,6 +67323,34 @@
               "review_content_id": "5afd3b0072f947e548ad289617cdc23e48c2dd4c7552de42acc04c169a5d2e4a",
               "verdict": "REVISE",
               "at": "2026-11-10T04:08:06Z"
+            }
+          ]
+        },
+        "F-67acf54df046": {
+          "digest": "67acf54df046cbb04ebfdd5384b946162f51f46cdfa627f5993f1e31c1d8c1c2",
+          "text": "**O1.** `TEST_RESULTS.md` is still the revision 3 file (its header says \"implementation revision 3 round\", head `8a92da8`). It was flagged in round 2 as O2 and is stale again. Rewrite it for the revision that is reviewed next, with the full-suite result from that head.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "13fb6eaed6ddb2cc428312aa073531b1aa02a5aba2be9365c2119097a8256854",
+              "verdict": "REVISE",
+              "at": "2026-11-10T04:47:43Z"
+            }
+          ]
+        },
+        "F-e26338c9ff82": {
+          "digest": "e26338c9ff829ed3ffacce104ddbf09de20f73e01e61e7b588942ff6c47aae1d",
+          "text": "**O2.** Non-`--json` stderr also carries the reviewer's intermediate agent messages and every command's output (`stderr_shapes.txt` (a')). A draft of the verdict that Codex prints as an intermediate message, or a file it `cat`s, can still keep part of the verdict text in `worker.stderr`. Only the final message's lines are dropped. Saying so in one clause of the new `docs/guide/harnesses.md` paragraph (\"the lines of the final message\") would make the guarantee exact.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "13fb6eaed6ddb2cc428312aa073531b1aa02a5aba2be9365c2119097a8256854",
+              "verdict": "REVISE",
+              "at": "2026-11-10T04:47:43Z"
             }
           ]
         }

@@ -90,6 +90,13 @@ TOOL_ALLOWLIST = frozenset({
     # reported ``removed``: inert, cannot be switched off
     "collaboration_modes", "item_ids", "resize_all_images", "sqlite", "steer", "terminal_resize_reflow",
     "tool_search_always_defer_mcp_tools", "tui_app_server", "unified_exec_zsh_fork",
+    # reported ``stable`` and enabled by ``codex-cli 0.167.0``, allowlisted by the owner's decision of 2026-11-10
+    # (SignalHub 01a1c2fc, "allow" chosen over disabling them): none adds a browser, desktop or network tool of its
+    # own by its name (a setup wizard, tool-list plumbing, OAuth refresh coordination, plugin discovery prefetch, an
+    # effort override), and the sandbox, the network-off policy and the pinned model and effort still apply.
+    # ``tests/harness_contract/codex/features_list.0.167.0.txt`` is the capture.
+    "bedrock_setup_wizard", "deferred_tool_world_state", "incremental_tools", "mcp_oauth_refresh_coordination",
+    "plugin_discovery_prefetch", "prediction_preserve_parent_tools", "reasoning_effort_override",
 })
 
 #: Every other feature the pinned Codex reports as enabled, switched off by

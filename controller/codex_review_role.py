@@ -392,6 +392,12 @@ def _emptied(result: worker.WorkerResult) -> worker.WorkerResult:
     return worker.WorkerResult(**{**fields, "result": "", "stdout": "", "stderr": "", "stream_diagnosis": diagnosis})
 
 
+def without_message(result: worker.WorkerResult) -> worker.WorkerResult:
+    """``result`` with its final message (the verdict) emptied, for the job record's ``worker`` block (review I1)."""
+    fields = {f.name: getattr(result, f.name) for f in dataclasses.fields(result)}
+    return worker.WorkerResult(**{**fields, "result": ""})
+
+
 def _recorded_block(code: str, recorded: Mapping[str, Any]) -> dict:
     return {"code": code, **recorded}
 
@@ -478,11 +484,13 @@ def _run(managed_repo: Any, *, runtime_root: Path, job_id: str, operator_home: P
         raw = layout.last_message.read_bytes()
     except OSError:
         raw = b""
+    # The final message is the verdict: once read, the role's own copy goes, so the verdict file written below (and
+    # the Workflow's feedback) are its only retained copies (review I1).
+    try:
+        runtime.remove_tree(runtime_root, layout.rel("last-message.md"))
+    except (OSError, ControllerError):
+        pass
     if _worker_output_holds_armour(raw, result):
-        try:
-            runtime.remove_tree(runtime_root, layout.rel("last-message.md"))
-        except (OSError, ControllerError):
-            pass
         return Ending(REFUSED, "credential_in_verdict", _emptied(result), {
             "message": "the role's output holds a private-key armour line; nothing was recorded",
             "message_sha256": _sha256(raw), "message_length": len(raw), "worker_outcome": result.outcome,

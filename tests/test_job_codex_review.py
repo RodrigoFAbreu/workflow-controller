@@ -340,6 +340,23 @@ class RowTests:
         self.assertFalse(self.layout.worktree.exists())
         self.assert_valid(record)
 
+    def test_a_refused_record_leaves_the_verdict_text_in_no_file_but_the_one_verdict_file(self) -> None:
+        """Review I1: the returned record, every runtime file and every event hold the verdict marker only in
+        ``reviews/<job>-verdict.md`` (0600): not in ``worker.result_excerpt``, the streams or ``last-message.md``."""
+        marker = "UNIQUE-VERDICT-MARKER-4f1c9"
+        self.script(message=message("APPROVE", extra=" " + marker))
+
+        def refused(*args, **kw):
+            raise WorkflowQueryError("timed out", evidence={})
+
+        with mock.patch.object(review_recorder, "record", refused):
+            record = self.step()
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertNotIn(marker, json.dumps(record, default=str))
+        holders = [p for p in self.runtime.rglob("*") if p.is_file() and marker.encode() in p.read_bytes()]
+        self.assertEqual([p.relative_to(self.runtime).as_posix() for p in holders], ["reviews/job1-verdict.md"])
+        self.assertEqual(holders[0].stat().st_mode & 0o777, 0o600)
+
 
 class UsageTests:
     """The usage gate of a routed review: the Codex provider on both paths, a hold leaves no record."""

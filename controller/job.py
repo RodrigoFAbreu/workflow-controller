@@ -9330,7 +9330,9 @@ def _run_codex_review(
             completed_at = _now()
             record = {
                 **record,
-                "worker": _worker_dict(result, stdout_path=worker_streams["stdout_path"],
+                # The final message of a routed review is the verdict: its one retained copy is the verdict file
+                # (and the Workflow's feedback), so the record's excerpt is emptied (review I1).
+                "worker": _worker_dict(codex_review_role.without_message(result), stdout_path=worker_streams["stdout_path"],
                                        stderr_path=worker_streams["stderr_path"]),
                 "worker_outcome": result.outcome,
                 "telemetry": _codex_tester_telemetry(record, seconds=result.duration_ms / 1000),

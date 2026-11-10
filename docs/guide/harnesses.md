@@ -510,8 +510,8 @@ so the job *carries* a closed set of files into the Codex clone and back (`contr
   the implementation role `current/REVIEW_REQUEST.md`, `IMPLEMENTATION_SUMMARY.md`, `TEST_RESULTS.md`, `CONTEXT_FILES.txt` and
   `PLAN.md`. Generated files (the manifest, the bundle, `.pin/`, staging leftovers) are discarded, never carried back.
 - **The guards.** Before the launch a dirty path outside the set refuses the job. Every member is read without following a link
-  and refused if it is a link, a hardlink, a special file, a submodule, outside the repository or holds a private-key armour
-  line. After the run, before anything is written, the clone is checked: no commit, branch or tag made by the plan role, no
+  and refused if it is a symbolic link, a special file, a submodule, outside the repository, over the size bound or holds a
+  private-key armour line; a hardlink is read as bytes, and a member is always written by a rename, never through a link. After the run, before anything is written, the clone is checked: no commit, branch or tag made by the plan role, no
   change to the clone's `.git`, the same intent-to-add set, nothing changed outside the set, and the managed repository's members
   and state file not changed by someone else meanwhile. Only the changed members are written, atomically, with the state file
   last and only this work item's entry replaced, under the Workflow's own state lock (another item's concurrent entry is kept).

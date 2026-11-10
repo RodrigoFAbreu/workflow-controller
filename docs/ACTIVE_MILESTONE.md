@@ -60,6 +60,17 @@ after a landing"), `docs/common-problems.md` (each `carry_*` cause and the regen
 `docs/guide/development.md` and `docs/items/workflow-controller-h4e3.md`. `tools/harness_table.py --check` and
 `tools/check_docs.py` pass.
 
+All five checkpoints are implemented. The self-review fixed two things. A carry refused after the worker ran (in the run and
+in `resume`) ended `FAILED` with the clone kept but left the rest of the worker's directory behind (`carry/`, the Codex home's
+config, `scratch/`, `bin/`, `home/`, `tmp/`, `last-message.md`); it is now settled as a refused landing's is, only the clone
+and the sessions staying, and `PlanEndingsTest`'s shared carry-out refusal check asserts it (it fails without the fix). The
+pages said a hardlink at a member is refused; the carry reads a hardlink as bytes and replaces the managed file by a rename,
+never writing through it (as `tests/test_codex_apply_safety.py` proves), so `docs/guide/harnesses.md` and
+`docs/common-problems.md` now say so.
+Verification: the full suite (`python3 tools/run_tests.py`, 6306 tests in 8 shards, coverage exact) fails only the three
+known environmental `tests.test_fake_codex_contract.FakeCodexContractTest` tests (the fake Codex reads the user's
+`~/.codex` config); `tests.test_job_codex_apply` (45 tests), `tools/check_docs.py` and `tools/harness_table.py --check` pass.
+
 ## Previous milestone (H4e2b)
 
 **Complete.** `workflow-controller-h4e2b` (H4e2b, issue [#315](https://github.com/RodrigoFAbreu/workflow-controller/issues/315)):

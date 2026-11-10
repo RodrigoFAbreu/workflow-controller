@@ -626,6 +626,12 @@ class PlanEndingsTest(PlanCase):
         self.assertTrue(self.clone().exists())  # the clone is kept ...
         self.assertEqual(evidence["clone"], str(self.clone()))  # ... and named
         self.assertNotEqual(record["codex_carry"]["stage"], "done")
+        # the rest of the worker's directory is settled as a refused landing's is: the clone and the sessions stay
+        layout = codex_worker_sandbox.WorkerLayout(self.runtime, "job1")
+        self.assertLessEqual({path.name for path in layout.base.iterdir()}, {"tree", "codex-home"})
+        self.assertFalse((layout.base / "carry").exists())
+        if layout.codex_home.exists():
+            self.assertLessEqual({path.name for path in layout.codex_home.iterdir()}, {"sessions"})
         return record
 
     def test_carry_foreign_dirt_at_carry_in_is_worker_not_started_with_no_codex_and_no_clone(self) -> None:

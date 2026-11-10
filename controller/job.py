@@ -9599,9 +9599,11 @@ def _run_codex_apply(
                     managed_repo, runtime_root=runtime_root, job_id=job_id, record=held, carry_set=carry_set,
                     digests=digests)
             except (codex_carry.CarryError, _CarryLandingRefused) as exc:
-                # D8: nothing more is written, the clone is kept and named.
+                # D8: nothing more is written, the clone is kept and named; the rest of the worker's directory is
+                # settled as a refused landing's is.
                 held = getattr(exc, "record", held)
                 fields = _carry_failure_fields(held, runtime_root, root, exc)
+                _settle_codex_worker_dir(runtime_root, job_id, keep_tree=True)
                 ended = _name_kept_clone({**held, **fields, "updated_at": _now()}, runtime_root)
                 state["record"] = ended = _persist(runtime_root, job_id, ended, event=_final_event(STATUS_FAILED),
                                                    details={"error": getattr(exc, "cause", None)
@@ -9663,8 +9665,9 @@ def _reconcile_codex_carry(record: JobRecord, *, managed_repo: Any, runtime_root
     except (codex_carry.CarryError, _CarryLandingRefused) as exc:
         held = getattr(exc, "record", held)
         now = _now()
-        failed = _name_kept_clone({**held, **_carry_failure_fields(held, runtime_root, root, exc),
-                                   "reconciled_at": now, "updated_at": now}, runtime_root)
+        fields = _carry_failure_fields(held, runtime_root, root, exc)
+        _settle_codex_worker_dir(runtime_root, job_id, keep_tree=True)  # the clone stays, as at the end of a run
+        failed = _name_kept_clone({**held, **fields, "reconciled_at": now, "updated_at": now}, runtime_root)
         return _persist(runtime_root, job_id, failed, event="reconciled", details=_reconciled_details(failed))
     fields = _carry_resolution(held, managed_repo=managed_repo, runtime_root=runtime_root, worker_outcome=outcome)
     now = _now()

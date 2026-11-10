@@ -67009,7 +67009,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-h4e2b-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4e2b-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 2,
       "implementation_revision": 6,
       "functional_review_round": null,
@@ -67157,12 +67157,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 5,
+          "local": 6,
           "external": 2
         }
       },
-      "state_revision": 30,
-      "last_transition": "2026-11-10T05:59:19Z",
+      "state_revision": 31,
+      "last_transition": "2026-11-10T06:05:11Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

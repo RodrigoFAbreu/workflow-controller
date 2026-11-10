@@ -25,6 +25,11 @@ FUNCTIONAL_TESTER = "functional-tester"
 #: apart from ``worker`` (a session that lands commits) and ``reviewer`` (the
 #: external verdict's role).
 LOCAL_REVIEWER = "local-reviewer"
+#: The two apply roles (``apply-plan-review``, ``apply-implementation-review``;
+#: workflow-controller-h4e3, D1): each runs as its own adapter role, apart from
+#: ``worker`` (every other lifecycle session), so ``codex`` can declare the two
+#: without declaring ``worker``.
+LOCAL_APPLIER = "local-applier"
 
 #: How a harness reports usage: exactly, computed from its output, or not.
 USAGE_REPORTED = "reported"
@@ -70,7 +75,7 @@ class HarnessAdapter:
 
 CLAUDE_CODE = HarnessAdapter(
     name="claude-code", reviewer_name="claude", family="anthropic",
-    roles=(WORKER, LOCAL_REVIEWER, REVIEWER, FUNCTIONAL_TESTER), can_restrict_agents=True,
+    roles=(WORKER, LOCAL_REVIEWER, LOCAL_APPLIER, REVIEWER, FUNCTIONAL_TESTER), can_restrict_agents=True,
     can_restrict_tools=True, usage=USAGE_REPORTED, pinned_version="2.1.296 (Claude Code)",
     fails_closed_on_unknown_version=True,
     # ``verify-claude`` admits the functional-tester launch only (it reads the
@@ -81,7 +86,7 @@ CLAUDE_CODE = HarnessAdapter(
 )
 CODEX = HarnessAdapter(
     name="codex", reviewer_name="codex", family="openai",
-    roles=(LOCAL_REVIEWER, REVIEWER, FUNCTIONAL_TESTER), can_restrict_agents=True,
+    roles=(LOCAL_REVIEWER, LOCAL_APPLIER, REVIEWER, FUNCTIONAL_TESTER), can_restrict_agents=True,
     can_restrict_tools=True, usage=USAGE_DERIVED, pinned_version="codex-cli 0.163.0",
     fails_closed_on_unknown_version=True,
     # ``verify-codex`` admits the functional-tester launch only (it reads the

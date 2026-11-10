@@ -2,6 +2,19 @@
 
 ## Status
 
+**In progress.** `workflow-controller-h4e3` (H4e3, issue [#334](https://github.com/RodrigoFAbreu/workflow-controller/issues/334)):
+plan `docs/ai-workflow/CONTROLLER_H4E3_PLAN.md` (revision 9), five checkpoints. It routes `apply-plan-review` and
+`apply-implementation-review` to Codex through a bounded carry of the uncommitted working set, and stops after the landing
+(the Controller never runs the managed repository's generator; that is H4e3b). CP1 is complete: `harness.LOCAL_APPLIER` is the
+adapter role of the two apply roles (`routing.ADAPTER_ROLE`, `routing.LOCAL_APPLY_ROLES`), both adapters declare it,
+`worker_launch.LAUNCHERS` holds `(claude-code, local-applier)` (the Claude launcher) and `(codex, local-applier)` (the real
+`CodexLauncher`), `(codex, worker)` stays unregistered, and `review_mode.worker_families` counts the three roles. The default is
+unchanged. The carry itself (CP2) and the job branch that uses it (CP3) are not written yet, so a Codex route for an apply role
+reaches the plain Codex worker path until CP3; the pages follow in CP5. Verified with the narrow modules of the plan's CP1 list
+and `tools/harness_table.py --check`.
+
+## Previous milestone (H4e2b)
+
 **Complete.** `workflow-controller-h4e2b` (H4e2b, issue [#315](https://github.com/RodrigoFAbreu/workflow-controller/issues/315)):
 plan `docs/ai-workflow/CONTROLLER_H4E2B_PLAN.md` (revision 2), four checkpoints. CP1 is complete: `harness.LOCAL_REVIEWER` is
 the adapter role of `review-plan` and `review-implementation` (`routing.ADAPTER_ROLE`, `routing.LOCAL_REVIEW_ROLES`), both

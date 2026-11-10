@@ -114,11 +114,11 @@ def worker_families(options: routing.RoutingOptions = routing.NO_OVERRIDES) -> f
     (reviewer-family D1): the roles whose adapter role is ``worker`` or
     ``local-reviewer``, over every entry of each role's fallback chain (fallback-chain D6): a
     fallback entry is a route the role can take. The two local review roles
-    run as ``local-reviewer`` (h4e2b, D1) and stay counted."""
+    run as ``local-reviewer`` (h4e2b, D1) and stay counted, as do the two apply roles (``local-applier``, h4e3, D1)."""
     return frozenset(
         harness.get(route.harness).family
         for role, adapter_role in routing.ADAPTER_ROLE.items()
-        if adapter_role in (harness.WORKER, harness.LOCAL_REVIEWER)
+        if adapter_role in (harness.WORKER, harness.LOCAL_REVIEWER, harness.LOCAL_APPLIER)
         for route in options.chain(role))
 
 

@@ -42,7 +42,7 @@ def with_codex_roles(*roles: str):
 
 
 #: The routing roles the Codex adapter takes: the tester and the two local review roles.
-CODEX_ROLES = {"functional-tester", *routing.LOCAL_REVIEW_ROLES}
+CODEX_ROLES = {"functional-tester", *routing.LOCAL_REVIEW_ROLES, *routing.LOCAL_APPLY_ROLES}
 
 
 class RenderTest(unittest.TestCase):
@@ -112,7 +112,7 @@ class RenderTest(unittest.TestCase):
         self.assertEqual({r[3] for r in rows if r[0].strip("`") not in CODEX_ROLES}, {"no"})
 
     def test_every_constant_has_wording(self) -> None:
-        for role in (harness.WORKER, harness.LOCAL_REVIEWER, harness.REVIEWER, harness.FUNCTIONAL_TESTER):
+        for role in (harness.WORKER, harness.LOCAL_REVIEWER, harness.LOCAL_APPLIER, harness.REVIEWER, harness.FUNCTIONAL_TESTER):
             self.assertIn(role, ht.ROLE_WORDING)
         for usage in (harness.USAGE_REPORTED, harness.USAGE_DERIVED, harness.USAGE_NONE):
             self.assertIn(usage, ht.USAGE_WORDING)
@@ -120,7 +120,7 @@ class RenderTest(unittest.TestCase):
     def test_legend_order_and_usage_sentences(self) -> None:
         text = ht.render()
         legend = [line for line in text.splitlines() if line.startswith("- ")]
-        self.assertEqual([line.split("`")[1] for line in legend], ["worker", "local-reviewer", "reviewer", "functional-tester"])
+        self.assertEqual([line.split("`")[1] for line in legend], ["worker", "local-reviewer", "local-applier", "reviewer", "functional-tester"])
         for row, a in zip(table_rows(text)[0], harness.ADAPTERS.values()):
             self.assertIn(ht.USAGE_WORDING[a.usage], row)
 
@@ -128,7 +128,7 @@ class RenderTest(unittest.TestCase):
         only_reviewer = {"codex": dataclasses.replace(harness.CODEX, roles=(harness.REVIEWER,))}
         with mock.patch.object(harness, "ADAPTERS", only_reviewer):
             legend = [line.split("`")[1] for line in ht.render().splitlines() if line.startswith("- ")]
-        self.assertEqual(legend, ["reviewer", "worker", "local-reviewer", "functional-tester"])
+        self.assertEqual(legend, ["reviewer", "worker", "local-applier", "local-reviewer", "functional-tester"])
 
     def test_an_unknown_role_or_usage_raises_naming_it(self) -> None:
         with with_codex_roles("novel-role"):

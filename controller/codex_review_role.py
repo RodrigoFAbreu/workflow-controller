@@ -400,13 +400,16 @@ def without_message(result: worker.WorkerResult) -> worker.WorkerResult:
 
 def _diagnosis_without_message(result: worker.WorkerResult) -> dict | None:
     """``result.stream_diagnosis`` with the final message kept out of ``detail`` (review round 5, I1). A non-zero
-    exit's detail is the tail of stdout and stderr, so it is rebuilt from the streams as :func:`without_message_streams`
-    leaves them (the cut tail can start inside a message line, which a line match would miss); any other detail drops
-    the lines that are lines of the message. The classification (``subtype``, outcome) is untouched."""
+    exit's detail is the tail of stdout and stderr (a ``sandbox_breach`` after a non-zero exit keeps that detail), so a
+    detail equal to that tail is rebuilt from the streams as :func:`without_message_streams` leaves them (the cut tail
+    can start inside a message line, which a line match would miss); any other detail drops the lines that are lines of
+    the message. The classification (``subtype``, ``breach``, outcome) is untouched."""
     if result.stream_diagnosis is None:
         return None
     diagnosis = dict(result.stream_diagnosis)
-    if diagnosis.get("subtype") == codex_worker.SUBTYPE_EXIT:
+    detail = str(diagnosis.get("detail") or "")
+    from_streams = detail == (result.stdout + result.stderr).strip()[-codex_worker.DETAIL_CHARS:]
+    if diagnosis.get("subtype") == codex_worker.SUBTYPE_EXIT or (from_streams and result.returncode):
         stdout, stderr = without_message_streams(result)
         text = (stdout + stderr).strip()[-codex_worker.DETAIL_CHARS:]
         diagnosis["detail"] = text or f"codex exec exited {result.returncode}"

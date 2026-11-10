@@ -494,6 +494,30 @@ class RunTests:
                 self.assertEqual(ending.worker.subtype, cause)
                 shutil.rmtree(self.layout.base, ignore_errors=True)
 
+    def test_a_sandbox_breach_after_a_non_zero_exit_keeps_no_piece_of_the_message_in_detail(self) -> None:
+        # Review round 6, I1: the breach keeps the stream-tail detail, whose 400-character cut can start inside a
+        # message line, so it is rebuilt from the cleaned streams like a non_zero_exit's; subtype and breach stay.
+        lines = [f"verdict line {n} " + "some words to pad it out " * 6 for n in range(8)]
+        text = "\n".join(lines)
+        stderr = "banner\n" + text + "\n"
+        tail = (text + stderr).strip()[-cw.DETAIL_CHARS:]
+        breach = {"paths": ["x"]}
+        result = worker.WorkerResult(
+            outcome=worker.FAILURE, returncode=1, session_id=None, is_error=True, subtype="sandbox_breach",
+            terminal_reason=None, stop_reason=None, result=text, num_turns=None, permission_denials=None,
+            total_cost_usd=None, duration_ms=1, stdout=text, stderr=stderr, raw_json=None,
+            stream_diagnosis={"subtype": "sandbox_breach", "detail": tail, "breach": breach},
+            owned_processes_seen=None)
+        saved = crr.without_message(result)
+        diagnosis = saved.stream_diagnosis
+        self.assertEqual((diagnosis["subtype"], diagnosis["breach"], saved.subtype), ("sandbox_breach", breach,
+                                                                                     "sandbox_breach"))
+        self.assertIn("banner", diagnosis["detail"])
+        for line in lines:
+            for piece in line.split(". ")[0:1] + [line[-30:]]:
+                self.assertNotIn(piece, diagnosis["detail"])
+        self.assertNotIn("some words to pad", diagnosis["detail"])
+
     def test_a_usage_limit_keeps_its_fact(self) -> None:
         self.script(verdict="limit", limit_shape="string_full", message="partial")
         ending = self.run_role()

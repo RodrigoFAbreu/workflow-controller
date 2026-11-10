@@ -67009,7 +67009,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-h4e2b-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4e2b-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 2,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -67157,12 +67157,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 1,
-          "external": 0
+          "local": 2,
+          "external": 1
         }
       },
-      "state_revision": 20,
-      "last_transition": "2026-11-10T02:05:50Z",
+      "state_revision": 22,
+      "last_transition": "2026-11-10T03:23:50Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -67255,7 +67255,76 @@
               "at": "2026-11-09T14:56:10Z"
             }
           ]
+        },
+        "F-848a00a14bf2": {
+          "digest": "848a00a14bf2bc4c3e9683a5e2d61e6a347e898854e9a62d6bdfbb6c7be486a9",
+          "text": "**O1. The new phase-1 test does not check that the live review's group is ended.** `test_resume_phase_one_never_re_attaches_to_a_review_whose_process_is_alive` (`tests/test_job_codex_review.py`) checks that `worker.reattach` is not called and that nothing signals pid or group 1. H4c2 D7 also says a Codex orphan \"is ended by `resume`\". That half is reached through `_reconcile_codex_review` -> `_end_review_group` -> `worker._kill_drained_group(FAKE_GROUP)`, and the mocked `os.killpg` already records it. Adding `killpg.assert_any_call(FAKE_GROUP, signal.SIGKILL)` would pin it at this site.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "9e6a240020e6e817bba8191e9aefe3b49f8796a8af631b3050b8c2c674593059",
+              "verdict": "APPROVE",
+              "at": "2026-11-10T03:15:11Z"
+            }
+          ]
+        },
+        "F-cbaa34abf0e7": {
+          "digest": "cbaa34abf0e7e9f0e540f5de8e96bdd51a537f7c8320449dae036fa3ec76a5d0",
+          "text": "**O2. `TEST_RESULTS.md` still describes revision 1.** Its header says \"implementation revision 1\" and every run it lists is at `a9c8952`. The revision-2 figures (full suite 6123, 3 environmental failures, and the new I1 and #329 tests) appear only as one line in `IMPLEMENTATION_SUMMARY.md`. The next bundle should state the runs at `a57a20b` in `TEST_RESULTS.md`.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "9e6a240020e6e817bba8191e9aefe3b49f8796a8af631b3050b8c2c674593059",
+              "verdict": "APPROVE",
+              "at": "2026-11-10T03:15:11Z"
+            }
+          ]
+        },
+        "F-d9fb4f5bd39a": {
+          "digest": "d9fb4f5bd39a8a0027833893f3edf4527c7d0157402b52dba3569fbdf4b0aca0",
+          "text": "**O3. The branch should merge `origin/main` before its pull request.** The `tests/__init__.py` docstring points at `docs/guide/development.md`, \"Running signal tests safely\". That section exists only on `main` (PR #328, `44a75b7`), not on this branch. The `#329` hunks in `a57a20b` match `main`'s, and `git merge-tree HEAD origin/main` is clean, so merging resolves the reference.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "9e6a240020e6e817bba8191e9aefe3b49f8796a8af631b3050b8c2c674593059",
+              "verdict": "APPROVE",
+              "at": "2026-11-10T03:15:11Z"
+            }
+          ]
+        },
+        "F-123307a5c749": {
+          "digest": "123307a5c749d351fa314b82cb50b2f70da287aa5f251d2decddb85cc5268f15",
+          "text": "**O1. The safety “digest” does not hash working-file contents.** `tests/test_codex_review_safety.py:53` compares status, refs and index information. Changing an already dirty managed file’s contents leaves it unchanged; I reproduced this with `README.md`. Including file-content hashes would strengthen the unchanged-tree assertions.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "9e6a240020e6e817bba8191e9aefe3b49f8796a8af631b3050b8c2c674593059",
+              "verdict": "REVISE",
+              "at": "2026-11-10T03:23:50Z"
+            }
+          ]
         }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "9e6a240020e6e817bba8191e9aefe3b49f8796a8af631b3050b8c2c674593059",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "0e7a37e92d2f122bdc797afbbbb52116e1ae75e27032480193a26bb8bb2801fe",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-10T03:15:11Z",
+          "verdict_sha256": "d0d4d8988b6e5bf9a0e89b3be1082596ebb0e138da317c08a7e5ead0d550f914",
+          "run_ref": "session:local .ai-review/workflow-controller-h4e2b/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

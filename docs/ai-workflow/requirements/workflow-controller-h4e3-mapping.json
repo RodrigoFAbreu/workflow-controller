@@ -15,7 +15,7 @@
       ]
     },
     "R3": {
-      "description": "A routed apply runs the carry around the Codex worker inside the job's record and stops after the landing at the existing bundle gate, running no script of the managed repository, with one job status per ending and one test each (#334)",
+      "description": "A routed apply runs the carry around the Codex worker inside the job's record and stops after the landing at a Controller-authored regeneration gate, running no script of the managed repository, with one job status per ending and one test each (#334)",
       "checkpoint_ids": [
         "CP3"
       ]

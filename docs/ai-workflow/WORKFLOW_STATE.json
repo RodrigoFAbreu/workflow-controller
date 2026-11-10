@@ -68016,8 +68016,8 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-h4e3-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4e3-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AMENDING_PLAN",
-      "plan_revision": 9,
+      "phase": "IMPLEMENTING",
+      "plan_revision": 12,
       "implementation_revision": null,
       "functional_review_round": null,
       "base_commit": "d47ba6e28c20085deeeb29a1ee0440bcf3445e0a",
@@ -68030,41 +68030,41 @@
           "start_commit": "46cbe2f1049bde505e8684c4bcdfe8ec0bc2ba7e"
         },
         "CP2": {
-          "status": "COMPLETE",
+          "status": "NEEDS_REVALIDATION",
           "start_commit": "0ce3fffd196f8de5d2ce0e93f7155261dbd0c6a6"
         }
       },
-      "current_bundle_id": "877a262f4504479a08ecdc9d447b94209863893bbddacf1c0588d36231ea0528",
+      "current_bundle_id": "82d3f8f883e90a2f9a2fa5f6bbcdc47e225bfdc911ecff747a17c98e19daffd2",
       "plan_approval": {
-        "status": "SUPERSEDED",
+        "status": "CURRENT",
         "basis": "POLICY_SATISFIED",
-        "reviewed_bundle_id": "877a262f4504479a08ecdc9d447b94209863893bbddacf1c0588d36231ea0528",
-        "approved_review_content_id": "069aaadc6aa94c05065fcb74886771100897fad4a2c9802e1f7ea8e13546ad40",
+        "reviewed_bundle_id": "82d3f8f883e90a2f9a2fa5f6bbcdc47e225bfdc911ecff747a17c98e19daffd2",
+        "approved_review_content_id": "878b6e7ac7ccf339e74d7b38515ab40e3c66f392ee9a42631c4c4e286be70dd1",
         "review_content_manifest": [
           {
             "path": "docs/ai-workflow/CONTROLLER_H4E3_PLAN.md",
             "exists": true,
             "mode": "100644",
-            "blob": "3ee318f8325043ead0e29ab0efc23db452292ad3"
+            "blob": "fd1e11495b74d1729955c1ece8ba2cbb2ad5a9f0"
           },
           {
             "path": "docs/ai-workflow/registry/workflow-controller-h4e3-registry.json",
             "exists": true,
             "mode": "100644",
-            "blob": "a12f72909d6940e329c00cd45ee615766ea9052f"
+            "blob": "150b094b84b03760df3a3e00093a599e46341b36"
           },
           {
             "path": "docs/ai-workflow/requirements/workflow-controller-h4e3-mapping.json",
             "exists": true,
             "mode": "100644",
-            "blob": "a88017597e9d242fa8ee9eee4b1d188a22315a39"
+            "blob": "a1c5f1c293148b5a0973e2ddbd43d25e2bd10bbc"
           }
         ],
         "reviewed_content_commit": null,
         "legacy_evidence": null,
         "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
         "waived_guarantees": [],
-        "recorded_at": "2026-11-10T13:52:56Z",
+        "recorded_at": "2026-11-10T18:53:37Z",
         "policy_evidence": {
           "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
           "policy_source": "default",
@@ -68094,24 +68094,24 @@
             }
           ],
           "inputs": {
-            "review_content_id": "069aaadc6aa94c05065fcb74886771100897fad4a2c9802e1f7ea8e13546ad40",
+            "review_content_id": "878b6e7ac7ccf339e74d7b38515ab40e3c66f392ee9a42631c4c4e286be70dd1",
             "ledger": {
               "local": {
-                "bundle_id": "877a262f4504479a08ecdc9d447b94209863893bbddacf1c0588d36231ea0528",
+                "bundle_id": "82d3f8f883e90a2f9a2fa5f6bbcdc47e225bfdc911ecff747a17c98e19daffd2",
                 "verdict": "APPROVE",
-                "round": 9,
-                "verdict_sha256": "099f0891a9add391536ac954f685c5d81b97715977fab62d3939fb8d6fbcec40",
-                "ledger_entry_sha256": "8de6b6cc2ef361a75f90e39182e37999084e8f6c9284264703196ff01de05f28",
+                "round": 12,
+                "verdict_sha256": "09e411ead9717bbbe4b8beae3bfd926b4b4037cb86c0fda56dddc2052837a093",
+                "ledger_entry_sha256": "075bfbba8cc134333d69900523f33154da84b3aca97504b5fdecb7757f78eb6c",
                 "run_ref": "session:local .ai-review/workflow-controller-h4e3/feedback/REVIEW_FEEDBACK.md",
                 "reviewer_model": "anthropic/claude-opus-5-5"
               },
               "manual": {
-                "bundle_id": "877a262f4504479a08ecdc9d447b94209863893bbddacf1c0588d36231ea0528",
+                "bundle_id": "82d3f8f883e90a2f9a2fa5f6bbcdc47e225bfdc911ecff747a17c98e19daffd2",
                 "verdict": "APPROVE",
-                "round": 9,
-                "verdict_sha256": "e7d018bfe8d55dac5be06b075a82d75ba69208d06d773dce784364bfea2638e4",
-                "ledger_entry_sha256": "6f5beab4565af8d98de95444d63d0273b42170fa4f852f9a4613d477892e45ad",
-                "run_ref": "codex:20261110T134751Z-61d67d1f",
+                "round": 12,
+                "verdict_sha256": "bc41c371d9f8e9d842599362d43812da29b4f7bff431a8a03a135b382b6065a0",
+                "ledger_entry_sha256": "4247fa32309b85ea673d4ea8ea146e2eca1fc9e4b5882eee7ec79f3e42f206f3",
+                "run_ref": "codex:20261110T184856Z-355c6456",
                 "reviewer_model": "openai/gpt-6.1-sol"
               }
             },
@@ -68121,30 +68121,30 @@
           "trust": {
             "review_verdicts": "orchestrator"
           },
-          "evaluated_at": "2026-11-10T13:52:56Z",
+          "evaluated_at": "2026-11-10T18:53:37Z",
           "workflow_release": "2.27.0"
         }
       },
       "technical_approval": null,
       "technical_review_block_pins": [],
       "plan_review_stages": {
-        "review_content_id": "069aaadc6aa94c05065fcb74886771100897fad4a2c9802e1f7ea8e13546ad40",
+        "review_content_id": "878b6e7ac7ccf339e74d7b38515ab40e3c66f392ee9a42631c4c4e286be70dd1",
         "LOCAL_MODEL_PLAN_REVIEW": {
-          "bundle_id": "877a262f4504479a08ecdc9d447b94209863893bbddacf1c0588d36231ea0528",
+          "bundle_id": "82d3f8f883e90a2f9a2fa5f6bbcdc47e225bfdc911ecff747a17c98e19daffd2",
           "verdict": "APPROVE",
-          "round": 9,
-          "completed_at": "2026-11-10T13:47:34Z",
-          "verdict_sha256": "099f0891a9add391536ac954f685c5d81b97715977fab62d3939fb8d6fbcec40",
+          "round": 12,
+          "completed_at": "2026-11-10T18:48:34Z",
+          "verdict_sha256": "09e411ead9717bbbe4b8beae3bfd926b4b4037cb86c0fda56dddc2052837a093",
           "run_ref": "session:local .ai-review/workflow-controller-h4e3/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
         "MANUAL_EXTERNAL_PLAN_REVIEW": {
-          "bundle_id": "877a262f4504479a08ecdc9d447b94209863893bbddacf1c0588d36231ea0528",
+          "bundle_id": "82d3f8f883e90a2f9a2fa5f6bbcdc47e225bfdc911ecff747a17c98e19daffd2",
           "verdict": "APPROVE",
-          "round": 9,
-          "completed_at": "2026-11-10T13:50:10Z",
-          "verdict_sha256": "e7d018bfe8d55dac5be06b075a82d75ba69208d06d773dce784364bfea2638e4",
-          "run_ref": "codex:20261110T134751Z-61d67d1f",
+          "round": 12,
+          "completed_at": "2026-11-10T18:51:01Z",
+          "verdict_sha256": "bc41c371d9f8e9d842599362d43812da29b4f7bff431a8a03a135b382b6065a0",
+          "run_ref": "codex:20261110T184856Z-355c6456",
           "reviewer_model": "openai/gpt-6.1-sol"
         }
       },
@@ -68152,27 +68152,34 @@
       "blocking_decisions": [],
       "review_round_counts": {
         "plan": {
-          "local": 9,
-          "external": 2
+          "local": 12,
+          "external": 4
         },
         "implementation": {
           "local": 0,
           "external": 0
         }
       },
-      "state_revision": 39,
-      "last_transition": "2026-11-10T18:28:22Z",
+      "state_revision": 52,
+      "last_transition": "2026-11-10T18:53:37Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
-        "status": "CONSUMED",
-        "at": "2026-11-10T18:28:22Z",
+        "status": "BOUND",
+        "at": "2026-11-10T18:46:35Z",
         "consumed": {
-          "review_content_id": "069aaadc6aa94c05065fcb74886771100897fad4a2c9802e1f7ea8e13546ad40",
-          "plan_revision": 9,
+          "review_content_id": "c0518e9e85ef3eeccc13e829d702b31ab62d6418e479efd550da3e44185fba97",
+          "plan_revision": 11,
           "legacy": false
         },
-        "published": null,
-        "bound": null
+        "published": {
+          "review_content_id": "878b6e7ac7ccf339e74d7b38515ab40e3c66f392ee9a42631c4c4e286be70dd1",
+          "plan_revision": 12
+        },
+        "bound": {
+          "review_content_id": "878b6e7ac7ccf339e74d7b38515ab40e3c66f392ee9a42631c4c4e286be70dd1",
+          "bundle_id": "82d3f8f883e90a2f9a2fa5f6bbcdc47e225bfdc911ecff747a17c98e19daffd2",
+          "plan_revision": 12
+        }
       },
       "consumed_plan_review_content_ids": [
         "069aaadc6aa94c05065fcb74886771100897fad4a2c9802e1f7ea8e13546ad40",
@@ -68183,7 +68190,9 @@
         "936a5d9848f4833ab14be43f95d6e866f56a641eaf5786692c5fc25d980756d6",
         "9c1f1289ebe137dc9fcbd395232b8b31c3410d06c56149c57023e1be56f09b74",
         "a914057e8de1a2cfe98f77590899100d0bbd01753b8d34b6aaef4efcf59dd9ea",
-        "c3c478f1a5a7c51c49aef4b86696ab707e6c96affb799504affd6fa16bd5cc8c"
+        "c0518e9e85ef3eeccc13e829d702b31ab62d6418e479efd550da3e44185fba97",
+        "c3c478f1a5a7c51c49aef4b86696ab707e6c96affb799504affd6fa16bd5cc8c",
+        "e988b21669162b108c970db7fa1fe1177b5a22ee9abc3fdefadfc197031bb49d"
       ],
       "optional_findings": {
         "F-f019fc8b9118": {
@@ -68339,6 +68348,62 @@
               "at": "2026-11-10T13:50:10Z"
             }
           ]
+        },
+        "F-fccfc898b082": {
+          "digest": "fccfc898b082a5c1a44e7a846336a57fe13034e91d3054509aa02de324ef407f",
+          "text": "The Controller's gate stores nothing, so it holds only for the `run` that ended on it. If the operator runs `controller run` again without regenerating, the Workflow still answers row 12 (`plan.review.local`, automatic, `BOUND`), or the implementation review row, and the Controller launches the next review against the stale managed bundle. That review fails closed: `review_recorder`'s preconditions (`assert_local_generation_matches`, the manifest identity check and `validate_local_plan_review_preconditions_bound`, `controller/review_recorder.py:181-211`) refuse a bundle that does not match, and Claude's `/review-plan` refuses at its step 5. So nothing wrong gets recorded, but the operator gets a `FAILED` review job, possibly after review usage is spent, instead of the gate again. Say this on `docs/common-problems.md` under the gate, and consider a CP3 test that re-runs past the gate without regenerating and shows the refusal.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 10,
+              "review_content_id": "e988b21669162b108c970db7fa1fe1177b5a22ee9abc3fdefadfc197031bb49d",
+              "verdict": "APPROVE",
+              "at": "2026-11-10T18:36:45Z"
+            }
+          ]
+        },
+        "F-d160583ecf1f": {
+          "digest": "d160583ecf1ff14ab75856404f28225c8c93c3cd1eacdcb8748143221eab97d2",
+          "text": "The previous D4a clarification remains unresolved: ordinary protocol recovery uses `_protocol_resolution`, whose interrupted `no_progress` ending does not compare HEAD. Clarify the distinction from legacy `_reconcile_launched` when documenting recovery.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 10,
+              "review_content_id": "e988b21669162b108c970db7fa1fe1177b5a22ee9abc3fdefadfc197031bb49d",
+              "verdict": "REVISE",
+              "at": "2026-11-10T18:40:58Z"
+            }
+          ]
+        },
+        "F-689ecd34cbee": {
+          "digest": "689ecd34cbee3c2a1f32412421ab2302b0a3dce3621a9067acdae67f8adf2fc3",
+          "text": "**O1.** Condition (2) accepts a reason whose text \"names\" `BUNDLE_UNVERIFIED`. When `plan_review_publication_status` raises, reconcile writes the exception's type and message into the text (`scripts/workflow_protocol.py:2606-2609`), and that message could contain the token. Matching the exact text `<observed target phase> with plan_review_publication_status BUNDLE_UNVERIFIED` closes this.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 11,
+              "review_content_id": "c0518e9e85ef3eeccc13e829d702b31ab62d6418e479efd550da3e44185fba97",
+              "verdict": "REVISE",
+              "at": "2026-11-10T18:45:08Z"
+            }
+          ]
+        },
+        "F-65095c66190d": {
+          "digest": "65095c66190daffd7c46db63e58a4a35c15de024de08c6932a2364550e8abb65",
+          "text": "**O2.** D7 calls `_reconcile_launched` \"legacy\" and says a carry record never reaches it. In fact `_reconcile_launched` dispatches every record that holds a `protocol` block to `_reconcile_protocol` (`controller/job.py:2742-2743`); only its body below that dispatch is legacy. D4a still names `_reconcile_launched`'s interrupted ending as a reader of the re-captured baseline. One wording that says \"the non-protocol body of `_reconcile_launched`\" in both places would remove the apparent contradiction.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 11,
+              "review_content_id": "c0518e9e85ef3eeccc13e829d702b31ab62d6418e479efd550da3e44185fba97",
+              "verdict": "REVISE",
+              "at": "2026-11-10T18:45:08Z"
+            }
+          ]
         }
       },
       "amendment_history": [
@@ -68449,7 +68514,15 @@
             }
           },
           "pre_amendment_approval_commit": "46cbe2f1049bde505e8684c4bcdfe8ec0bc2ba7e",
-          "resolved_at_plan_revision": null
+          "resolved_at_plan_revision": 12,
+          "reconciliation_outcome": {
+            "CP1": "retained",
+            "CP2": "needs_revalidation",
+            "CP3": "needs_revalidation",
+            "CP4": "needs_revalidation",
+            "CP5": "needs_revalidation"
+          },
+          "resolved_review_content_id": "878b6e7ac7ccf339e74d7b38515ab40e3c66f392ee9a42631c4c4e286be70dd1"
         }
       ],
       "amendment_base_commit": "bc89f9b0d0de0b424585f95f150079eb35003eea"

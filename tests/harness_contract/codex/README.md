@@ -22,6 +22,7 @@ on further drift.
 | file | what it pins | SHA-256 |
 | --- | --- | --- |
 | `features_list.0.163.0.txt` | `codex features list` in an empty `CODEX_HOME` (no model call), measured on `codex-cli 0.163.0` on 2026-10-26: the source of `TOOL_ALLOWLIST` and `DISABLED_FEATURES` | `6dd1708362bdc7de0a50f7e4ad9087410fbfe42df7793bf9977cf6d2103ff810` |
+| `features_list.0.167.0.txt` | `codex features list` in an empty `CODEX_HOME` (no model call), measured on `codex-cli 0.167.0` on 2026-11-10: seven newly enabled features (`bedrock_setup_wizard`, `deferred_tool_world_state`, `incremental_tools`, `mcp_oauth_refresh_coordination`, `plugin_discovery_prefetch`, `prediction_preserve_parent_tools`, `reasoning_effort_override`) are allowlisted by the owner's decision; the contract test classifies every enabled feature of it | `cc2d57b10b9cc353869b60b025e60a609709ddcec8a77445605d5d14f64d8499` |
 | `exec_argv.json` | the real `exec` command lines (`pinned_run` and `recommended_run`, the shape `review.argv` now builds), the flag-rejection behaviour and what the first run showed | `abe973aa983c41f1af7c9285aad43f4edf91e512902dc56f4504763e93f9ff41` |
 | `rollout_excerpt.jsonl` | a real rollout's event shapes and a failing `task_complete` (`codex_error_info`): the source of limit classification and usage readings | `60779143bedf8051d9c985d7e10a9c3cd6ed935f08fc7e4fac1e6d81b8019f88` |
 | `stderr_shapes.txt` | stdout is the final message only; stderr is the whole transcript (never read for classification) | `a206acba62218e49a80738cb3b5bfa0c37496bf086e466538ac4e8c2e115a063` |

@@ -362,6 +362,18 @@ class RegistryAndContractTest(unittest.TestCase):
         with self.assertRaises(ReviewLaunchRefusedError):
             review.harness("other")
 
+    def test_every_enabled_feature_of_the_0_167_0_capture_is_allowlisted_or_disabled(self):
+        # codex-cli 0.167.0 turned on seven features the 0.163.0 capture does not have; each stopped every
+        # Codex review ("the feature ... is enabled and is not allowlisted") until the owner allowlisted them.
+        capture = CODEX_CAPTURES / "features_list.0.167.0.txt"
+        enabled = {n for n, on in review.parse_features(capture.read_text()).items() if on}
+        self.assertTrue(enabled)
+        self.assertEqual(sorted(enabled - review.TOOL_ALLOWLIST - set(review.DISABLED_FEATURES)), [])
+        self.assertEqual(sorted(set(review.DISABLED_FEATURES) - enabled), [])
+        for name in ("bedrock_setup_wizard", "reasoning_effort_override"):
+            self.assertIn(name, review.TOOL_ALLOWLIST)
+            self.assertNotIn(name, review.DISABLED_FEATURES)
+
     def test_the_capture_is_in_the_repository(self):
         self.assertTrue(FEATURES_CAPTURE.is_file())
 

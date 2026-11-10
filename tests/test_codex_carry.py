@@ -858,12 +858,13 @@ class WorkflowFixtureCarryTest(unittest.TestCase):
 
 class ZzCoverageTest(unittest.TestCase):
     def test_every_cause_has_a_case(self) -> None:
-        """Runs after the module's other tests have filled COVERED (unittest sorts classes by name; this one is last)."""
-        missing = [cause for cause in carry.CAUSES if cause not in COVERED]
-        # carry_commit_pending_failed etc. are filled by the classes above; when this class is run alone it only
-        # checks that the list of causes is the documented one.
-        if COVERED:
-            self.assertEqual(missing, [], "a cause in codex_carry.CAUSES has no test case")
+        """Static, because the sharded run splits a module's tests across shards and a runtime ``COVERED`` set is
+        partial there: every cause is named in a test module that drives it."""
+        tests_dir = Path(__file__).resolve().parent
+        text = "".join((tests_dir / name).read_text(encoding="utf-8")
+                       for name in ("test_codex_carry.py", "test_job_codex_apply.py", "test_codex_apply_safety.py"))
+        missing = [cause for cause in carry.CAUSES if f'"{cause}"' not in text and f"'{cause}'" not in text]
+        self.assertEqual(missing, [], "a cause in codex_carry.CAUSES has no test case")
         self.assertEqual(len(carry.CAUSES), len(set(carry.CAUSES)))
         self.assertTrue(set(carry.MEMBER_DETAILS) >= {"name", "kind", "git", "gitlink", "escape", "bound", "armour",
                                                       "absent"})

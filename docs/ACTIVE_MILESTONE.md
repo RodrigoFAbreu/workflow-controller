@@ -51,6 +51,14 @@ the plant of a `scripts/sitecustomize.py`, a root `secrets.py` and a `__pycache_
 regeneration passes the next stage's preconditions for both roles. A test fails when a member of `codex_carry.CAUSES` has no
 case (`CAUSE_CASES`). Verified with `tests.test_codex_apply_safety`, `tests.test_job_codex_apply`,
 `tests.test_package_structure` and `tests.test_write_containment` (100 tests); no product code changed.
+CP5 is complete: `tests/test_codex_apply_live.py` is the opt-in live proof (`CONTROLLER_LIVE_CODEX_TESTS=1`, skipped on `CI`, one
+real Codex turn per role, it asserts the `carry_bundle_regeneration_pending` gate, the clone gone, what the managed repository
+holds and the `usage_record`); it was collected and skipped offline and **not run live** (it spends the operator's Codex usage),
+so `tests/harness_contract/codex/apply_roles.txt` does not exist. The pages say what is selectable and what the Controller leaves
+to the operator: `docs/guide/harnesses.md` (the carry, the guards, the endings, the recovery and "What the Controller does not do
+after a landing"), `docs/common-problems.md` (each `carry_*` cause and the regeneration gate), `docs/guide/workers.md`,
+`docs/guide/development.md` and `docs/items/workflow-controller-h4e3.md`. `tools/harness_table.py --check` and
+`tools/check_docs.py` pass.
 
 ## Previous milestone (H4e2b)
 

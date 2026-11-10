@@ -321,6 +321,13 @@ LEFTOVER_INVENTORY = (
      "run_controller_module: a read-only command (status, follow, --version) or a step/run with --timeout N <= 600 (D11)"),
     ("test_review_recorder.py", "start:run", 1, "short",
      "the fixture's own `prepare-ai-review.sh` on its scratch repository, waited by the test"),
+    ("test_codex_apply_safety.py", "start:run", 3, "short",
+     "the worker-side git edits of the clone (add, reset, commit, branch, tag) and the operator's `prepare-ai-review.sh` "
+     "regeneration on a scratch repository: each waited by the test and exits by itself"),
+    ("test_codex_carry.py", "start:run", 1, "short",
+     "the Workflow's own plan-stage `prepare-ai-review.sh` in a carried scratch clone, waited by the test"),
+    ("test_job_codex_apply.py", "start:run", 1, "short",
+     "the operator's `prepare-ai-review.sh` regeneration on a scratch repository, waited by the test"),
     ("test_review_mode.py", "start:run", 1, "short",
      "the captures generator's --check run: a read-only comparison that exits by itself"),
     ("test_functional_enforcement.py", "start:run", 4, "bounded",

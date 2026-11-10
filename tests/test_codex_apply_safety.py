@@ -170,7 +170,8 @@ class PlanRefusalsTest(Safety, base.PlanCase):
             (clone / "stray.txt").write_text("outside\n")
 
         def tracked(clone: Path) -> None:
-            (clone / "docs" / "UX_FLOWS.md").write_text("a tracked change outside the set\n")
+            with (clone / ".gitignore").open("a") as handle:
+                handle.write("# a tracked change outside the set\n")
 
         def feedback(clone: Path) -> None:
             path = clone / ITEM / "feedback" / "REVIEW_FEEDBACK.md"
@@ -311,7 +312,8 @@ class PlanRefusalsTest(Safety, base.PlanCase):
 
     def test_foreign_dirt_of_each_kind_refuses_before_the_clone(self) -> None:
         def tracked() -> None:
-            (self.root / "docs" / "UX_FLOWS.md").write_text("changed by someone else\n")
+            with (self.root / ".gitignore").open("a") as handle:
+                handle.write("# changed by someone else\n")
 
         def untracked() -> None:
             (self.root / "untracked.md").write_text("x\n")

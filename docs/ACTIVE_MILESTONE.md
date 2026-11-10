@@ -40,6 +40,17 @@ write), `mark_worker_ran` and `verified_sources`. `tests/test_job_codex_apply.py
 and recorder and the fake `codex` for both roles: the gate and its message, each row of D8's table, the four conditions of the narrow
 check alone, every stage of the block at each recovery site, the implementation role's D4 commit, usage limit and kill cases, and the
 operator's regeneration steps followed by the next review's preconditions.
+CP4 is complete: `tests/test_codex_apply_safety.py` proves D10 through `job.execute_step` with the real carry, landing and
+recorder and the fake `codex`. For both roles it covers a link, a hardlink and a special file at a member, a private-key armour
+line (never in the record), a worker write outside the set (stray, tracked, `feedback/`, a new name in the item directory), a
+state change outside this item's entry (another entry, `active_work_item_id`, a top-level key, the schema), an added or dropped
+intent-to-add entry, a commit, branch or tag made by the plan role, a hook or config written into the clone, a deleted member,
+a gone clone and the implementation role's `current/` withdrawn by its own generation (nothing landed). Derived leftovers are
+discarded; another item's concurrent entry is kept; a kill at each member boundary of the carry out is finished by `resume`;
+the plant of a `scripts/sitecustomize.py`, a root `secrets.py` and a `__pycache__` file runs nothing; and the operator's
+regeneration passes the next stage's preconditions for both roles. A test fails when a member of `codex_carry.CAUSES` has no
+case (`CAUSE_CASES`). Verified with `tests.test_codex_apply_safety`, `tests.test_job_codex_apply`,
+`tests.test_package_structure` and `tests.test_write_containment` (100 tests); no product code changed.
 
 ## Previous milestone (H4e2b)
 

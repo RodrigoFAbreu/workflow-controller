@@ -67009,7 +67009,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-h4e2b-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4e2b-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 2,
       "implementation_revision": 5,
       "functional_review_round": null,
@@ -67157,12 +67157,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 4,
-          "external": 1
+          "local": 5,
+          "external": 2
         }
       },
-      "state_revision": 27,
-      "last_transition": "2026-11-10T05:22:27Z",
+      "state_revision": 29,
+      "last_transition": "2026-11-10T05:43:49Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -67353,16 +67353,58 @@
               "at": "2026-11-10T04:47:43Z"
             }
           ]
+        },
+        "F-6bc42ab46edd": {
+          "digest": "6bc42ab46edd58239f7406cf3c688eb1c9bb66f5cd41cf4612ab90521bd3e470",
+          "text": "**O1. `IMPLEMENTATION_SUMMARY.md` stops at review round 3.** Its header still names content head `a9c8952` (the self-review), and it has no \"Review round 4\" section for `75ed1e3` (the stream filter reads the message from `stdout` alone, and the `docs/guide/harnesses.md` clause on intermediate messages). `TEST_RESULTS.md` is current for revision 5. Add the round 4 entry and update the head so the external reviewer gets the whole history from the summary.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 5,
+              "review_content_id": "dec8931822efed77fa70e13238561b39d292b3e91a7cd609fd893da479a01779",
+              "verdict": "APPROVE",
+              "at": "2026-11-10T05:36:32Z"
+            }
+          ]
+        },
+        "F-a2d0298dd427": {
+          "digest": "a2d0298dd427f3f3d8d898ff9cb6b986e70b16de27132bd146e9040873bb377a",
+          "text": "**O2. The `docs/guide/harnesses.md` paragraph says \"nowhere else\" and then qualifies it.** It opens \"A routed review keeps the verdict text nowhere else\" and ends \"a draft of the verdict ... can still appear in `worker.stderr`\". Opening with the exact guarantee, for example \"A routed review keeps the final message nowhere else\", would remove the contradiction. The second line is also one long line where the rest of the paragraph wraps at 120 characters.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 5,
+              "review_content_id": "dec8931822efed77fa70e13238561b39d292b3e91a7cd609fd893da479a01779",
+              "verdict": "APPROVE",
+              "at": "2026-11-10T05:36:32Z"
+            }
+          ]
+        },
+        "F-96ac3f7ccb94": {
+          "digest": "96ac3f7ccb945e1fb4b650ca18332c343c8119c378a389ca71a1f1efd9ba03ce",
+          "text": "**O3. The stderr filter also drops unrelated lines that match a message line.** `without_message_streams` (`controller/codex_review_role.py:401-410`) drops every stderr line whose stripped text equals any line of the message. A common short line in the verdict (`None.`, a `## ` heading) also removes the same text from command output elsewhere in the transcript. Only the diagnostic is affected and no verdict text can leak this way, so this is acceptable. One clause in the docstring would say so.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 5,
+              "review_content_id": "dec8931822efed77fa70e13238561b39d292b3e91a7cd609fd893da479a01779",
+              "verdict": "APPROVE",
+              "at": "2026-11-10T05:36:32Z"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "9e6a240020e6e817bba8191e9aefe3b49f8796a8af631b3050b8c2c674593059",
+        "review_content_id": "dec8931822efed77fa70e13238561b39d292b3e91a7cd609fd893da479a01779",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "0e7a37e92d2f122bdc797afbbbb52116e1ae75e27032480193a26bb8bb2801fe",
+          "bundle_id": "7ba7b6416f44d9166383347ab6f5899acb5b58fc91f1e5eb7f10ec421ee8b8d3",
           "verdict": "APPROVE",
-          "round": 2,
-          "completed_at": "2026-11-10T03:15:11Z",
-          "verdict_sha256": "d0d4d8988b6e5bf9a0e89b3be1082596ebb0e138da317c08a7e5ead0d550f914",
+          "round": 5,
+          "completed_at": "2026-11-10T05:36:32Z",
+          "verdict_sha256": "b9382dcf5d396d772e68e920a07a926ff229f05662969ac215c6651c1f25d9b0",
           "run_ref": "session:local .ai-review/workflow-controller-h4e2b/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },

@@ -514,53 +514,73 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-ci1c` (CI1c, issue [#317](https://github.com/RodrigoFAbreu/workflow-controller/issues/317)),
-implementation revision 3, plan `docs/ai-workflow/CONTROLLER_CI1C_PLAN.md` (revision 5). The item is an investigation with a
-negative result: parallel test workers inside a shard were measured and not adopted. No source, test or workflow file changed
-since the base commit `065ca1e`; the change is documentation only (`docs/guide/ci-and-releases.md`, `docs/guide/development.md`,
-`docs/items/workflow-controller-ci1c.md`, the new `docs/items/workflow-controller-ci1c-reproduction.md`). There is no
-user-visible command. Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or
-`ssh`, a `PATH` of the sandbox's `bin/` and the system directories, and no write inside the read-only product clone. Run from
-the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write only to the scratch `TMPDIR`.
+Item `workflow-controller-h4e2b` (H4e2b, issue [#315](https://github.com/RodrigoFAbreu/workflow-controller/issues/315)),
+implementation revision 7, plan `docs/ai-workflow/CONTROLLER_H4E2B_PLAN.md` (revision 2), base commit `8ae7096`. The item lets an
+operator name `codex` as the harness of the two local review roles (`review-plan`, `review-implementation`): the roles get the
+adapter role `local-reviewer`, a routed review runs H4e2's read-only `run_review` inside the job's record (one status per
+ending), every recovery site calls `recover`, and the routed path is proved adversarially. The default is unchanged. Every flow
+runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's
+`bin/` and the system directories, and no write inside the read-only product clone. Run from the product clone with `python3 -B`
+and no `PYTHONPATH=.`; flows write only to the scratch `TMPDIR`. The tests drive the fake `codex` of `tests/fake_codex.py`
+against scratch repositories, so no flow needs a pull request or a forge call.
 
 Setup: `export TMPDIR=$(mktemp -d)`. No data to seed.
 
-**Flow 1: No code changed.**
-Run `git diff --stat 065ca1e HEAD -- . ':!docs'`.
-Expected: no output (nothing outside `docs/` changed, so no test, tool or workflow file).
+**Flow 1: Codex is routable for the two review roles only.**
+Run `python3 -B -m unittest tests.test_routing tests.test_worker_launch tests.test_harness tests.test_cli 2>&1 | tail -4`.
+Expected: `OK`. These pin: `routing.ADAPTER_ROLE` maps exactly `review-plan` and `review-implementation` to `local-reviewer`;
+`(codex, local-reviewer)` is the non-spawning `CodexReviewLauncher`; `codex` is still refused for every worker role
+(`milestone-plan`); `codex` parses for both review roles; a Claude-only model or effort is refused with the existing message.
 
-**Flow 2: The plan is unchanged.**
-Run `python3 -B tools/run_tests.py plan --profile ci --ci-placement --output $TMPDIR/p.json`.
-Expected: rc 0 and `plan_digest` `1663e78f3cccedc713b19925f4cfce5eeefb24645f0a2e7e43c1f78e7651bcb1`, `shard_count` 6 (the digest
-the reproduction page requires).
+**Flow 2: The default is unchanged.**
+Run `python3 -B -m unittest tests.test_job_codex_worker tests.test_route_select tests.test_route_select_job tests.test_settings 2>&1 | tail -4`.
+Expected: `OK` (the Claude and Codex-worker job modules pass with only the planned edits; no routing config means both roles
+resolve to `claude-code`).
 
-**Flow 3: Generated workflows and documentation.**
-Run `python3 -B tools/ci_workflows.py --check; echo rc=$?` and `python3 -B tools/check_docs.py; echo rc=$?`.
-Expected: `rc=0` each (links, anchors such as `#measurements-cp1`, and the task-page commands all resolve).
+**Flow 3: Every ending of a routed review has a job status.**
+Run `python3 -B -m unittest tests.test_job_codex_review 2>&1 | tail -4`.
+Expected: `OK`, 46 or more tests. They cover each row of the plan's D3 table (recorded, record pending, not started, worker failed
+incl. usage limit and sandbox breach, refused, identity changed, release changed, record refused with the 0600 verdict file) and
+D4 (`resume`, `abandon`, drift and the exception handler call `recover`; a review record never reaches the worker reconciler; a
+routed review is never re-attached on `resume`).
 
-**Flow 4: The guides state the negative result.**
-Read the paragraph after the runner table in `docs/guide/ci-and-releases.md` ("Parallel workers inside a shard...") and the
-**Workers** bullet in `docs/guide/development.md`.
-Expected: both say workers were measured and not used; 2 workers cut the wall 29% and 36% but a run failed (a killed worker's
-process group still present after 15 s), 3 workers failed a run and raised CPU by 30% and 41%, over the 25% limit; the conformance
-lane bounds the longest shard; both link to the item page's measurements.
+**Flow 4: Adversarial safety through `execute_step`.**
+Run `python3 -B -m unittest tests.test_codex_review_safety 2>&1 | tail -4`.
+Expected: `OK`, 39 or more tests (both stages): credentials and armour lines in inputs, final message and `stderr`; symlink,
+special file, submodule, path escape, over-bound input; hooks; crafted refs; forged `Status:` headers. Each case leaves the
+managed tree, index, refs and state unchanged, the clone gone, and no armour line in the record or any runtime file. The test
+that fails for a cause of `codex_review_role.CAUSES` with no case is among them.
 
-**Flow 5: The item page is consistent.**
-Read `docs/items/workflow-controller-ci1c.md` (Measurements, Superseded measurements, D5, CP2, CP3).
-Expected: the table matches the guides (shard 0: 2 workers -28.6% wall / +16.7% CPU with 1 failed run; 3 workers -26.4% / +29.7%;
-shard 4: 2 workers -35.9% / +16.0%; 3 workers -50.1% / +41.1% with 1 failed run); the earlier measurements are labelled superseded,
-not the result; CP2 is "not needed"; test selection is not built and a larger runner waits for the owner.
+**Flow 5: The verdict stays out of every job-record field, and the unsafe process-group guard.**
+Run `python3 -B -m unittest tests.test_codex_review_role tests.test_unsafe_process_group 2>&1 | tail -4`.
+Expected: `OK` (the review-round fixes: the verdict text only in the verdict file, not in `worker.stdout`/`stderr` or
+`stream_diagnosis.detail`, also after a sandbox breach with a non-zero exit; `os.killpg` is never handed a non-worker process
+group, #329).
 
-**Flow 6: The reproduction page is self-sufficient.**
-Read `docs/items/workflow-controller-ci1c-reproduction.md`.
-Expected: the set-up, the patch (scratch clone only, never committed), `runone.py`, the drivers and `CI1C_WORKERS` are given; the
-digest in the set-up equals Flow 2's.
+**Flow 6: Independence check with `codex` on both stages.**
+Run `python3 -B -m unittest tests.test_review_mode tests.test_routing_chain 2>&1 | tail -4`.
+Expected: `OK`; with `review-plan` on `codex`, other roles on `claude-code` and an external `reviewer.harness` of `codex`, the
+mixed-lane stop fires and names the collision.
 
-**Known limitations / out of scope.** The measurements were made on a 16-thread desktop pinned to four threads, so only ratios
-transfer to CI; the shard-count question and the second and third candidates (test selection, a larger runner) are not part of
-this item; tracing the process-group assertion would be a new item. The full suite is not a flow: three `fake_codex_contract`
-tests fail in a sandbox that reads `~/.codex` config (environmental) and `test_functional_sandbox` has a known CI flake (#206).
+**Flow 7: Generated tables and the pages.**
+Run `python3 -B tools/harness_table.py --check; echo rc=$?`, `python3 -B tools/check_docs.py; echo rc=$?` and
+`python3 -B tools/ci_workflows.py --check; echo rc=$?`. Then read `docs/guide/harnesses.md` from "Routing the two local review
+roles to Codex" to the end of "What a Codex review round costs", and `docs/items/workflow-controller-h4e2b.md`.
+Expected: `rc=0` each. The `codex` column is `yes` for the two review roles and both adapters declare `local-reviewer`; the page
+gives the routing, the status table of each ending and that the default is unchanged; the cost table gives formulas and the price
+file's date and reads `not measured` in every measured cell; the item page says the live proof was not run.
+
+**Flow 8: The live proof is opt-in and inert offline.**
+Run `python3 -B -m unittest tests.test_codex_review_live -v 2>&1 | tail -6`.
+Expected: the tests are collected and skipped (no `CONTROLLER_LIVE_CODEX_TESTS`); no `codex` starts, no spend; the command to run
+it is on `docs/guide/development.md`.
+
+**Known limitations / out of scope.** The live proof (`CONTROLLER_LIVE_CODEX_TESTS=1 ... tests.test_codex_review_live`) has not
+been run: it spends Codex usage, so `tests/harness_contract/codex/review_role.txt` does not exist and the cost table is
+`not measured`; it is not required for acceptance. The two `apply-*` roles (H4e3) and `milestone-implement` (H4f) still cannot
+be routed to `codex`. The full suite is not a flow: three `fake_codex_contract` tests fail in a sandbox that reads `~/.codex`
+config (environmental) and `test_functional_sandbox` has a known CI flake (#206).
 
 ## Next action
 
-Functional review of `workflow-controller-ci1c` (see the checklist above), then `/accept-milestone`.
+Functional review of `workflow-controller-h4e2b` (see the checklist above), then `/accept-milestone`.

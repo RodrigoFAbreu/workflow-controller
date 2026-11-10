@@ -24,6 +24,22 @@ CP5. Verified with the narrow modules of the plan's CP2 list (`tests.test_codex_
 Workflow's own plan-stage generator and verifier in a carried plan clone.
 Revision 12 (the plan amendment for D8's gate endings, CP3 to CP5) left D3 to D7 unchanged, so CP2 was revalidated rather than
 reworked: the same five modules pass (158 tests) on a clean export of the checkpoint's commit.
+CP3 is complete: `job._run_codex_apply` is the apply branch (`job._is_codex_apply_route`, keyed on the route's role and harness and
+taken before the review and Codex-worker branches). It computes D3's set, makes D4's commit for the implementation role, records the
+carry base and re-captures the "moved nothing" baseline before the clone is made, carries in, launches with the eight options of H4d,
+records `usage` and `usage_record`, lands (implementation role) and carries out, then asks the Workflow's `reconcile` through
+`_protocol_resolution`. A `FINISHED` answer, and a plan role's `invalid` answer that is exactly the expected stale-bundle result
+(`job._is_expected_stale_bundle`: four conditions, files only), end `GATE_BLOCKED` at the Controller's own gate
+`carry_bundle_regeneration_pending` (`job.CARRY_BUNDLE_GATE_CODE`, not a member of `codex_carry.CAUSES`), whose message names the steps
+to run in the managed repository, the implementation role's landed range first; every other answer is the resolution's own ending. A
+refused carry or landing after the worker ran is `FAILED` (`CodexCarryRefused`, with the cause, the stage and the members not
+written) with the clone kept and named. `resume`, `abandon`, a drifted release and the post-spawn exception handler recover a
+`codex_carry` record through the carry's recovery (`_reconcile_codex_carry`, `_end_carry_without_carry_out`); a carry record never
+reaches `_reconcile_codex_worker`. `codex_carry.recover` gained `before_write` (the landing, after every check and before the first
+write), `mark_worker_ran` and `verified_sources`. `tests/test_job_codex_apply.py` drives `execute_step` with the real carry, landing
+and recorder and the fake `codex` for both roles: the gate and its message, each row of D8's table, the four conditions of the narrow
+check alone, every stage of the block at each recovery site, the implementation role's D4 commit, usage limit and kill cases, and the
+operator's regeneration steps followed by the next review's preconditions.
 
 ## Previous milestone (H4e2b)
 

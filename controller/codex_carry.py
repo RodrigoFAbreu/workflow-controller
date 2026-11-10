@@ -28,7 +28,9 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from . import codex_review_role, codex_worker_sandbox, codex_worker_tree, gitrepo, review_recorder, runtime
+from . import (
+    codex_review_role, codex_worker_sandbox, codex_worker_tree, gitrepo, protocol, review_recorder, runtime,
+)
 from .errors import ControllerError, GitOperationError
 
 #: The two roles, and the stage each one's Workflow command works at.
@@ -126,6 +128,16 @@ def workflow_names(sources: Mapping[str, bytes] | None) -> dict[str, Any]:
                 except ValueError:
                     continue
     return found
+
+
+def verified_sources(repo_root: Path) -> Mapping[str, bytes] | None:
+    """The managed repository's verified Workflow script set (the bytes ``run_in_private_copy`` would run), for
+    :func:`compute`'s derived names; ``None`` when the installation cannot be read (the built-in names then stand)."""
+    try:
+        managed = protocol.read_managed(Path(repo_root))
+        return protocol.script_set(Path(repo_root), managed).sources
+    except ControllerError:
+        return None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -414,6 +426,12 @@ def _advance(block: dict, persist: Callable[[dict], None] | None, stage: str, **
     block.update(fields)
     if persist is not None:
         persist(copy.deepcopy(block))
+
+
+def mark_worker_ran(block: dict, persist: Callable[[dict], None] | None = None) -> None:
+    """D7: the worker's end is recorded; the block moves to ``worker_ran`` (a block already past it is left alone)."""
+    if block["stage"] in ("carried_in",):
+        _advance(block, persist, "worker_ran")
 
 
 def _state_in_rel(layout: codex_worker_sandbox.WorkerLayout) -> str:
@@ -721,12 +739,15 @@ def write_out(managed_repo: Any, layout: codex_worker_sandbox.WorkerLayout, carr
 
 def recover(managed_repo: Any, layout: codex_worker_sandbox.WorkerLayout, carry_set: CarrySet, block: dict, *,
             worker_started: bool, persist: Callable[[dict], None] | None = None,
-            digests: Mapping[str, str] | None = None, runner: gitrepo.Runner | None = None) -> dict:
+            digests: Mapping[str, str] | None = None, runner: gitrepo.Runner | None = None,
+            before_write: Callable[[], None] | None = None) -> dict:
     """D7: finish or end a carry from what is on disk. ``worker_started`` is whether the record names a worker process.
     Returns ``{"action": ..., "stage": ...}`` with ``action`` one of ``not_started`` (``preparing``, or ``carried_in``
     with no worker: the clone is removed and nothing is written), ``carried_out`` (the carry out ran from the kept clone
     and the block is ``done``) or ``done`` (nothing is written). A clone gone before ``done`` is ``carry_clone_gone``,
-    nothing further written. Never recomputes D4."""
+    nothing further written. Never recomputes D4. ``before_write`` runs once, after :func:`check_out` and before the
+    first write, and never at stage ``out`` (the landing it stands for is done by then); an exception from it ends the
+    carry out with nothing written."""
     stage = block["stage"]
     if stage == "done":
         return {"action": "done", "stage": stage}
@@ -743,6 +764,8 @@ def recover(managed_repo: Any, layout: codex_worker_sandbox.WorkerLayout, carry_
         outcome = write_out(managed_repo, layout, carry_set, block, pending, persist=persist, digests=digests)
     else:
         plan = check_out(managed_repo, layout, carry_set, block, runner=runner)
+        if before_write is not None:
+            before_write()  # the implementation role's landing: after every check, before any write (D6)
         outcome = write_out(managed_repo, layout, carry_set, block, plan, persist=persist, digests=digests)
     return {"action": "carried_out", "stage": "done", **outcome}
 

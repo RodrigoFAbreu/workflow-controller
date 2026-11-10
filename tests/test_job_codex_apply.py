@@ -1,0 +1,987 @@
+"""`workflow-controller-h4e3` CP3: a routed apply role run as a job (`controller.job`, D8 and D9).
+
+Offline, through ``job.execute_step``: the managed repository is the recorder tests' fixture (the installed Workflow,
+a generated and bound bundle), moved to ``REVISING_PLAN`` or ``APPLYING_REVIEW_FEEDBACK`` through the Workflow's own
+writers; the route sends the apply role to ``codex``; the carry, the landing and the recorder are the real ones and
+the worker is the scripted fake Codex behind the real launcher, whose own work (the Workflow's writers run in the
+clone) is the ``after`` hook, as ``tests/test_job_codex_worker_landing.py`` does. D8's table has one test per ending,
+D9's recovery sites one test per site and stage.
+"""
+
+from __future__ import annotations
+
+import contextlib
+import json
+import os
+import subprocess
+import shutil
+import sys
+import types
+import unittest
+from pathlib import Path
+from unittest import mock
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
+from controller import (  # noqa: E402
+    codex_carry, codex_worker as cw, codex_worker_sandbox, harness, job, managed_repo, review, review_recorder, routing,
+)
+from controller import runtime as runtime_module  # noqa: E402
+from tests import fixtures  # noqa: E402
+from tests.test_codex_review_role import RoleCase, message  # noqa: E402
+from tests.test_job import FAKE_IDENTITY  # noqa: E402
+from tests.test_review_recorder import (  # noqa: E402
+    COMPLETED_AT, IN_PLACE, STATE, WID, RecorderCase, _entry, _git,
+)
+
+REAL_LAUNCH = cw.launch_codex_worker
+
+#: The Workflow's own writers, run in the clone: what ``/apply-plan-review`` does for one accepted finding -- the plan
+#: edited, the revision published, the bundle generated from the author inputs and bound.
+PLAN_WORK = r'''
+import datetime
+import subprocess
+root = Path.cwd()
+wid = "wi-1"
+def now():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+entry = ws.json.loads((root / "docs/ai-workflow/WORKFLOW_STATE.json").read_text())["work_items"][wid]
+revision = entry["plan_revision"] + 1
+plan = root / entry["plan_path"]
+plan.write_text(plan.read_text().replace(f"(Revision {revision - 1})", f"(Revision {revision})") + "\nRevised for the finding.\n")
+registry = root / entry["registry_path"]
+registry.write_text(registry.read_text().replace(f'"plan_revision": {revision - 1}', f'"plan_revision": {revision}'))
+rcid, _ = fingerprint.compute_review_content_id_plan_stage_for_work_item(root, wid)
+ws.state_transaction(root, lambda s: ws.publish_plan_revision(s, wid, revision, now(), review_content_id=rcid))
+inputs = root / fingerprint.resolve_plan_review_inputs_dir(root, wid)
+(inputs / "REVIEW_REQUEST.md").write_text(f"# Review request\n\nstage: plan\nwork item: {wid}\nreview_content_id: {rcid}\n")
+(inputs / "TEST_RESULTS.md").write_text(f"stage: plan (revision {revision})\nhead: {subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()}\n\nNo checks at the plan stage.\n")
+done = subprocess.run(["./scripts/prepare-ai-review.sh", entry["base_commit"], "plan", wid], cwd=root, check=False,
+                      capture_output=True, text=True, stdin=subprocess.DEVNULL)
+assert done.returncode == 0, done.stdout + done.stderr
+binding = ws.verify_plan_review_bundle(root, wid)
+ws.state_transaction(root, lambda s: ws.bind_plan_review_bundle(s, wid, binding=binding, now=now()))
+'''
+
+#: ``/review-plan``'s REVISE recorded through the Workflow's writer: the item goes to ``REVISING_PLAN``.
+REVISE = r'''
+import datetime
+root = Path.cwd()
+wid = "wi-1"
+entry = ws.json.loads((root / "docs/ai-workflow/WORKFLOW_STATE.json").read_text())["work_items"][wid]
+rcid, _ = fingerprint.compute_review_content_id_plan_stage_for_work_item(root, wid)
+now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+ws.state_transaction(root, lambda s: ws.record_local_plan_review(
+    s, wid, verdict="REVISE", bundle_id=entry["current_bundle_id"], review_content_id=rcid, round=1, now=now))
+feedback = root / ".ai-review" / wid / "feedback" / "REVIEW_FEEDBACK.md"
+feedback.parent.mkdir(parents=True, exist_ok=True)
+feedback.write_text("\n".join([
+    "# Review Decision", "", "Status: REVISE", "Reviewer role: LOCAL_MODEL_PLAN_REVIEW",
+    f"Reviewed bundle ID: {entry['current_bundle_id']}", f"Reviewed base commit: {entry['base_commit']}",
+    f"Work item: {wid}", f"Reviewed review content ID: {rcid}", "", "## Blocking findings", "", "- B1: add a line.", ""]))
+'''
+
+
+
+#: ``/apply-implementation-review``'s Workflow writers run in the clone: the finding fixed and committed, the revision
+#: advanced through ``record_bundle_generation`` and its generation-record commit, and this round's author-written
+#: summary (the generator itself is the operator's step after the landing).
+IMPL_WORK = r'''
+import datetime
+import subprocess
+root = Path.cwd()
+wid = "wi-1"
+def now():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+def git(*args):
+    return subprocess.run(["git", "-c", "user.name=Worker", "-c", "user.email=worker@example.invalid", *args],
+                          cwd=root, check=True, capture_output=True, text=True).stdout.strip()
+flows = root / "docs" / "UX_FLOWS.md"
+flows.write_text("the fixed flow\n")
+git("add", "docs/UX_FLOWS.md")
+git("commit", "-m", "fix the finding")
+head = git("rev-parse", "HEAD")
+entry = ws.json.loads((root / "docs/ai-workflow/WORKFLOW_STATE.json").read_text())["work_items"][wid]
+outcome = ws.resolve_bundle_generation_outcome(root, entry, base_commit=entry["base_commit"], head=head)
+assert outcome[0] == "ordinary", outcome
+ws.state_transaction(root, lambda s: ws.record_bundle_generation(
+    s, wid, stage="post-fix", head=head, now=now(), outcome=outcome[0]))
+entry = ws.json.loads((root / "docs/ai-workflow/WORKFLOW_STATE.json").read_text())["work_items"][wid]
+revision = entry["implementation_revision"]
+current = root / ".ai-review" / wid / "current"
+(current / "IMPLEMENTATION_SUMMARY.md").write_text(f"# Summary\n\nimplementation_revision: {revision}\n")
+(current / "TEST_RESULTS.md").write_text("# Test results\n\nall green, round 2\n")
+git("add", "docs/ai-workflow/WORKFLOW_STATE.json")
+git("commit", "-m", f"generation record\n\nWorkflow-Bundle-Generation-Record: {wid}/{revision}\nWorkflow-Work-Item: {wid}")
+content_id = ws.approval_review_content_id(
+    root, stage="implementation", base_commit=entry["base_commit"], work_item_type="product", work_item_id=wid,
+    head="HEAD", artifacts_path=fingerprint.artifacts_path_for_work_item(wid))
+(current / "REVIEW_REQUEST.md").write_text(f"# Review request\n\nstage: implementation\nreview_content_id: {content_id}\n")
+'''
+
+ITEM = f".ai-review/{WID}"
+
+
+class ApplyCase(RoleCase):
+    """A fixture moved to its apply phase (``REVISING_PLAN`` or ``APPLYING_REVIEW_FEEDBACK``), restored before each
+    test, with the apply role routed to ``codex`` and driven through ``execute_step``; the worker's own work is the
+    ``after`` hook, called with the clone's path once the fake run has ended."""
+
+    ROLE = routing.APPLY_PLAN_REVIEW
+
+    @classmethod
+    def prepare(cls) -> None:
+        raise NotImplementedError
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.prepare()
+        shutil.rmtree(cls._kept)
+        shutil.copytree(cls._built, cls._kept, symlinks=True)
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.stub = fixtures.write_stub_workflow_manager(self.tmp / "workflow-manager", release=self.release())
+        self.target = managed_repo.inspect(self.root, manager_bin=str(self.stub))
+        self.options = self.routing_for({self.ROLE: self.entry()})
+        self.enterContext(mock.patch.object(job, "CODEX_HOME_RESOLVER", lambda: self.operator))
+        self.enterContext(mock.patch.object(cw, "launch_codex_worker", self.fake_launch))
+        self.ids = 0
+        self.enterContext(mock.patch.object(job, "_new_job_id", self.next_id))
+        self.after = None
+        self.worker_reconciler = self.enterContext(mock.patch.object(
+            job, "_reconcile_codex_worker", side_effect=AssertionError("a carry record reached the worker reconciler")))
+
+    @staticmethod
+    def entry(**extra) -> dict:
+        return {"harness": "codex", "model": review.DEFAULT_MODEL, "effort": review.DEFAULT_EFFORT, **extra}
+
+    @staticmethod
+    def routing_for(roles: dict) -> routing.RoutingOptions:
+        config = routing.parse_routing_config(json.dumps({"schema_version": 1, "roles": roles}), path="<test>")
+        return routing.RoutingOptions(config=config, config_source="settings")
+
+    def release(self) -> str:
+        return json.loads((self.root / ".workflow-manager" / "installation.json").read_text())["workflow_version"]
+
+    def next_id(self) -> str:
+        self.ids += 1
+        return f"job{self.ids}"
+
+    def fake_launch(self, task, *, runtime_root, job_id, operator_home, cwd, timeout, model, effort, prompt=None,
+                    on_spawn=None, **rest):
+        self.launched.append({"task": task, "prompt": prompt, "cwd": cwd})
+        result = REAL_LAUNCH(
+            task, runtime_root=runtime_root, job_id=job_id, operator_home=operator_home, cwd=cwd, timeout=timeout,
+            on_spawn=on_spawn, model=model, effort=effort, prompt=prompt, binary_name=str(self.binary),
+            system_dir=self.system, real_home=self.real_home, run=self.controls(job_id))
+        if self.after is not None:
+            self.after(Path(cwd))
+        return result
+
+    def step(self, **kw):
+        if not self.recorded:
+            self.record()
+        kw.setdefault("timeout", 60)
+        kw.setdefault("routing", self.options)
+        return job.execute_step(self.target, identity=FAKE_IDENTITY, runtime=self.runtime, **kw)
+
+    def resume(self, target=None) -> list[dict]:
+        return job.resume(target or self.target, identity=FAKE_IDENTITY, runtime=self.runtime)
+
+    def abandon(self, job_id: str = "job1") -> dict:
+        return job.abandon(self.target, identity=FAKE_IDENTITY, runtime=self.runtime, job_id=job_id)
+
+    def records(self) -> list[dict]:
+        return [json.loads(path.read_text()) for path in sorted((self.runtime / "jobs").glob("*.json"))]
+
+    def only_record(self) -> dict:
+        (record,) = self.records()
+        return record
+
+    def clone(self) -> Path:
+        return codex_worker_sandbox.WorkerLayout(self.runtime, "job1").worktree
+
+    def kill_at(self, target: str, name: str, *, after: int = 0):
+        """Raise ``KeyboardInterrupt`` from ``target.name`` on its ``after``-th call (0 = the first): the Controller
+        process killed at that point; the record stays as the last write left it."""
+        real = getattr(target, name)
+        calls = []
+
+        def killer(*args, **kw):
+            calls.append(1)
+            if len(calls) > after:
+                raise KeyboardInterrupt
+            return real(*args, **kw)
+
+        return mock.patch.object(target, name, killer)
+
+    def managed_snapshot(self) -> tuple:
+        return ((self.root / STATE).read_bytes(), _git(self.root, "status", "--porcelain=v1", "-uall"),
+                _git(self.root, "for-each-ref"), _git(self.root, "rev-parse", "HEAD"))
+
+    def regenerate_as_the_operator(self, stage: str) -> None:
+        """The steps the gate names, run by the test acting as the operator in the managed repository; then the next
+        review's preconditions pass (D8, CP4's operator case)."""
+        entry = _entry(self.root)
+        done = subprocess.run(["./scripts/prepare-ai-review.sh", entry["base_commit"], stage, WID], cwd=self.root,
+                              capture_output=True, text=True, check=False, stdin=subprocess.DEVNULL,
+                              env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        kind = "plan" if stage == "plan" else "implementation"
+        fixtures.run_workflow_python(self.root, f"""
+entry = ws.json.loads((Path.cwd() / "docs/ai-workflow/WORKFLOW_STATE.json").read_text())["work_items"]["wi-1"]
+manifest = Path.cwd() / fingerprint.resolve_bundle_dir(Path.cwd(), "wi-1", stage={kind!r}) / "MANIFEST.md"
+fingerprint.assert_local_generation_matches(Path.cwd(), manifest)
+if {kind!r} == "plan":
+    ws.validate_local_plan_review_preconditions_bound(Path.cwd(), entry)
+else:
+    ws.validate_local_implementation_review_preconditions(entry)
+    ws.verify_implementation_review_bundle(Path.cwd(), "wi-1")
+""")
+
+    def evidence(self, record: dict) -> dict:
+        return record["reconciliation_evidence"]
+
+    def assert_carry_ended(self, record: dict, *, stage: str = "done", kept: bool = False) -> None:
+        self.assertEqual(record["codex_carry"]["stage"], stage)
+        self.assertEqual(self.clone().exists(), kept)
+
+
+class PlanCase(ApplyCase):
+    STAGE = "plan"
+    ROLE = routing.APPLY_PLAN_REVIEW
+
+    @classmethod
+    def prepare(cls) -> None:
+        fixtures.run_workflow_python(cls._built, REVISE)
+
+    def plan_work(self, clone: Path) -> None:
+        fixtures.run_workflow_python(clone, PLAN_WORK)
+
+    def worked(self) -> None:
+        self.script(message="applied")
+        self.after = self.plan_work
+
+
+class ImplCase(ApplyCase):
+    STAGE = "implementation"
+    ROLE = routing.APPLY_IMPLEMENTATION_REVIEW
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """The fixture's checkpoint commit carries the Workflow's trailer pair, so the repository verifies healthy."""
+        real = fixtures.commit_all
+
+        def commit_all(root, message, *args, **kw):
+            if message == "implemented":
+                message += "\n\nWorkflow-Checkpoint: CP1\nWorkflow-Work-Item: wi-1"
+            return real(root, message, *args, **kw)
+
+        with mock.patch.object(fixtures, "commit_all", commit_all):
+            super().setUpClass()
+
+    @classmethod
+    def prepare(cls) -> None:
+        """A manual-ingest ``REVISE``: the entry is written and left uncommitted (D4's case)."""
+        values = review_recorder.check(cls._built, "implementation", WID).values
+        verdict = cls._area / "verdict.md"
+        verdict.write_text(RecorderCase.compose(None, values, "REVISE"), encoding="utf-8")
+        fixtures.run_workflow_python(
+            cls._built, IN_PLACE.replace("    ws.commit_pending_applying_review_feedback_entry(root, \"wi-1\", "
+                                         "attribution=())\n", "    pass\n"),
+            "implementation", "REVISE", COMPLETED_AT, str(values["round"]), str(verdict))
+
+    def impl_work(self, clone: Path) -> None:
+        fixtures.run_workflow_python(clone, IMPL_WORK)
+
+    def worked(self) -> None:
+        self.script(message="applied")
+        self.after = self.impl_work
+
+
+GATE_STEPS_PLAN = "scripts/prepare-ai-review.sh {base} plan wi-1"
+GATE_STEPS_IMPL = "scripts/prepare-ai-review.sh {base} post-fix wi-1"
+
+
+class PlanRoleTest(PlanCase):
+    def test_a_routed_plan_apply_ends_at_the_regeneration_gate(self) -> None:
+        self.worked()
+        before = {rel: (self.root / rel).read_bytes() for rel in (f"{ITEM}/current/MANIFEST.md",)}
+        before_plan = (self.root / _entry(self.root)["plan_path"]).read_text()
+        record = self.step()
+        self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED, record.get("reconciliation_evidence"))
+        self.assertEqual(self.evidence(record)["code"], job.CARRY_BUNDLE_GATE_CODE)
+        self.assertEqual(self.evidence(record)["reconcile_class"], "invalid")
+        self.assertEqual(record["protocol"]["reconcile"]["class"], "invalid")
+        self.assertEqual(record["protocol_gate"]["code"], job.CARRY_BUNDLE_GATE_CODE)
+        self.assert_carry_ended(record)
+        self.assertEqual(_entry(self.root)["phase"], "AWAITING_LOCAL_PLAN_REVIEW")
+        self.assertEqual(_entry(self.root)["plan_revision"], 2)
+        self.assertNotEqual((self.root / _entry(self.root)["plan_path"]).read_text(), before_plan)
+        self.assertIn('"plan_revision": 2', (self.root / _entry(self.root)["registry_path"]).read_text())
+        self.assertIn("revision 2", (self.root / f"{ITEM}/plan-inputs/TEST_RESULTS.md").read_text())
+        # no generated bundle file was written by the job: the managed bundle is as it was
+        for rel, data in before.items():
+            self.assertEqual((self.root / rel).read_bytes(), data)
+        self.assertFalse((self.root / ITEM / "REJECTED").exists())
+        self.assertTrue(record["usage_record"])
+        self.assertIsNone(self.worker_reconciler.call_args)
+
+    def test_after_the_operator_regenerates_the_next_review_preconditions_pass(self) -> None:
+        self.worked()
+        record = self.step()
+        self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
+        advisory_before = _entry(self.root)["current_bundle_id"]
+        self.regenerate_as_the_operator("plan")
+        self.assertEqual(_entry(self.root)["current_bundle_id"], advisory_before)  # as the clone wrote it
+
+    def test_the_gate_message_names_the_plan_steps(self) -> None:
+        self.worked()
+        record = self.step()
+        gate = record["human_gate_pending"]
+        base = _entry(self.root)["base_commit"]
+        self.assertEqual(gate["phase"], "AWAITING_LOCAL_PLAN_REVIEW")
+        text = gate["what_is_required"]
+        self.assertIn(f"(1) run `{GATE_STEPS_PLAN.format(base=base)}`", text)
+        self.assertIn("(2) take the next step", text)
+        self.assertNotIn("git log -p", text)
+        self.assertTrue(text.startswith(job.CARRY_BUNDLE_GATE_CODE))
+
+    def test_a_gate_record_passes_validate_record_and_resume_never_reconciles_it(self) -> None:
+        self.worked()
+        record = self.step()
+        self.assertTrue(job.validate_record(record, managed_repo=self.target, identity=FAKE_IDENTITY).valid)
+        before = self.only_record()
+        (reported,) = self.resume()
+        self.assertEqual(reported["status"], job.STATUS_GATE_BLOCKED)
+        self.assertNotIn("reconciled_this_call", reported)
+        self.assertEqual(self.only_record(), before)
+
+    def test_a_worker_that_changed_nothing_is_the_no_progress_judgement(self) -> None:
+        self.script(message="nothing to do")
+        before = self.managed_snapshot()
+        record = self.step()
+        self.assertNotEqual(record["status"], job.STATUS_GATE_BLOCKED)
+        self.assertEqual(record["status"], job.STATUS_FINISHED)
+        self.assertEqual(record["protocol"]["progress"], "none")
+        self.assert_carry_ended(record)
+        self.assertEqual(self.managed_snapshot(), before)
+
+    def test_a_reconcile_answer_that_is_not_the_stale_bundle_is_the_resolutions_own_ending(self) -> None:
+        def work(clone: Path) -> None:
+            self.plan_work(clone)
+            (self.root / ITEM / "REJECTED").write_text("the generator's failure marker\n")  # a second reason
+
+        self.script(message="applied")
+        self.after = work
+        record = self.step()
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertEqual(self.evidence(record)["reason"], job.RECONCILE_INVALID_REASON)
+        codes = [reason["code"] for reason in self.evidence(record)["invalid_reasons"]]
+        self.assertIn("bundle_rejected", codes)
+        self.assert_carry_ended(record)
+
+    # -- the narrow check, one condition at a time ---------------------------
+
+    def done_record(self) -> tuple[dict, dict]:
+        """The ended gate record, and the ``FAILED`` fields the resolution gave before the gate (the synthetic answer
+        holds only ``plan_review_not_bound``, so each refusal below is by its own condition)."""
+        self.worked()
+        record = self.step()
+        phase = "AWAITING_LOCAL_PLAN_REVIEW"
+        fields = {"status": job.STATUS_FAILED, "observed_phase_after": phase, "reconciliation_evidence": {
+            "reason": job.RECONCILE_INVALID_REASON,
+            "invalid_reasons": [{"code": "plan_review_not_bound",
+                                 "text": f"{phase} with plan_review_publication_status BUNDLE_UNVERIFIED"}]}}
+        self.assertTrue(job._is_expected_stale_bundle(fields, record, self.root))
+        return record, fields
+
+    def refused(self, record: dict, fields: dict) -> None:
+        self.assertFalse(job._is_expected_stale_bundle(fields, record, self.root))
+
+    def test_condition_1_the_carry_is_done_after_every_member_was_written(self) -> None:
+        record, fields = self.done_record()
+        self.refused({**record, "codex_carry": {**record["codex_carry"], "stage": "out"}}, fields)
+        writes = {**record["codex_carry"]["writes"], "docs/ai-workflow/wi-1-PLAN.md": {"sha256": "0" * 64, "mode": 420}}
+        self.refused({**record, "codex_carry": {**record["codex_carry"], "writes": writes}}, fields)
+        self.refused({**record, "codex_carry": {**record["codex_carry"], "role": routing.APPLY_IMPLEMENTATION_REVIEW}},
+                     fields)
+
+    def test_condition_2_one_reason_with_exactly_the_stale_bundle_text(self) -> None:
+        record, fields = self.done_record()
+        evidence = fields["reconciliation_evidence"]
+        reasons = evidence["invalid_reasons"]
+        for changed in (
+            [*reasons, {"code": "illegal_edge", "text": "x"}],
+            [{"code": "plan_review_not_bound", "text": "AWAITING_LOCAL_PLAN_REVIEW with plan_review_publication_status "
+                                                       "CONTENT_DRIFTED"}],
+            [{"code": "plan_review_not_bound", "text": "raised: BUNDLE_UNVERIFIED while checking"}],
+            [{"code": "bundle_rejected", "text": reasons[0]["text"]}],
+            [],
+        ):
+            self.refused(record, {**fields, "reconciliation_evidence": {**evidence, "invalid_reasons": changed}})
+        self.refused(record, {**fields, "observed_phase_after": "REVISING_PLAN"})
+        self.refused(record, {**fields, "reconciliation_evidence": {**evidence, "reason": "worker_outcome"}})
+
+    def test_condition_3_the_managed_manifest_is_an_older_integer_revision(self) -> None:
+        record, fields = self.done_record()
+        manifest = self.root / ITEM / "current" / "MANIFEST.md"
+        original = manifest.read_text()
+        for text in (original.replace("plan_revision: 1", "plan_revision: 2"),
+                     original.replace("plan_revision: 1", "plan_revision: 3"),
+                     original.replace("plan_revision: 1", "plan_revision: one"),
+                     original.replace("plan_revision: 1\n", "")):
+            manifest.write_text(text)
+            self.refused(record, fields)
+        manifest.unlink()
+        self.refused(record, fields)
+        manifest.mkdir()
+        self.refused(record, fields)
+
+    def test_condition_4_no_rejected_marker_and_a_bound_binding_at_the_revision(self) -> None:
+        record, fields = self.done_record()
+        marker = self.root / ITEM / "REJECTED"
+        marker.symlink_to("nowhere")  # an entry of any kind; it is never opened
+        self.refused(record, fields)
+        marker.unlink()
+        state = json.loads((self.root / STATE).read_text())
+        binding = state["work_items"][WID]["plan_review_binding"]
+        for change in (lambda b: b.update(status="PUBLISHED"), lambda b: b["bound"].update(plan_revision=1),
+                       lambda b: b.pop("bound")):
+            changed = json.loads(json.dumps(state))
+            change(changed["work_items"][WID]["plan_review_binding"])
+            (self.root / STATE).write_text(json.dumps(changed))
+            self.refused(record, fields)
+        (self.root / STATE).write_text(json.dumps(state))
+        self.assertTrue(job._is_expected_stale_bundle(fields, record, self.root), binding)
+
+
+class ImplRoleTest(ImplCase):
+    def test_a_routed_implementation_apply_with_a_pending_entry_lands_over_the_carry_base_and_ends_at_the_gate(self) -> None:
+        pre_head = _git(self.root, "rev-parse", "HEAD").strip()
+        self.assertIn(STATE, _git(self.root, "status", "--porcelain"))  # the pending manual-ingest entry
+        manifest = (self.root / ITEM / "current" / "MANIFEST.md").read_bytes()
+        self.worked()
+        record = self.step()
+        self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED, record.get("reconciliation_evidence"))
+        self.assertEqual(self.evidence(record)["code"], job.CARRY_BUNDLE_GATE_CODE)
+        carry = record["codex_carry"]
+        base = carry["base_commit"]
+        self.assertNotEqual(base, pre_head)  # D4's commit is the carry base ...
+        self.assertEqual(carry["pre_step_head"], pre_head)
+        self.assertEqual(_git(self.root, "rev-parse", f"{base}^").strip(), pre_head)  # ... and the only commit D4 made
+        self.assertEqual(record["pre_state"]["target_head"], base)  # the baseline is re-captured at the carry base
+        self.assertEqual(Path(self.launched[0]["cwd"]), self.clone())  # launched once, from that commit: no retry
+        self.assertEqual(len(self.launched), 1)
+        head = _git(self.root, "rev-parse", "HEAD").strip()
+        self.assertEqual(_git(self.root, "rev-list", "--count", f"{base}..{head}").strip(), "2")  # landed over it
+        self.assertEqual(record["codex_worker"]["landing"]["outcome"], "landed")
+        self.assertEqual(_entry(self.root)["phase"], "AWAITING_LOCAL_IMPLEMENTATION_REVIEW")
+        self.assertEqual(_entry(self.root)["implementation_revision"], 2)
+        self.assert_carry_ended(record)
+        self.assertEqual(_git(self.root, "status", "--porcelain"), "")
+        # a carried-out member, and no generated bundle file written by the job
+        self.assertIn("implementation_revision: 2", (self.root / ITEM / "current" / "IMPLEMENTATION_SUMMARY.md").read_text())
+        self.assertEqual((self.root / ITEM / "current" / "MANIFEST.md").read_bytes(), manifest)
+        self.assertTrue(record["usage_record"])
+
+    def test_after_the_operator_reads_the_range_and_regenerates_the_next_review_preconditions_pass(self) -> None:
+        self.worked()
+        record = self.step()
+        self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
+        self.regenerate_as_the_operator("post-fix")
+
+    def test_the_gate_message_names_the_landed_range_before_the_steps(self) -> None:
+        self.worked()
+        record = self.step()
+        base, head = record["codex_carry"]["base_commit"], _git(self.root, "rev-parse", "HEAD").strip()
+        text = record["human_gate_pending"]["what_is_required"]
+        entry_base = _entry(self.root)["base_commit"]
+        self.assertIn(f"(1) read the landed range first: `git log -p {base}..{head}`", text)
+        self.assertIn(f"(2) run `{GATE_STEPS_IMPL.format(base=entry_base)}`", text)
+        self.assertIn("(3) take the next step", text)
+        self.assertEqual(self.evidence(record)["landed_head"], head)
+        self.assertEqual(record["human_gate_pending"]["phase"], "AWAITING_LOCAL_IMPLEMENTATION_REVIEW")
+
+    def test_a_usage_limit_with_no_change_is_interrupted_and_waits(self) -> None:
+        self.script(verdict="limit", limit_shape="string_full", message="partial")
+        record = self.step()
+        self.assertEqual(record["status"], job.STATUS_INTERRUPTED, record.get("reconciliation_evidence"))
+        self.assertIsNotNone(job.usage_limit_of(record))
+        self.assertEqual(record["pre_state"]["target_head"], record["codex_carry"]["base_commit"])
+
+    def test_a_worker_killed_before_its_end_is_recorded_ends_interrupted_on_resume(self) -> None:
+        self.script(message="applied")
+        with self.kill_at(job, "_with_worker_state"), self.assertRaises(KeyboardInterrupt):
+            self.step()
+        record = self.only_record()
+        self.assertEqual(record["status"], job.STATUS_LAUNCHED)
+        (resumed,) = self.resume()
+        self.assertEqual(resumed["status"], job.STATUS_INTERRUPTED, resumed.get("reconciliation_evidence"))
+        self.assertTrue(job.validate_record(resumed, managed_repo=self.target, identity=FAKE_IDENTITY).valid)
+
+    def test_a_kill_at_preparing_is_recovered_as_not_started_and_the_rerun_launches_from_the_kept_commit(self) -> None:
+        self.script(message="applied")
+        pre_head = _git(self.root, "rev-parse", "HEAD").strip()
+        with self.kill_at(codex_carry, "carry_in"), self.assertRaises(KeyboardInterrupt):
+            self.step()
+        killed = self.only_record()
+        self.assertEqual(killed["codex_carry"]["stage"], "preparing")
+        base = killed["codex_carry"]["base_commit"]
+        self.assertEqual(_git(self.root, "rev-parse", "HEAD").strip(), base)  # D4's commit stays
+        (resumed,) = self.resume()
+        self.assertNotEqual(resumed["status"], job.STATUS_LAUNCHED)
+        self.assertFalse(self.clone().exists())
+        self.assertEqual(_git(self.root, "rev-parse", "HEAD").strip(), base)
+        self.assertEqual(_git(self.root, "rev-list", "--count", f"{pre_head}..HEAD").strip(), "1")
+        self.worked()
+        again = self.step()  # a new job: its pre-step head is D4's commit, so commit_pending is a no-op
+        self.assertEqual(again["status"], job.STATUS_GATE_BLOCKED, again.get("reconciliation_evidence"))
+        self.assertEqual(again["codex_carry"]["pre_step_head"], base)
+        self.assertEqual(again["codex_carry"]["base_commit"], base)
+        self.assertEqual(_git(self.root, "rev-list", "--count", f"{pre_head}..{base}").strip(), "1")  # no second commit
+
+    def test_an_unrelated_branch_move_after_d4_still_refuses(self) -> None:
+        self.script(message="applied")
+        real = codex_carry.carry_in
+
+        def moved(managed, layout, carry_set, block, **kw):
+            subprocess.run(["git", "-c", "user.name=Other", "-c", "user.email=other@example.invalid", "commit",
+                            "--allow-empty", "-m", "someone else"], cwd=self.root, check=True, capture_output=True)
+            return real(managed, layout, carry_set, block, **kw)
+
+        with mock.patch.object(codex_carry, "carry_in", moved):
+            record = self.step()
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertEqual(self.evidence(record)["code"], job.WORKER_NOT_STARTED_CODE)
+        self.assertIn("managed_branch_moved", json.dumps(self.evidence(record)))
+        self.assertEqual(self.launched, [])
+        self.assertFalse(self.clone().exists())
+
+    def test_a_refused_landing_carries_nothing_out_and_keeps_the_clone(self) -> None:
+        self.worked()
+        refused = mock.Mock()
+        refused.outcome = "refused"
+        refused.to_block = lambda clone_kept: {"cause": "landing_refused", "clone_kept": clone_kept, "commits": []}
+        with mock.patch.object(job, "CODEX_LANDER", lambda *a, **k: refused):
+            before = (self.root / ITEM / "current" / "IMPLEMENTATION_SUMMARY.md").read_bytes()
+            record = self.step()
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertEqual(self.evidence(record)["code"], job.CODEX_LANDING_REFUSED_CODE)
+        self.assertNotEqual(record["codex_carry"]["stage"], "done")
+        self.assertTrue(self.clone().exists())
+        self.assertEqual((self.root / ITEM / "current" / "IMPLEMENTATION_SUMMARY.md").read_bytes(), before)
+
+    def test_the_apply_branch_is_taken_before_the_review_and_worker_branches(self) -> None:
+        self.worked()
+        with mock.patch.object(job, "_run_codex_review", side_effect=AssertionError("review branch")), \
+                mock.patch.object(job, "_is_codex_review_route", side_effect=AssertionError("review branch asked")):
+            record = self.step()
+        self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
+        self.assertTrue(job._is_codex_carry_record(record))
+        self.assertFalse(job._is_codex_worker_record(record))
+
+    def test_the_usage_gate_is_asked_with_the_codex_provider_on_the_single_route_and_the_chain(self) -> None:
+        for roles in (
+            {self.ROLE: self.entry()},
+            {self.ROLE: self.entry(fallback=[self.entry(), {"harness": "claude-code", "model": "opus"}])},
+        ):
+            self.setUp()
+            self.options = self.routing_for(roles)
+            self.worked()
+            gate = mock.Mock(return_value="token-1")
+            with mock.patch.object(job.usage, "bind_job"), \
+                    mock.patch.object(job, "_usage_start_block", return_value={"token": "token-1"}), \
+                    mock.patch.object(job, "_usage_account", side_effect=lambda _root, record, **_kw: record):
+                record = self.step(usage_gate=gate)
+            gate.assert_called_once()
+            self.assertEqual(gate.call_args.kwargs, {"provider": "codex"})
+            self.assertEqual(record["usage"]["token"], "token-1")
+            self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
+
+
+def _in_clone(path: Path, rel: str) -> Path:
+    return path / rel
+
+
+class PlanEndingsTest(PlanCase):
+    """D8's table, one test per ending of the carry that is not the gate."""
+
+    def refused_at_carry_out(self, work, cause: str) -> dict:
+        self.script(message="applied")
+        self.after = work
+        before = self.managed_snapshot()
+        before_files = {rel: (self.root / rel).read_bytes() for rel in (
+            _entry(self.root)["plan_path"], _entry(self.root)["registry_path"])}
+        record = self.step()
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        evidence = self.evidence(record)
+        self.assertEqual((evidence["code"], evidence["cause"]), (job.CODEX_CARRY_REFUSED_CODE, cause))
+        self.assertEqual(self.managed_snapshot(), before)  # nothing written to the managed repository
+        for rel, data in before_files.items():
+            self.assertEqual((self.root / rel).read_bytes(), data)
+        self.assertTrue(self.clone().exists())  # the clone is kept ...
+        self.assertEqual(evidence["clone"], str(self.clone()))  # ... and named
+        self.assertNotEqual(record["codex_carry"]["stage"], "done")
+        return record
+
+    def test_carry_foreign_dirt_at_carry_in_is_worker_not_started_with_no_codex_and_no_clone(self) -> None:
+        self.script(message="applied")
+        (self.root / "README.md").write_text("changed by someone else\n")
+        record = self.step()
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertEqual(self.evidence(record)["code"], job.WORKER_NOT_STARTED_CODE)
+        self.assertIn("carry_foreign_dirt", json.dumps(self.evidence(record)))
+        self.assertEqual(self.launched, [])
+        self.assertFalse(self.clone().exists())
+
+    def test_carry_member_refused_at_carry_in_is_worker_not_started(self) -> None:
+        self.script(message="applied")
+        (self.root / ITEM / "feedback" / "auth.json").write_text("{}")  # a credential-shaped name
+        record = self.step()
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertEqual(self.evidence(record)["code"], job.WORKER_NOT_STARTED_CODE)
+        self.assertIn("carry_member_refused", json.dumps(self.evidence(record)))
+        self.assertEqual(self.launched, [])
+        self.assertFalse(self.clone().exists())
+
+    def test_carry_out_of_set(self) -> None:
+        def work(clone: Path) -> None:
+            self.plan_work(clone)
+            (clone / "stray.txt").write_text("outside the set\n")
+
+        self.refused_at_carry_out(work, "carry_out_of_set")
+
+    def test_carry_state_foreign(self) -> None:
+        def work(clone: Path) -> None:
+            self.plan_work(clone)
+            path = clone / STATE
+            document = json.loads(path.read_text())
+            document["a_new_top_level_key"] = 1
+            path.write_text(json.dumps(document, indent=2) + "\n")
+
+        self.refused_at_carry_out(work, "carry_state_foreign")
+
+    def test_carry_unexpected_commit(self) -> None:
+        def work(clone: Path) -> None:
+            self.plan_work(clone)
+            subprocess.run(["git", "-c", "user.name=W", "-c", "user.email=w@example.invalid", "commit",
+                            "--allow-empty", "-m", "a commit the plan role must not make"], cwd=clone, check=True,
+                           capture_output=True)
+
+        self.refused_at_carry_out(work, "carry_unexpected_commit")
+
+    def test_clone_git_changed(self) -> None:
+        def work(clone: Path) -> None:
+            self.plan_work(clone)
+            hooks = clone / ".git" / "hooks"
+            hooks.mkdir(exist_ok=True)
+            (hooks / "post-merge").write_text("#!/bin/sh\necho owned\n")
+
+        self.refused_at_carry_out(work, "clone_git_changed")
+
+    def test_carry_index_changed(self) -> None:
+        def work(clone: Path) -> None:
+            self.plan_work(clone)
+            subprocess.run(["git", "add", "-N", "extra-intent.txt"], cwd=clone, capture_output=True)
+            (clone / "extra-intent.txt").write_text("x\n")
+            subprocess.run(["git", "add", "-N", "extra-intent.txt"], cwd=clone, check=True, capture_output=True)
+
+        self.refused_at_carry_out(work, "carry_index_changed")
+
+    def test_carry_member_refused_at_carry_out(self) -> None:
+        def work(clone: Path) -> None:
+            self.plan_work(clone)
+            member = clone / ITEM / "plan-inputs" / "REVIEW_REQUEST.md"
+            member.unlink()
+            os.symlink("/etc/passwd", member)
+
+        self.refused_at_carry_out(work, "carry_member_refused")
+
+    def test_carry_managed_changed(self) -> None:
+        def work(clone: Path) -> None:
+            self.plan_work(clone)
+            plan = self.root / _entry(self.root)["plan_path"]
+            plan.write_text(plan.read_text() + "someone else edited this meanwhile\n")
+
+        self.script(message="applied")
+        self.after = work
+        record = self.step()
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertEqual(self.evidence(record)["cause"], "carry_managed_changed")
+        self.assertTrue(self.clone().exists())
+
+    def test_carry_clone_gone_names_the_members_not_yet_written(self) -> None:
+        def work(clone: Path) -> None:
+            self.plan_work(clone)
+            shutil.rmtree(clone)
+
+        self.script(message="applied")
+        self.after = work
+        record = self.step()
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertEqual(self.evidence(record)["cause"], "carry_clone_gone")
+        self.assertIn("not_written", self.evidence(record)["codex_carry"])
+
+    def test_a_worker_failure_keeps_the_launchers_subtype_and_the_clone(self) -> None:
+        self.script(exit=3, message="partial")
+        record = self.step()
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertEqual(record["worker_outcome"], "FAILURE")
+        self.assertEqual(record["worker"]["subtype"], "non_zero_exit")
+        self.assertTrue(self.clone().exists())
+        self.assertNotEqual(record["codex_carry"]["stage"], "done")
+
+    def test_a_usage_limit_keeps_its_fact_and_is_interrupted_for_the_wait_path(self) -> None:
+        self.script(verdict="limit", limit_shape="string_full", message="partial")
+        record = self.step()
+        self.assertEqual(record["status"], job.STATUS_INTERRUPTED, record.get("reconciliation_evidence"))
+        self.assertIsNotNone(job.usage_limit_of(record))
+        self.assertEqual(record["pre_state"]["target_head"], record["codex_carry"]["base_commit"])
+
+    def test_a_sandbox_breach_is_failed_and_keeps_the_clone(self) -> None:
+        self.script(message="applied", git=[["init", "-q", "sub"]])  # a nested repository: the Codex scan's breach
+        record = self.step()
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertEqual(record["worker"]["subtype"], cw.SUBTYPE_BREACH)
+        self.assertTrue(self.clone().exists())
+
+    def test_an_exception_after_the_spawn_is_failed_naming_it_with_the_stage_and_keeps_the_clone(self) -> None:
+        def work(clone: Path) -> None:
+            self.plan_work(clone)
+            raise RuntimeError("the harness fell over")
+
+        self.script(message="applied")
+        self.after = work
+        with self.assertRaises(RuntimeError):
+            self.step()
+        record = self.only_record()
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        found = self.evidence(record)
+        self.assertEqual(found["code"], "RuntimeError")
+        self.assertEqual(found["codex_carry"]["stage"], "carried_in")
+        self.assertIn("not_written", found["codex_carry"])
+        self.assertTrue(self.clone().exists())
+
+
+STAGES = ("preparing", "carried_in", "carried_in_with_worker", "worker_ran", "out", "done")
+WORKER_RAN = {"preparing": False, "carried_in": False, "carried_in_with_worker": True, "worker_ran": True,
+              "out": True, "done": True}
+#: The stages whose clone is still on disk when the Controller is killed: the clone is removed once the carry is done.
+CLONE_KEPT = {"preparing": False, "carried_in": False, "carried_in_with_worker": True, "worker_ran": True,
+              "out": True, "done": False}
+
+
+class RecoveryTest(PlanCase):
+    """D9: every recovery site, for each stage of the block."""
+
+    def kill_a_managed_write(self):
+        """The Controller killed after the first member of the carry out was written (the carry in writes the clone
+        through the same primitive, which is let through)."""
+        real = runtime_module.write_carried_file
+        written = []
+
+        def write(root, rel, data, **kw):
+            if Path(root) == self.root:
+                if written:
+                    raise KeyboardInterrupt
+                written.append(rel)
+            return real(root, rel, data, **kw)
+
+        return mock.patch.object(runtime_module, "write_carried_file", write)
+
+    def killed_at(self, stage: str) -> dict:
+        """Run the step and kill the Controller at ``stage``; returns the record the kill left."""
+        self.script(message="applied")
+        self.after = self.plan_work
+        kills = {
+            "preparing": lambda: self.kill_at(codex_carry, "carry_in"),
+            "carried_in": lambda: self.kill_at(job.codex_worker_job, "launch_options"),
+            "worker_ran": lambda: self.kill_at(job, "_complete_codex_carry"),
+            "out": self.kill_a_managed_write,
+            "done": lambda: self.kill_at(job, "_carry_resolution"),
+        }
+        if stage == "carried_in_with_worker":
+            def work(clone: Path) -> None:
+                self.plan_work(clone)
+                raise KeyboardInterrupt
+
+            self.after = work
+            context = contextlib.nullcontext()
+        else:
+            context = kills[stage]()
+        with context, self.assertRaises(KeyboardInterrupt):
+            self.step()
+        record = self.only_record()
+        self.assertEqual(record["status"], job.STATUS_LAUNCHED if stage not in ("worker_ran", "out", "done")
+                         else record["status"])
+        self.assertEqual(record["codex_carry"]["stage"], "carried_in" if stage == "carried_in_with_worker"
+                         else stage)
+        return record
+
+    def test_resume_recovers_each_stage(self) -> None:
+        for stage in STAGES:
+            with self.subTest(stage=stage):
+                self.setUp()
+                shutil.rmtree(self.runtime / "jobs", ignore_errors=True)
+                shutil.rmtree(self.runtime / "worker", ignore_errors=True)
+                self.killed_at(stage)
+                before = _entry(self.root)
+                (resumed,) = self.resume()
+                self.assertNotEqual(resumed["status"], job.STATUS_LAUNCHED)
+                self.assertFalse(self.clone().exists())
+                if WORKER_RAN[stage]:
+                    # the carry out ran (or finished) from the kept clone: the gate of the ordinary ending
+                    self.assertEqual(resumed["status"], job.STATUS_GATE_BLOCKED, resumed.get("reconciliation_evidence"))
+                    self.assertEqual(resumed["codex_carry"]["stage"], "done")
+                    self.assertEqual(_entry(self.root)["plan_revision"], 2)
+                else:
+                    # nothing ran: the clone is removed and nothing is written
+                    self.assertEqual(_entry(self.root), before)
+                    self.assertEqual(_entry(self.root)["plan_revision"], 1)
+                self.assertTrue(job.validate_record(resumed, managed_repo=self.target, identity=FAKE_IDENTITY).valid)
+
+    def test_abandon_ends_each_stage_without_carrying_out(self) -> None:
+        for stage in STAGES:
+            with self.subTest(stage=stage):
+                self.setUp()
+                shutil.rmtree(self.runtime / "jobs", ignore_errors=True)
+                shutil.rmtree(self.runtime / "worker", ignore_errors=True)
+                self.killed_at(stage)
+                before = self.managed_snapshot()
+                before_state = _entry(self.root)
+                ended = self.abandon()
+                self.assertEqual(ended["status"], job.STATUS_FAILED)
+                self.assertEqual(self.clone().exists(), CLONE_KEPT[stage])  # kept only when the worker ran
+                if stage != "out":
+                    self.assertEqual(self.managed_snapshot(), before)
+                    self.assertEqual(_entry(self.root), before_state)
+                else:  # members written before the kill stay; nothing more is written
+                    self.assertEqual(_entry(self.root), before_state)
+
+    def drifted(self):
+        (self.root / "scripts" / "workflow_state.py").write_text(
+            "# changed after the job was decided\n" + (self.root / "scripts" / "workflow_state.py").read_text())
+        stub = fixtures.write_stub_workflow_manager(self.tmp / "drifted-manager", release=self.release(),
+                                                    verify_exit=1)
+        target = managed_repo.inspect_for_resume(self.root, manager_bin=str(stub))
+        self.assertIsNotNone(target.drift)
+        return target
+
+    def test_a_drifted_release_ends_each_stage_without_carrying_out(self) -> None:
+        for stage in STAGES:
+            with self.subTest(stage=stage):
+                self.setUp()
+                shutil.rmtree(self.runtime / "jobs", ignore_errors=True)
+                shutil.rmtree(self.runtime / "worker", ignore_errors=True)
+                self.killed_at(stage)
+                before_state = _entry(self.root)
+                (ended,) = self.resume(self.drifted())
+                self.assertEqual(ended["status"], job.STATUS_FAILED)
+                self.assertEqual(ended["reconciliation_evidence"]["reason"], job.WORKFLOW_RELEASE_CHANGED_REASON)
+                self.assertEqual(self.clone().exists(), CLONE_KEPT[stage])
+                self.assertEqual(_entry(self.root), before_state)
+
+    def test_a_carry_record_never_reaches_the_worker_reconciler(self) -> None:
+        self.killed_at("worker_ran")
+        self.resume()
+        self.worker_reconciler.assert_not_called()
+
+
+class ImplRecoveryTest(ImplCase):
+    """D9 for the implementation role: the landing is the record's own, and decides first."""
+
+    def kill_a_managed_member_write(self):
+        real = runtime_module.write_carried_file
+        seen = []
+
+        def write(root, rel, data, **kw):
+            if Path(root) == self.root:
+                seen.append(rel)
+                raise KeyboardInterrupt
+            return real(root, rel, data, **kw)
+
+        return mock.patch.object(runtime_module, "write_carried_file", write)
+
+    def killed_after_the_landing(self) -> tuple[dict, str]:
+        self.worked()
+        with self.kill_a_managed_member_write(), self.assertRaises(KeyboardInterrupt):
+            self.step()
+        record = self.only_record()
+        self.assertEqual(record["codex_carry"]["stage"], "out")
+        self.assertEqual(record["codex_worker"]["landing"]["outcome"], "landed")
+        return record, _git(self.root, "rev-parse", "HEAD").strip()
+
+    def test_resume_after_the_landing_finishes_the_carry_out_and_lands_nothing_twice(self) -> None:
+        record, head = self.killed_after_the_landing()
+        (resumed,) = self.resume()
+        self.assertEqual(resumed["status"], job.STATUS_GATE_BLOCKED, resumed.get("reconciliation_evidence"))
+        self.assertEqual(_git(self.root, "rev-parse", "HEAD").strip(), head)
+        self.assertIn("implementation_revision: 2", (self.root / ITEM / "current" / "IMPLEMENTATION_SUMMARY.md").read_text())
+        self.assertFalse(self.clone().exists())
+
+    def test_resume_before_the_landing_lands_then_carries_out(self) -> None:
+        self.worked()
+        with self.kill_at(job, "_complete_codex_carry"), self.assertRaises(KeyboardInterrupt):
+            self.step()
+        record = self.only_record()
+        self.assertEqual(record["codex_carry"]["stage"], "worker_ran")
+        base = record["codex_carry"]["base_commit"]
+        self.assertEqual(_git(self.root, "rev-parse", "HEAD").strip(), base)
+        (resumed,) = self.resume()
+        self.assertEqual(resumed["status"], job.STATUS_GATE_BLOCKED, resumed.get("reconciliation_evidence"))
+        self.assertEqual(_git(self.root, "rev-list", "--count", f"{base}..HEAD").strip(), "2")
+        self.assertEqual(resumed["codex_worker"]["landing"]["outcome"], "landed")
+
+    def test_abandon_after_the_landing_carries_nothing_out_and_keeps_the_clone(self) -> None:
+        record, head = self.killed_after_the_landing()
+        before = (self.root / ITEM / "current" / "IMPLEMENTATION_SUMMARY.md").read_bytes()
+        ended = self.abandon()
+        self.assertEqual(ended["status"], job.STATUS_FAILED)
+        self.assertEqual(_git(self.root, "rev-parse", "HEAD").strip(), head)
+        self.assertEqual((self.root / ITEM / "current" / "IMPLEMENTATION_SUMMARY.md").read_bytes(), before)
+        self.assertTrue(self.clone().exists())
+
+    def test_abandon_before_the_landing_lands_nothing_and_keeps_the_clone(self) -> None:
+        self.worked()
+        with self.kill_at(job, "_complete_codex_carry"), self.assertRaises(KeyboardInterrupt):
+            self.step()
+        base = self.only_record()["codex_carry"]["base_commit"]
+        ended = self.abandon()
+        self.assertEqual(ended["status"], job.STATUS_FAILED)
+        self.assertEqual(_git(self.root, "rev-parse", "HEAD").strip(), base)
+        self.assertTrue(self.clone().exists())
+
+    def test_a_drifted_release_after_the_landing_carries_nothing_out_and_keeps_the_clone(self) -> None:
+        record, head = self.killed_after_the_landing()
+        state = (self.root / "scripts" / "workflow_state.py")
+        state.write_text("# changed after the job was decided\n" + state.read_text())
+        stub = fixtures.write_stub_workflow_manager(self.tmp / "drifted-manager", release=self.release(), verify_exit=1)
+        target = managed_repo.inspect_for_resume(self.root, manager_bin=str(stub))
+        (ended,) = self.resume(target)
+        self.assertEqual(ended["status"], job.STATUS_FAILED)
+        self.assertEqual(ended["reconciliation_evidence"]["reason"], job.WORKFLOW_RELEASE_CHANGED_REASON)
+        self.assertEqual(_git(self.root, "rev-parse", "HEAD").strip(), head)
+        self.assertTrue(self.clone().exists())
+
+
+class RouteTest(unittest.TestCase):
+    def test_the_apply_branch_is_keyed_on_the_roles_and_the_harness(self) -> None:
+        def route(role: str, harness_name: str) -> routing.ResolvedRoute:
+            return mock.Mock(role=role, harness=harness_name)
+
+        for role in routing.LOCAL_APPLY_ROLES:
+            self.assertTrue(job._is_codex_apply_route(route(role, "codex")))
+            self.assertFalse(job._is_codex_apply_route(route(role, "claude-code")))
+        for role in (routing.REVIEW_PLAN, routing.REVIEW_IMPLEMENTATION):
+            self.assertFalse(job._is_codex_apply_route(route(role, "codex")))
+
+    def test_the_gate_cause_is_not_a_refusal_cause(self) -> None:
+        self.assertNotIn(job.CARRY_BUNDLE_GATE_CODE, codex_carry.CAUSES)
+
+
+if __name__ == "__main__":
+    unittest.main()

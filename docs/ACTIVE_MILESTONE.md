@@ -3,7 +3,7 @@
 ## Status
 
 **In progress.** `workflow-controller-h4e3` (H4e3, issue [#334](https://github.com/RodrigoFAbreu/workflow-controller/issues/334)):
-plan `docs/ai-workflow/CONTROLLER_H4E3_PLAN.md` (revision 9), five checkpoints. It routes `apply-plan-review` and
+plan `docs/ai-workflow/CONTROLLER_H4E3_PLAN.md` (revision 12), five checkpoints. It routes `apply-plan-review` and
 `apply-implementation-review` to Codex through a bounded carry of the uncommitted working set, and stops after the landing
 (the Controller never runs the managed repository's generator; that is H4e3b). CP1 is complete: `harness.LOCAL_APPLIER` is the
 adapter role of the two apply roles (`routing.ADAPTER_ROLE`, `routing.LOCAL_APPLY_ROLES`), both adapters declare it,
@@ -22,6 +22,8 @@ is not written yet, so a Codex route for an apply role still reaches the plain C
 CP5. Verified with the narrow modules of the plan's CP2 list (`tests.test_codex_carry`, `tests.test_codex_worker_tree`,
 `tests.test_review_recorder`, `tests.test_package_structure`, `tests.test_write_containment`), including a run of the
 Workflow's own plan-stage generator and verifier in a carried plan clone.
+Revision 12 (the plan amendment for D8's gate endings, CP3 to CP5) left D3 to D7 unchanged, so CP2 was revalidated rather than
+reworked: the same five modules pass (158 tests) on a clean export of the checkpoint's commit.
 
 ## Previous milestone (H4e2b)
 

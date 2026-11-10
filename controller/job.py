@@ -3196,6 +3196,12 @@ def _is_codex_worker_record(record: Mapping) -> bool:
             and isinstance(record.get("codex_worker"), Mapping))
 
 
+def _is_codex_owned_record(record: Mapping) -> bool:
+    """A record whose process is a Codex one -- a Codex worker or a routed Codex review. `resume` ends such an
+    orphan and never follows it (H4c2, D7), so process handling tests this, not :func:`_is_codex_worker_record`."""
+    return _is_codex_worker_record(record) or _is_codex_review_record(record)
+
+
 def _is_codex_review_record(record: Mapping) -> bool:
     """A routed Codex review's record (workflow-controller-h4e2b, D4): a protocol job record carrying the
     ``codex_review`` block that :func:`_run_codex_review` persists. The block, never the adapter's name, identifies
@@ -4508,7 +4514,7 @@ def _supervise_records(managed_repo: Any, *, identity: Any, runtime_root: Path,
     actually re-attached to."""
     for path in _job_file_paths(runtime_root):
         candidate = _supervision_candidate(path, managed_repo, identity)
-        if candidate is not None and not _is_codex_worker_record(candidate):
+        if candidate is not None and not _is_codex_owned_record(candidate):
             _supervise_record(managed_repo, identity=identity, runtime_root=runtime_root, path=path,
                               drain_detach_seconds=drain_detach_seconds)
 
@@ -4832,7 +4838,7 @@ def _abandon_supervision(managed_repo: Any, *, identity: Any, runtime_root: Path
         record = _supervision_candidate(path, managed_repo, identity, valid=False)
         if record is None:
             return
-        codex = _is_codex_worker_record(record)
+        codex = _is_codex_owned_record(record)
         worker_process = record.get("worker_process")
         if worker_process is not None:
             assessment = worker.assess_worker_liveness(worker_process if isinstance(worker_process, Mapping) else {})
@@ -5038,7 +5044,7 @@ def _abandon_mark_failed(managed_repo: Any, *, identity: Any, runtime_root: Path
             # `resume` refuses this record (its root is gone) and ends nothing, so a Codex record is
             # never sent there: the by-hand end, then this command (H4c2, D7).
             guidance = (_active_guidance(job_id, assessment, root, then=_abandon_command(job_id, root))
-                        if _is_codex_worker_record(record)
+                        if _is_codex_owned_record(record)
                         else f"{_active_guidance(job_id, assessment, root)} Follow it: "
                              f"`{follow_command(runtime_root, root)}`")
             raise LifecycleWorkerActiveError(

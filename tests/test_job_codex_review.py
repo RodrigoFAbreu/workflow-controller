@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import os
 import shutil
 import sys
 import time
@@ -29,6 +30,10 @@ from tests import fixtures  # noqa: E402
 from tests.test_codex_review_role import ARMOUR, RoleCase, message  # noqa: E402
 from tests.test_job import FAKE_IDENTITY  # noqa: E402
 from tests.test_review_recorder import FEEDBACK, STATE, WID  # noqa: E402
+
+#: The fake process group of a "live" review in these tests. Never 1: ``os.killpg(1, sig)`` is ``kill(-1, sig)`` and ends
+#: the whole desktop session. Every test that can reach a signal also replaces ``os.killpg`` and ``os.kill``.
+FAKE_GROUP = 424242
 
 REAL_LAUNCH = cw.launch_codex_worker
 REAL_RECORD = review_recorder.record
@@ -492,6 +497,33 @@ class RecoveryTests:
         job._persist(self.runtime, record["job_id"], broken, event="test")
         with self.assertRaises(crr.CodexReviewRecoveryError):
             self.resumed()
+
+    def active(self):
+        return worker.LivenessAssessment(verdict=worker.ACTIVE, row="same_boot", reason="test", process=None,
+                                         recorded={"pid": FAKE_GROUP, "pgid": FAKE_GROUP}, current={})
+
+    def test_resume_phase_one_never_re_attaches_to_a_review_whose_process_is_alive(self) -> None:
+        record = self.interrupt_at("preparing")
+        job._persist(self.runtime, record["job_id"], {**record, "worker_process": {"pid": FAKE_GROUP, "pgid": FAKE_GROUP}},
+                     event="test")
+        with mock.patch.object(worker, "assess_worker_liveness", return_value=self.active()), \
+                mock.patch.object(worker, "reattach", side_effect=AssertionError("re-attached")) as reattach, \
+                mock.patch.object(os, "killpg") as killpg, mock.patch.object(os, "kill") as kill:
+            self.resumed()
+        reattach.assert_not_called()
+        self.assertNotIn(1, [call.args[0] for call in killpg.call_args_list])   # killpg(1, ...) ends the session
+        self.assertNotIn(1, [call.args[0] for call in kill.call_args_list])
+
+    def test_abandon_of_a_review_whose_process_is_alive_gives_the_codex_guidance(self) -> None:
+        record = self.interrupt_at("preparing")
+        job._persist(self.runtime, record["job_id"], {**record, "worker_process": {"pid": FAKE_GROUP, "pgid": FAKE_GROUP}},
+                     event="test")
+        with mock.patch.object(worker, "assess_worker_liveness", return_value=self.active()), \
+                mock.patch.object(os, "killpg"), mock.patch.object(os, "kill"):
+            with self.assertRaises(job.LifecycleWorkerActiveError) as raised:
+                job.abandon(self.target, identity=FAKE_IDENTITY, runtime=self.runtime, job_id=record["job_id"])
+        self.assertIn("ends a Codex worker", str(raised.exception))
+        self.assertNotIn("Follow it", str(raised.exception))
 
     # -- abandon ---------------------------------------------------------------
 

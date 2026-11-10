@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from controller import harness, worker, worker_launch
+from controller import codex_worker, harness, worker, worker_launch
 from controller.errors import HarnessRoleError
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -65,9 +65,32 @@ class ClaudeCodeLauncherTest(unittest.TestCase):
 
 
 class RegistryTest(unittest.TestCase):
-    def test_launchers_are_exactly_the_worker_role_adapters(self) -> None:
-        workers = {a.name for a in harness.ADAPTERS.values() if harness.WORKER in a.roles}
-        self.assertEqual(set(worker_launch.LAUNCHERS), workers)
+    def test_launchers_are_exactly_the_launchable_roles_each_adapter_declares(self) -> None:
+        # One entry per (adapter, role) for the worker and local-reviewer roles; codex only reviews locally.
+        declared = {(a.name, role) for a in harness.ADAPTERS.values()
+                    for role in (harness.WORKER, harness.LOCAL_REVIEWER) if role in a.roles}
+        self.assertEqual(set(worker_launch.LAUNCHERS), declared)
+        self.assertEqual(declared, {("claude-code", "worker"), ("claude-code", "local-reviewer"),
+                                    ("codex", "local-reviewer")})
+
+    def test_codex_reaches_a_launcher_for_the_local_review_roles_only(self) -> None:
+        launcher = worker_launch.for_harness("codex", harness.LOCAL_REVIEWER)
+        self.assertIsInstance(launcher, worker_launch.CodexReviewLauncher)
+        self.assertIsInstance(launcher, codex_worker.CodexLauncher)
+        self.assertIsNot(worker_launch.for_harness("claude-code", harness.LOCAL_REVIEWER),
+                         worker_launch.for_harness("claude-code"))
+        for role in (harness.WORKER, harness.REVIEWER, harness.FUNCTIONAL_TESTER):
+            with self.subTest(role=role), self.assertRaises(HarnessRoleError):
+                worker_launch.for_harness("codex", role)
+
+    def test_the_review_launcher_never_spawns(self) -> None:
+        with self.assertRaises(RuntimeError):
+            worker_launch.for_harness("codex", harness.LOCAL_REVIEWER).launch("/review-plan")
+
+    def test_a_declared_role_with_no_entry_is_refused(self) -> None:
+        with mock.patch.object(worker_launch, "LAUNCHERS", {("claude-code", harness.WORKER): object()}):
+            with self.assertRaises(HarnessRoleError):
+                worker_launch.for_harness("claude-code", harness.LOCAL_REVIEWER)
 
     def test_the_adapter_name_and_its_reviewer_alias_resolve_alike(self) -> None:
         self.assertIs(worker_launch.for_harness("claude-code"), worker_launch.for_harness("claude"))
@@ -103,7 +126,7 @@ class SeamTest(unittest.TestCase):
         step = _function(self.tree, "_execute_step_locked")
         resolved = gate = forwarded = None
         for node in ast.walk(step):
-            if isinstance(node, ast.Assign) and ast.unparse(node.value) == "worker_launch.for_harness(route.harness)":
+            if isinstance(node, ast.Assign) and ast.unparse(node.value) == "worker_launch.for_harness(route.harness, _adapter_role(route))":
                 resolved = node.lineno
             if isinstance(node, ast.Call) and ast.unparse(node.func) == "usage_gate":
                 gate = node.lineno
@@ -116,10 +139,10 @@ class SeamTest(unittest.TestCase):
 
 
 class ImportDisciplineTest(unittest.TestCase):
-    def test_worker_launch_imports_only_harness_worker_and_errors(self) -> None:
+    def test_worker_launch_imports_only_harness_worker_codex_worker_and_errors(self) -> None:
         self.assertEqual(
             _package_imports(ROOT / "controller" / "worker_launch.py"),
-            {"controller.harness", "controller.worker", "controller.errors"},
+            {"controller.harness", "controller.worker", "controller.errors", "controller.codex_worker"},
         )
 
     def test_harness_and_worker_do_not_import_it(self) -> None:

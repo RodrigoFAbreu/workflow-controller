@@ -322,7 +322,7 @@ class HarnessFieldTest(unittest.TestCase):
         accepted = {name: sorted(role for role in routing.ROLES
                                  if routing.ADAPTER_ROLE[role] in adapter.roles)
                     for name, adapter in harness.ADAPTERS.items()}
-        self.assertEqual(accepted, {"claude-code": sorted(routing.ROLES), "codex": ["functional-tester"]})
+        self.assertEqual(accepted, {"claude-code": sorted(routing.ROLES), "codex": ["functional-tester", "review-implementation", "review-plan"]})
         for role in routing.ROLES:
             self.assertEqual(routing.check_role_harness(role, "claude-code"), "claude-code")
 
@@ -341,27 +341,30 @@ class HarnessFieldTest(unittest.TestCase):
             {"harness": "codex"})
 
     def test_the_other_roles_still_refuse_codex(self) -> None:
-        for role in ("review-plan", "milestone-implement"):
+        for role in ("milestone-plan", "milestone-implement"):
             with self.subTest(role=role), self.assertRaises(ValueError):
                 routing.parse_role_harness(f"{role}=codex")
 
     def test_adapter_role_maps_every_routing_role_to_a_declared_one(self) -> None:
         self.assertEqual(set(routing.ADAPTER_ROLE), set(routing.ROLES))
         self.assertEqual(routing.ADAPTER_ROLE["functional-tester"], harness.FUNCTIONAL_TESTER)
-        for role in routing.ROLES - {"functional-tester"}:
+        for role in routing.LOCAL_REVIEW_ROLES:
+            self.assertEqual(routing.ADAPTER_ROLE[role], harness.LOCAL_REVIEWER)
+        self.assertEqual(set(routing.LOCAL_REVIEW_ROLES), {"review-plan", "review-implementation"})
+        for role in routing.ROLES - {"functional-tester", *routing.LOCAL_REVIEW_ROLES}:
             self.assertEqual(routing.ADAPTER_ROLE[role], harness.WORKER)
         for adapter_role in routing.ADAPTER_ROLE.values():
             self.assertIn(adapter_role, harness.CLAUDE_CODE.roles)
 
     def test_codex_is_refused_in_a_default_and_in_each_kind_of_role(self) -> None:
-        for role in ("milestone-implement", "review-plan", "satisfy-gate"):
+        for role in ("milestone-implement", "milestone-plan", "satisfy-gate"):
             with self.subTest(role=role), self.assertRaises(RoutingConfigError) as ctx:
                 _config(roles={role: {"harness": "codex"}})
             self.assertIn(f"role {role!r} runs as a {routing.ADAPTER_ROLE[role]!r} and harness 'codex' "
-                          f"declares only ['reviewer', 'functional-tester']", ctx.exception.message)
+                          f"declares only ['local-reviewer', 'reviewer', 'functional-tester']", ctx.exception.message)
             self.assertEqual({k: ctx.exception.evidence[k] for k in ("role", "adapter_role", "harness", "declared_roles")},
                              {"role": role, "adapter_role": routing.ADAPTER_ROLE[role], "harness": "codex",
-                              "declared_roles": ["reviewer", "functional-tester"]})
+                              "declared_roles": ["local-reviewer", "reviewer", "functional-tester"]})
         with self.assertRaises(RoutingConfigError) as ctx:
             _config(default={"harness": "codex"})
         self.assertIn("role 'apply-functional-review'", ctx.exception.message)
@@ -371,10 +374,10 @@ class HarnessFieldTest(unittest.TestCase):
         overrides = {role: {"harness": "claude-code"} for role in routing.ROLES}
         config = _config(default={"harness": "codex"}, roles=overrides)
         self.assertEqual(dict(config.default), {"harness": "codex"})
-        overrides.pop("review-plan")
+        overrides.pop("milestone-plan")
         with self.assertRaises(RoutingConfigError) as ctx:
             _config(default={"harness": "codex"}, roles=overrides)
-        self.assertIn("role 'review-plan'", ctx.exception.message)
+        self.assertIn("role 'milestone-plan'", ctx.exception.message)
         self.assertNotIn("further", ctx.exception.message)
 
     def test_a_value_that_is_not_a_registered_name_is_refused(self) -> None:
@@ -387,7 +390,7 @@ class HarnessFieldTest(unittest.TestCase):
 
     def test_the_settings_section_refuses_with_the_dotted_key_and_refuses_the_entry_whole(self) -> None:
         for section, key in (
-            ({"roles": {"review-plan": {"model": "m", "harness": "codex"}}}, "routing.roles.review-plan.harness"),
+            ({"roles": {"milestone-plan": {"model": "m", "harness": "codex"}}}, "routing.roles.milestone-plan.harness"),
             ({"default": {"harness": "codex"}}, "routing.default.harness"),
             ({"roles": {"review-plan": {"harness": 5}}}, "routing.roles.review-plan.harness"),
             ({"roles": {"review-plan": {"harness": ""}}}, "routing.roles.review-plan.harness"),
@@ -440,13 +443,36 @@ class HarnessResolutionTest(unittest.TestCase):
 
     def test_the_role_harness_option_parses_and_refuses(self) -> None:
         self.assertEqual(routing.parse_role_harness("review-plan=claude-code"), ("review-plan", "claude-code"))
-        for text in ("review-plan", "nobody=claude-code", "review-plan=codex", "review-plan=claude",
+        for text in ("review-plan", "nobody=claude-code", "milestone-plan=codex", "review-plan=claude",
                      "review-plan=", "review-plan=--resume"):
             with self.subTest(text=text), self.assertRaises(ValueError):
                 routing.parse_role_harness(text)
 
+    def test_the_two_local_review_roles_accept_codex_with_its_own_model_and_effort(self) -> None:
+        for role in routing.LOCAL_REVIEW_ROLES:
+            with self.subTest(role=role):
+                self.assertEqual(routing.parse_role_harness(f"{role}=codex"), (role, "codex"))
+                options = routing.RoutingOptions(
+                    cli_role_harnesses={role: "codex"}, cli_role_models={role: "gpt-6.1-sol"},
+                    cli_role_efforts={role: "high"})
+                route = options.resolve(role)
+                self.assertEqual((route.harness, route.model, route.effort), ("codex", "gpt-6.1-sol", "high"))
+                config = _config(roles={role: {"harness": "codex", "model": "gpt-6.1-sol", "effort": "xhigh"}})
+                self.assertEqual(dict(config.roles[role])["harness"], "codex")
+
+    def test_a_codex_review_route_needs_a_model_and_effort_the_adapter_lists(self) -> None:
+        for role in routing.LOCAL_REVIEW_ROLES:
+            for model, effort in (("claude-opus-5-5", "high"), ("gpt-6.1-sol", "max")):
+                with self.subTest(role=role, model=model, effort=effort), self.assertRaises(ValueError):
+                    routing.check_route_values(role, "codex", model, effort, {})
+            routing.check_route_values(role, "codex", "gpt-6.1-sol", "high", {})
+            # Unset, the role keeps its Claude built-in model, which codex does not list.
+            with self.subTest(role=role, unset=True), self.assertRaises(RoutingConfigError) as ctx:
+                routing.RoutingOptions(cli_role_harnesses={role: "codex"})
+            self.assertIn("routes the model", ctx.exception.message)
+
     def test_a_hand_built_option_set_cannot_hold_an_invalid_pair(self) -> None:
-        for bad in ({"review-plan": "codex"}, {"nobody": "claude-code"}, {"review-plan": "claude"}):
+        for bad in ({"milestone-plan": "codex"}, {"nobody": "claude-code"}, {"review-plan": "claude"}):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 routing.RoutingOptions(cli_role_harnesses=bad)
         options = routing.RoutingOptions(cli_role_harnesses={"review-plan": "claude-code"})
@@ -584,7 +610,7 @@ class RoutingOptionsHarnessCheckTest(unittest.TestCase):
         self.assertEqual(dict(routing.NO_OVERRIDES.harness_models), {})
 
     def test_a_route_to_a_harness_without_the_builtin_model_names_the_default(self) -> None:
-        worker_codex = dataclasses.replace(harness.CODEX, roles=(harness.WORKER, harness.REVIEWER))
+        worker_codex = dataclasses.replace(harness.CODEX, roles=(harness.WORKER, harness.LOCAL_REVIEWER, harness.REVIEWER))
         patched = {**harness.ADAPTERS, "codex": worker_codex}
         with unittest.mock.patch.object(harness, "ADAPTERS", patched):
             config = _config(roles={"milestone-implement": {"harness": "codex"}})

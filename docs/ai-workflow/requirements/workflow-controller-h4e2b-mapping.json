@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-h4e2b",
+  "requirements": {
+    "R1": {
+      "description": "review-plan and review-implementation can be routed to codex through the existing harness field, behind their own adapter role, with the default and every Claude record unchanged (#315)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "A routed review runs read-only through run_review inside the job's record, with one job status per ending and one test each, usage admitted on the Codex provider (#315)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "Every recovery site of a codex_review record calls recover, records nothing again and leaves no clone (#315)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "The routed path is tested adversarially through the job: credentials, symlink, submodule, hook, crafted ref, forged header, and a test for every cause of the deny set and every refusal (#315)",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R5": {
+      "description": "An opt-in operator live proof of both stages exists and records its measured result (#315)",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "R6": {
+      "description": "The cost table and the pages state what is selectable, what a review loop costs and how it meets the weekly hold, from measured figures only (#315)",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    }
+  }
+}

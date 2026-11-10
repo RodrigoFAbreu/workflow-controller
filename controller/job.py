@@ -107,7 +107,7 @@ from typing import Any, Callable
 
 from controller import harness as adapters
 from controller import (
-    codex_tester, codex_worker, codex_worker_job, codex_worker_landing, codex_worker_sandbox, codex_worker_tree, evidence, functional_review, gitrepo, identity, lock, milestone_branch, notify, pr_report, protocol, protocol_decision, review, review_mode, review_rounds,
+    codex_review_role, codex_tester, codex_worker, codex_worker_job, codex_worker_landing, codex_worker_sandbox, codex_worker_tree, evidence, functional_review, gitrepo, identity, lock, milestone_branch, notify, pr_report, protocol, protocol_decision, review, review_mode, review_rounds,
     route_select, routing, runtime, target_state, telemetry, usage, usage_record, worker, worker_launch, worker_stream, workflow_contract,
 )
 from controller.decision import (
@@ -3114,6 +3114,10 @@ def _resume_drifted_protocol(record: JobRecord, *, managed_repo: Any, runtime_ro
     elif _is_codex_worker_record(record):
         # An ended `LAUNCHED` record keeps `tree` and the sessions alone (D7); the caller settled the credentials.
         _settle_codex_worker_dir(runtime_root, str(record["job_id"]), keep_tree=True)
+    review_ending = None
+    if _is_codex_review_record(record):
+        # H4e2b (D4): the drift ending of a routed Codex review removes its clone and records nothing.
+        review_ending = codex_review_role.recover(runtime_root, str(record["job_id"]), record["codex_review"], "drift")
     now = _now()
     block = dict(record["protocol"])
     current = protocol.managed_digests(managed_repo.root)
@@ -3133,6 +3137,9 @@ def _resume_drifted_protocol(record: JobRecord, *, managed_repo: Any, runtime_ro
             record, recovery),
         "reconciled_at": now, "updated_at": now,
     }
+    if review_ending is not None:
+        failed["reconciliation_evidence"] = {**failed["reconciliation_evidence"],
+                                             "codex_review": dict(review_ending.evidence)}
     if _is_codex_worker_record(record):
         # H4e leftovers, D1 site 4: a clone this ending kept is named (a refused landing already carries its own).
         failed = _name_kept_clone(failed, runtime_root)
@@ -3177,6 +3184,8 @@ def _group_label(record: Mapping) -> str:
     """What a group-ending message calls the record: a Codex worker's own name, else ``<harness> review``."""
     if _is_codex_worker_record(record):
         return "Codex worker"
+    if _is_codex_review_record(record):
+        return "Codex review"
     return f"{_review_display(record)} review"
 
 
@@ -3185,6 +3194,21 @@ def _is_codex_worker_record(record: Mapping) -> bool:
     ``_run_codex_worker`` persists before it prepares the tree. The adapter's name is never read."""
     return (not is_review_record(record) and not is_functional_record(record)
             and isinstance(record.get("codex_worker"), Mapping))
+
+
+def _is_codex_owned_record(record: Mapping) -> bool:
+    """A record whose process is a Codex one -- a Codex worker or a routed Codex review. `resume` ends such an
+    orphan and never follows it (H4c2, D7), so process handling tests this, not :func:`_is_codex_worker_record`."""
+    return _is_codex_worker_record(record) or _is_codex_review_record(record)
+
+
+def _is_codex_review_record(record: Mapping) -> bool:
+    """A routed Codex review's record (workflow-controller-h4e2b, D4): a protocol job record carrying the
+    ``codex_review`` block that :func:`_run_codex_review` persists. The block, never the adapter's name, identifies
+    it, and it is kept apart from :func:`_is_codex_worker_record` (a review record has no ``codex_worker`` block and
+    never reaches the worker reconciler)."""
+    return (not is_review_record(record) and not is_functional_record(record)
+            and isinstance(record.get("codex_review"), Mapping))
 
 
 def _end_review_group(record: Mapping, root: Path) -> None:
@@ -3242,6 +3266,21 @@ def _settle_codex_credentials(record: Mapping, runtime_root: Path) -> None:
             review.copy_back_credentials(layout.job, Path(operator_home), digest, review.CODEX)
     with contextlib.suppress(Exception):
         runtime.remove_tree(runtime_root, layout.rel("codex-home", review.CODEX.credential_file))
+
+
+def _reconcile_codex_review(record: JobRecord, *, managed_repo: Any, runtime_root: Path) -> JobRecord:
+    """The ``resume`` branch of a non-terminal routed Codex review record (workflow-controller-h4e2b, D4): end its
+    process group and every process carrying its tag, settle the credentials, then take the ending
+    ``codex_review_role.recover`` gives for the block's stage. Nothing is recorded again, no clone is left and the
+    record never reaches the worker reconciler. A group that cannot be judged or ended raises before anything is
+    written."""
+    _end_review_group(record, managed_repo.root)
+    _settle_codex_credentials(record, runtime_root)
+    job_id = str(record["job_id"])
+    ending = codex_review_role.recover(runtime_root, job_id, record["codex_review"], "resume")
+    fields = _codex_review_fields(ending, record, managed_repo=managed_repo, runtime_root=runtime_root)
+    return _codex_review_terminal(record, fields, runtime_root=runtime_root, job_id=job_id, event="reconciled",
+                                  recovered=True)
 
 
 def _reconcile_codex_worker(record: JobRecord, *, managed_repo: Any, runtime_root: Path) -> JobRecord:
@@ -3733,6 +3772,11 @@ def _resume_records(managed_repo: Any, *, identity: Any, runtime_root: Path) -> 
         elif is_functional_record(record) and status in NON_TERMINAL_STATUSES:
             results.append({**_reconcile_functional(record, runtime_root=runtime), "reconciled_this_call": True})
         elif (not drifted and status in (STATUS_LAUNCHED, STATUS_COMPLETED)
+              and _is_codex_review_record(record)):
+            # H4e2b (D4): a routed Codex review ends as `recover` says for its block's stage.
+            results.append({**_reconcile_codex_review(record, managed_repo=managed_repo, runtime_root=runtime),
+                            "reconciled_this_call": True})
+        elif (not drifted and status in (STATUS_LAUNCHED, STATUS_COMPLETED)
               and _is_codex_worker_record(record)):
             results.append({**_reconcile_codex_worker(record, managed_repo=managed_repo, runtime_root=runtime),
                             "reconciled_this_call": True})
@@ -3741,7 +3785,7 @@ def _resume_records(managed_repo: Any, *, identity: Any, runtime_root: Path) -> 
             if marked is not None:
                 results.append(marked)
             elif _drift_decides(record, managed_repo):
-                if _is_codex_worker_record(record):
+                if _is_codex_worker_record(record) or _is_codex_review_record(record):
                     _settle_codex_credentials(record, runtime)
                 results.append({**_resume_drifted_protocol(record, managed_repo=managed_repo, runtime_root=runtime),
                                 "reconciled_this_call": True})
@@ -4470,7 +4514,7 @@ def _supervise_records(managed_repo: Any, *, identity: Any, runtime_root: Path,
     actually re-attached to."""
     for path in _job_file_paths(runtime_root):
         candidate = _supervision_candidate(path, managed_repo, identity)
-        if candidate is not None and not _is_codex_worker_record(candidate):
+        if candidate is not None and not _is_codex_owned_record(candidate):
             _supervise_record(managed_repo, identity=identity, runtime_root=runtime_root, path=path,
                               drain_detach_seconds=drain_detach_seconds)
 
@@ -4794,7 +4838,7 @@ def _abandon_supervision(managed_repo: Any, *, identity: Any, runtime_root: Path
         record = _supervision_candidate(path, managed_repo, identity, valid=False)
         if record is None:
             return
-        codex = _is_codex_worker_record(record)
+        codex = _is_codex_owned_record(record)
         worker_process = record.get("worker_process")
         if worker_process is not None:
             assessment = worker.assess_worker_liveness(worker_process if isinstance(worker_process, Mapping) else {})
@@ -5000,7 +5044,7 @@ def _abandon_mark_failed(managed_repo: Any, *, identity: Any, runtime_root: Path
             # `resume` refuses this record (its root is gone) and ends nothing, so a Codex record is
             # never sent there: the by-hand end, then this command (H4c2, D7).
             guidance = (_active_guidance(job_id, assessment, root, then=_abandon_command(job_id, root))
-                        if _is_codex_worker_record(record)
+                        if _is_codex_owned_record(record)
                         else f"{_active_guidance(job_id, assessment, root)} Follow it: "
                              f"`{follow_command(runtime_root, root)}`")
             raise LifecycleWorkerActiveError(
@@ -5023,6 +5067,11 @@ def _abandon_mark_failed(managed_repo: Any, *, identity: Any, runtime_root: Path
         else:
             # An ended `LAUNCHED` record keeps `tree` and the sessions alone (D7), as `resume` does (round 3, O1).
             _settle_codex_worker_dir(runtime_root, job_id, keep_tree=True)
+    review_ending = None
+    if _is_codex_review_record(record):
+        # H4e2b (D4): the abandon of a routed Codex review removes its clone and records nothing.
+        _settle_codex_credentials(record, runtime_root)
+        review_ending = codex_review_role.recover(runtime_root, job_id, record["codex_review"], "abandon")
     validity = _validity_or_none(record, managed_repo, identity)
     now = _now()
     abandoned: JobRecord = {
@@ -5040,6 +5089,9 @@ def _abandon_mark_failed(managed_repo: Any, *, identity: Any, runtime_root: Path
         "reconciled_at": now,
         "updated_at": now,
     }
+    if review_ending is not None:
+        abandoned["reconciliation_evidence"] = {**abandoned["reconciliation_evidence"],
+                                                "codex_review": dict(review_ending.evidence)}
     if _is_codex_worker_record(record):
         # H4e leftovers, D1 site 5: the abandon of a `COMPLETED` or `LAUNCHED` record names the clone it kept (a
         # refused landing already carries its own).
@@ -6599,11 +6651,17 @@ def _worker_route(decision: Decision, work_item: Any, options: routing.RoutingOp
     return options.resolve(role)
 
 
+def _adapter_role(route: routing.ResolvedRoute) -> str:
+    """The adapter role ``route``'s role is launched as (h4e2b, D1)."""
+    return routing.ADAPTER_ROLE[route.role]
+
+
 def _launcher_error(entry: routing.ResolvedRoute) -> BaseException | None:
     """The chain probe for "unavailable": the error ``for_harness`` raises
-    for an entry whose launcher cannot be resolved, else ``None``."""
+    for an entry whose launcher cannot be resolved for the entry's adapter
+    role, else ``None``. It checks no Codex build (h4e2b, D1)."""
     try:
-        worker_launch.for_harness(entry.harness)
+        worker_launch.for_harness(entry.harness, _adapter_role(entry))
     except ControllerError as exc:
         return exc
     return None
@@ -8664,7 +8722,7 @@ def _execute_step_locked(
         # H3: the routed harness's launcher, resolved with the route and
         # before anything is recorded, so an unlaunchable harness leaves no
         # record.
-        launcher = worker_launch.for_harness(route.harness)
+        launcher = worker_launch.for_harness(route.harness, _adapter_role(route))
 
         # Usage budget (CP3, D7): admitted against the budget now, with the
         # route known and before any record exists, so a hold leaves nothing
@@ -8687,7 +8745,7 @@ def _execute_step_locked(
         if selected.outcome == route_select.UNAVAILABLE:
             raise selected.error
         route, token = selected.route, selected.token
-        launcher = worker_launch.for_harness(selected.route.harness)
+        launcher = worker_launch.for_harness(selected.route.harness, _adapter_role(selected.route))
         selection_block = {
             "position": selected.position, "length": len(chain),
             "skipped": [{"position": p, "harness": h, "cause": c} for p, h, c in selected.skipped],
@@ -8768,6 +8826,7 @@ def _execute_step_locked(
                 permission_mode=permission_mode, timeout=timeout, claude_bin=claude_bin,
                 lifecycle_lock=lifecycle_lock, supervisor_lock_path=supervisor_lock_path,
                 drain_detach_seconds=drain_detach_seconds, usage_end=usage_end, launcher=launcher,
+                review_brief=(reviewer or {}).get("brief"),
             )
     except BaseException:
         # A worker that never started left a terminal record: released
@@ -8888,6 +8947,14 @@ def _codex_home() -> Path:
 
 #: The Codex home a Codex worker job takes its credential from and copies it back to (H4c1, D4).
 CODEX_HOME_RESOLVER: Callable[[], Path] = _codex_home
+
+
+def _is_codex_review_route(route: routing.ResolvedRoute) -> bool:
+    """Whether ``route`` is a local review role routed to Codex (workflow-controller-h4e2b, D1, D3): keyed on the
+    route's role and harness, never on the launcher's type alone. Such a route takes the review branch
+    (:func:`_run_codex_review`), never the Codex worker's."""
+    return (route.role in routing.LOCAL_REVIEW_ROLES
+            and adapters.get(route.harness).name == adapters.CODEX.name)
 
 
 def _is_codex_launcher(launcher: Any) -> bool:
@@ -9119,6 +9186,212 @@ def _run_codex_worker(
     return result, record, spawned
 
 
+#: The review stage a routed local review role runs (workflow-controller-h4e2b, D3): the role names it.
+CODEX_REVIEW_STAGE: Mapping[str, str] = {routing.REVIEW_PLAN: "plan", routing.REVIEW_IMPLEMENTATION: "implementation"}
+
+#: ``reconciliation_evidence.code`` of a recorded-but-uncommitted Codex review (D3, ``CodexReviewRecordPending``).
+CODEX_REVIEW_COMMIT_PENDING_CODE = "recorder_commit_pending"
+
+
+def _codex_review_verdict_file(runtime_root: Path, job_id: str) -> dict | None:
+    """The composed verdict ``run_review`` left at ``reviews/<job id>-verdict.md`` (mode 0600 from here on), named by
+    its path and SHA-256 so the operator can record it by hand; ``None`` when the file is not there. The file is the
+    one copy: nothing here writes a second."""
+    rel = f"reviews/{job_id}-verdict.md"
+    path = Path(runtime_root) / rel
+    try:
+        data = path.read_bytes()
+        runtime.restrict_to_owner(runtime_root, rel)
+    except (OSError, ControllerError):
+        return None
+    return {"path": str(path), "sha256": hashlib.sha256(data).hexdigest(), "mode": "0600"}
+
+
+def _codex_review_fields(ending: codex_review_role.Ending, record: Mapping, *, managed_repo: Any,
+                         runtime_root: Path) -> dict:
+    """The record fields one ending of a routed Codex review writes (D3's table, and D4's rows through the same
+    function): ``status`` and what goes with it. The Workflow's own ``reconcile`` judges a recorded ending; every
+    other ending is judged by the table. No field holds the ``verdict`` text (the one copy is the 0600 file) or a line
+    of an armoured block (the credential check ran before any text was kept)."""
+    code = ending.code
+    evidence = {k: v for k, v in dict(ending.evidence).items() if k != "verdict"}
+    observed = _protocol_observed_phase(managed_repo, record)
+    block = dict(record["protocol"])
+
+    def judged(worker_outcome: str | None) -> dict:
+        fields = _protocol_resolution(record, managed_repo=managed_repo, runtime_root=runtime_root,
+                                      worker_outcome=worker_outcome)
+        if fields["status"] == STATUS_FINISHED:
+            violation = _branch_invariant_violation(managed_repo.root, runtime_root, record)
+            if violation is not None:
+                return {**fields, "status": STATUS_FAILED, "transition_verified": False,
+                        "reconciliation_evidence": violation}
+            if code == codex_review_role.RECORD_PENDING:
+                return {**fields, "reconciliation_evidence": {
+                    "code": CODEX_REVIEW_COMMIT_PENDING_CODE, "cause": ending.cause,
+                    "message": evidence.get("message"), "next": evidence.get("next")}}
+        return fields
+
+    def failed(extra: Mapping | None = None, *, reason_evidence: dict | None = None) -> dict:
+        body = reason_evidence if reason_evidence is not None else {"code": code, "cause": ending.cause, **evidence}
+        return {"status": STATUS_FAILED, "transition_verified": False, "observed_phase_after": observed,
+                "protocol": {**block, "reconcile": None}, "reconciliation_evidence": {**body, **(extra or {})}}
+
+    if code in (codex_review_role.RECORDED, codex_review_role.RECORD_PENDING):
+        return judged(worker.SUCCESS)
+    if code == codex_review_role.RECORD_INTERRUPTED:
+        return judged(None)
+    if code == codex_review_role.NOT_RECORDED:
+        return {"status": STATUS_INTERRUPTED, "observed_phase_after": observed,
+                "reconciliation_evidence": {"code": code, "cause": ending.cause, **evidence}}
+    if code == codex_review_role.WORKER_FAILED:
+        if ending.cause == codex_worker.SUBTYPE_BREACH:
+            return failed()
+        fields = judged(record.get("worker_outcome"))
+        if fields["status"] == STATUS_FAILED:
+            fields = {**fields, "reconciliation_evidence": {
+                **fields["reconciliation_evidence"], "codex_review": {"code": code, "cause": ending.cause}}}
+        return fields
+    if code == codex_review_role.RELEASE_CHANGED:
+        return failed(reason_evidence=_protocol_failure_evidence(
+            WORKFLOW_RELEASE_CHANGED_REASON, observed_phase=observed, worker_outcome=record.get("worker_outcome"),
+            codex_review={"code": code, "cause": ending.cause, **evidence}))
+    if code == codex_review_role.RECORD_REFUSED:
+        kept = _codex_review_verdict_file(runtime_root, str(record["job_id"]))
+        return failed({"verdict_file": kept} if kept is not None else None)
+    # NOT_STARTED, REFUSED, STATE_IDENTITY_CHANGED: nothing was recorded.
+    return failed()
+
+
+def _codex_review_terminal(record: JobRecord, fields: Mapping, *, runtime_root: Path, job_id: str, event: str,
+                           recovered: bool = False) -> JobRecord:
+    """The terminal write of a routed Codex review."""
+    now = _now()
+    ended = {**record, **fields, "updated_at": now, **({"reconciled_at": now} if recovered else {})}
+    return _persist(runtime_root, job_id, ended, event=event, details={
+        "observed_phase_after": ended.get("observed_phase_after"),
+        "transition_verified": ended.get("transition_verified", False)})
+
+
+def _run_codex_review(
+    managed_repo: Any, *, runtime_root: Path, run_id: str | None, job_id: str, record: JobRecord, decision: Decision,
+    route: routing.ResolvedRoute, timeout: float | None, pre_state: Mapping, worker_streams: Mapping,
+    usage_block: Mapping | None, usage_end: dict | None, ticker: usage.RenewalTicker | None,
+    brief: str | None,
+) -> JobRecord:
+    """The call-and-wait block of a routed Codex review (workflow-controller-h4e2b, D3, D4): the read-only
+    ``codex_review_role.run_review`` in place of a launch, inside the job's own record. It runs after the currency
+    check, takes the route's model and effort, flushes the ``codex_review`` block through ``on_progress`` and
+    ``worker_process`` on the spawn, and writes the terminal record as the ending's row says. It returns the terminal
+    record. An exception from the run is recovered as a ``resume`` of the block's stage and re-raised; a
+    ``KeyboardInterrupt`` leaves the record ``LAUNCHED`` (``run_review`` removed the clone), for ``resume``."""
+    stage = CODEX_REVIEW_STAGE[route.role]
+    if decision.protocol is None or decision.protocol.state_identity is None:
+        failed = _persist(runtime_root, job_id, {
+            **record, "status": STATUS_FAILED, "transition_verified": False,
+            "reconciliation_evidence": {
+                "code": WORKER_NOT_STARTED_CODE, "error": "CodexReviewNeedsProtocolDecision",
+                "message": f"a routed {route.role} review needs the Workflow's protocol decision, which this "
+                           "decision does not carry; nothing was started",
+                "evidence": {"role": route.role, "harness": route.harness}},
+            "updated_at": _now()}, event="worker_not_started", details={"error": "CodexReviewNeedsProtocolDecision"})
+        _run_job_ended(run_id, job_id, STATUS_FAILED, failed)
+        return failed
+    state: dict[str, Any] = {"record": record}
+
+    def on_spawn(pid: int, pgid: int) -> None:
+        current = state["record"]
+        process = worker.capture_worker_process(pid)
+        state["record"] = _persist(runtime_root, job_id, {
+            **current, "worker_process": process.to_dict(), "updated_at": _now()},
+            event="worker_spawned", details={"pid": pid, "pgid": pgid})
+        if ticker is not None:
+            ticker.start()
+
+    def on_progress(block: dict) -> None:
+        current = state["record"]
+        state["record"] = _persist(runtime_root, job_id, {**current, "codex_review": dict(block), "updated_at": _now()},
+                                   event=f"codex_review_{block.get('stage')}")
+
+    def recovered(exc_record: JobRecord) -> JobRecord:
+        block = exc_record.get("codex_review") if isinstance(exc_record.get("codex_review"), Mapping) else {}
+        ending = codex_review_role.recover(runtime_root, job_id, {"stage": "preparing", **block}, "resume")
+        fields = _codex_review_fields(ending, exc_record, managed_repo=managed_repo, runtime_root=runtime_root)
+        return _codex_review_terminal(exc_record, fields, runtime_root=runtime_root, job_id=job_id,
+                                      event=_final_event(fields["status"]), recovered=True)
+
+    def finish(ending: codex_review_role.Ending) -> JobRecord:
+        record = state["record"]
+        result = ending.worker
+        if result is not None:
+            # The verdict is kept once, at reviews/<job>-verdict.md: neither stream file keeps it (review round 3, I1).
+            stdout_text, stderr_text = codex_review_role.without_message_streams(result)
+            runtime.fill_log_file(runtime_root, f"jobs/{job_id}/worker.stdout", stdout_text.encode("utf-8"))
+            runtime.fill_log_file(runtime_root, f"jobs/{job_id}/worker.stderr", stderr_text.encode("utf-8"))
+            completed_at = _now()
+            record = {
+                **record,
+                # The final message of a routed review is the verdict: its one retained copy is the verdict file
+                # (and the Workflow's feedback), so the record's excerpt is emptied (review I1).
+                "worker": _worker_dict(codex_review_role.without_message(result), stdout_path=worker_streams["stdout_path"],
+                                       stderr_path=worker_streams["stderr_path"]),
+                "worker_outcome": result.outcome,
+                "telemetry": _codex_tester_telemetry(record, seconds=result.duration_ms / 1000),
+                **_usage_fields(codex_worker_job.usage_builder(result, route)),
+                "worker_streams": {**worker_streams, "format": CODEX_STREAM_FORMAT},
+                "updated_at": completed_at,
+            }
+            if usage_block is not None:
+                readings = (result.stream_diagnosis or {}).get("readings") or []
+                record["usage"] = _codex_end_block(usage_block, readings)
+                if usage_end is not None:
+                    usage_end.update(first={}, last={reading["window"]: reading for reading in readings})
+        if ending.code == codex_review_role.NOT_STARTED:
+            record = {**record, "worker_state": {"state": worker.ENDED, "since": _now()}}
+            failed = _persist(runtime_root, job_id, {
+                **record, "status": STATUS_FAILED, "transition_verified": False,
+                "reconciliation_evidence": {
+                    "code": WORKER_NOT_STARTED_CODE, "error": ending.cause, "message": ending.evidence.get("message"),
+                    "evidence": {k: v for k, v in dict(ending.evidence).items() if k != "message"}},
+                "updated_at": _now()}, event="worker_not_started", details={"error": ending.cause})
+            state["record"] = failed
+            _run_job_ended(run_id, job_id, STATUS_FAILED, failed)
+            return failed
+        if (record.get("worker_state") or {}).get("state") != worker.ENDED:
+            record = _with_worker_state(record, worker.ENDED, {})
+        if result is not None:
+            record = state["record"] = _persist(
+                runtime_root, job_id, {**record, "status": STATUS_COMPLETED}, event="completed",
+                details={"outcome": result.outcome, "exit_code": result.returncode})
+        fields = _codex_review_fields(ending, record, managed_repo=managed_repo, runtime_root=runtime_root)
+        ended = state["record"] = _codex_review_terminal(record, fields, runtime_root=runtime_root, job_id=job_id,
+                                                         event=_final_event(fields["status"]))
+        _run_job_ended(run_id, job_id, ended["status"], ended)
+        return ended
+
+    try:
+        operator_home = CODEX_HOME_RESOLVER()
+        ending = codex_review_role.run_review(
+            managed_repo, runtime_root=runtime_root, job_id=job_id, operator_home=operator_home, stage=stage,
+            work_item_id=str(record["work_item_id"]), base=str(pre_state["target_head"]), model=route.model,
+            effort=route.effort, state_identity=decision.protocol.state_identity, timeout=timeout, brief=brief,
+            on_progress=on_progress, launch_options={"on_spawn": on_spawn})
+        return finish(ending)
+    except KeyboardInterrupt:
+        raise
+    except Exception:
+        # The handler of a run that stopped part-way: the block's stage says what `recover` judges (D4). A record
+        # already terminal (something raised after the terminal write) is never recovered and written again.
+        if state["record"].get("status") not in TERMINAL_STATUSES:
+            with contextlib.suppress(Exception):
+                ended = recovered(state["record"])
+                _run_job_ended(run_id, job_id, ended["status"], ended)
+        raise
+    finally:
+        if ticker is not None:
+            ticker.stop()
+
+
 def _launch_job(
     managed_repo: Any,
     *,
@@ -9140,6 +9413,7 @@ def _launch_job(
     launcher: worker_launch.WorkerLauncher,
     drain_detach_seconds: float | None = None,
     usage_end: dict | None = None,
+    review_brief: str | None = None,
 ) -> JobRecord:
     """Steps 4 (from the LAUNCHED flush) to 9 of :func:`execute_step`,
     under the job's supervisor lock. ``usage_end``, when given, receives
@@ -9285,6 +9559,14 @@ def _launch_job(
                            f"({currency.reason}); no worker was started, and the next run re-decides",
                 "evidence": currency.evidence(),
             }, protocol_decision.DECISION_STALE_AT_LAUNCH)
+
+    if _is_codex_review_route(route):
+        # H4e2b (D1, D3): a routed review runs `run_review` in place of the launch, before the Codex worker's branch,
+        # keyed on the route's role and harness, never on the launcher's type alone.
+        return _run_codex_review(
+            managed_repo, runtime_root=runtime, run_id=run_id, job_id=job_id, record=record, decision=decision,
+            route=route, timeout=resolved_timeout, pre_state=pre_state, worker_streams=worker_streams,
+            usage_block=usage_block, usage_end=usage_end, ticker=ticker, brief=review_brief)
 
     codex = _is_codex_launcher(launcher)
     if codex:

@@ -111,12 +111,14 @@ def harness_family(name: str) -> str | None:
 
 def worker_families(options: routing.RoutingOptions = routing.NO_OVERRIDES) -> frozenset[str]:
     """The families of the harnesses ``options`` routes every worker role to
-    (reviewer-family D1): the roles whose adapter role is ``worker``, over
-    every entry of each role's fallback chain (fallback-chain D6): a
-    fallback entry is a route the role can take."""
+    (reviewer-family D1): the roles whose adapter role is ``worker`` or
+    ``local-reviewer``, over every entry of each role's fallback chain (fallback-chain D6): a
+    fallback entry is a route the role can take. The two local review roles
+    run as ``local-reviewer`` (h4e2b, D1) and stay counted."""
     return frozenset(
         harness.get(route.harness).family
-        for role, adapter_role in routing.ADAPTER_ROLE.items() if adapter_role == harness.WORKER
+        for role, adapter_role in routing.ADAPTER_ROLE.items()
+        if adapter_role in (harness.WORKER, harness.LOCAL_REVIEWER)
         for route in options.chain(role))
 
 

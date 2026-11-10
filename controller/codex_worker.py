@@ -7,10 +7,11 @@ starts or writes anything, runs the controls, runs ``codex exec`` under a deadli
 the nested-repository scan and the build around the run, copies the credential back and removes the copy on every path,
 and maps what happened to one of the four outcomes (:func:`classify`). :class:`CodexLauncher` is the
 :class:`controller.worker_launch.WorkerLauncher` of it. It is registered for a fixture role only: no setting, option or
-gate selects it, ``harness.CODEX`` declares no worker role and ``worker_launch.LAUNCHERS`` does not list it. The ``prompt`` keyword of
-:func:`launch_codex_worker` sends a given text on stdin in place of the rendered command (the read-only review run of
-:mod:`controller.codex_review_role`, itself routed to no role; see
-``docs/ai-workflow/CONTROLLER_CODEX_WORKER_LAUNCH_PLAN.md``).
+gate selects it, ``harness.CODEX`` declares no worker role and ``worker_launch.LAUNCHERS`` does not list it under
+``worker``. The ``prompt`` keyword of :func:`launch_codex_worker` sends a given text on stdin in place of the rendered
+command (the read-only review run of :mod:`controller.codex_review_role`, which routing selects for the two local review
+roles since H4e2b, through ``worker_launch.CodexReviewLauncher``, a subclass that never spawns; see
+``docs/ai-workflow/CONTROLLER_CODEX_WORKER_LAUNCH_PLAN.md`` and ``docs/ai-workflow/CONTROLLER_H4E2B_PLAN.md``).
 """
 
 from __future__ import annotations

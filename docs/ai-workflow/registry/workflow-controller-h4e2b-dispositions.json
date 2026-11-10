@@ -1,0 +1,74 @@
+{
+  "dispositions": {
+    "F-0fe677e854e0": {
+      "disposition": "fixed",
+      "note": "Plan revision 2 (7825af3) D3's CodexReviewRecordRefused row keeps the one file run_review writes at reviews/<job id>-verdict.md, sets it to 0600 and writes no second copy; controller/job.py _codex_review_verdict_file (6e2bf44) does exactly that (runtime.restrict_to_owner, path and SHA-256 in the evidence) and tests/test_job_codex_review.py asserts mode 0600 and that job1-verdict.md is the only verdict file."
+    },
+    "F-123307a5c749": {
+      "disposition": "fixed",
+      "note": "8a92da8 added git diff HEAD to SafetyCase.digest in tests/test_codex_review_safety.py, so a content change to an already dirty tracked file now changes the digest the unchanged-tree assertions compare."
+    },
+    "F-1e857251cdd5": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/333"
+    },
+    "F-3fb578f31901": {
+      "disposition": "fixed",
+      "note": "No removal was added and none is claimed on the pages: docs/guide/harnesses.md's status table (4f186e7) says the composed verdict is kept once at reviews/<job id>-verdict.md (mode 0600) with its path and SHA-256 in the evidence; the approved plan's D3 row still carries the removal clause as a historical record, and no code removes files under reviews/."
+    },
+    "F-452d0d93aa74": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6765415533"
+    },
+    "F-67acf54df046": {
+      "disposition": "fixed",
+      "note": "The bundle's TEST_RESULTS.md was rewritten for revision 5 (680cd87, full suite 6138 tests, only the 3 environmental fake_codex_contract failures), which the round-5 review confirmed current; its later staleness at revision 7 is F-452d0d93aa74."
+    },
+    "F-6bc42ab46edd": {
+      "disposition": "fixed",
+      "note": "The bundle's IMPLEMENTATION_SUMMARY.md now names content head 77246ed and has the 'Review round 4 (75ed1e3)', 'Review round 5 (680cd87)' and 'Review round 6 (77246ed)' sections."
+    },
+    "F-848a00a14bf2": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6765415533"
+    },
+    "F-96ac3f7ccb94": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6765415533"
+    },
+    "F-9928119bc87b": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6765415533"
+    },
+    "F-a2d0298dd427": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6765415533"
+    },
+    "F-b4dfbf6d5f44": {
+      "disposition": "fixed",
+      "note": "docs/guide/harnesses.md's cost section (4f186e7) names the operator's setting: the weekly hold is 'held by usage.codex_weekly_pause_at_percent, 95 by default', matching controller/settings.py."
+    },
+    "F-c65792f6bcc0": {
+      "disposition": "fixed",
+      "note": "Plan revision 2 (7825af3) D1 no longer says 'launched by D2's branch'; its registry bullet says the job's review branch of D3 runs run_review."
+    },
+    "F-cbaa34abf0e7": {
+      "disposition": "fixed",
+      "note": "The bundle's TEST_RESULTS.md was rewritten after round 2 (the round-4 review found it at revision 3, head 8a92da8, no longer revision 1 at a9c8952), and later for revision 5; its staleness at revision 7 is F-452d0d93aa74."
+    },
+    "F-d9fb4f5bd39a": {
+      "disposition": "dropped",
+      "reason": "No change on the branch is needed: the squash commit lands on main, where 'Running signal tests safely' exists (44a75b7, PR #328), and git merge-tree HEAD origin/main is clean, so the tests/__init__.py reference resolves on main; merging origin/main into the branch before the pull request is a step of opening the PR, not a change to this item's content."
+    },
+    "F-e26338c9ff82": {
+      "disposition": "fixed",
+      "note": "75ed1e3 added the clause to docs/guide/harnesses.md's retention paragraph: only the lines of the final message are dropped, the intermediate agent messages and command output stay, so a draft of the verdict can still appear in worker.stderr."
+    },
+    "F-fe436448e501": {
+      "disposition": "fixed",
+      "note": "9f9c8a0 added the harness.LOCAL_REVIEWER entry to ROLE_WORDING in tools/harness_table.py, so the regenerated tables in docs/guide/harnesses.md build."
+    }
+  },
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-h4e2b"
+}

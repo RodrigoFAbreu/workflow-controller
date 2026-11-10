@@ -83,7 +83,7 @@
 | 77 | [CI: skip the test shards for docs-only changes](items/workflow-controller-ci1a.md) `workflow-controller-ci1a` | Done | - | - |
 | 78 | [CI: split the giant test atoms and refresh the shard timings](items/workflow-controller-ci1b.md) `workflow-controller-ci1b` | Done | - | - |
 | 79 | [CI: measure parallel test workers inside a shard](items/workflow-controller-ci1c.md) `workflow-controller-ci1c` | Done | - | - |
-| 80 | [Codex worker, step 5c: route the two review roles, safety tests and live proof](items/workflow-controller-h4e2b.md) `workflow-controller-h4e2b` | Next | - | workflow-controller-h4e2 |
+| 80 | [Codex worker, step 5c: route the two review roles, safety tests and live proof](items/workflow-controller-h4e2b.md) `workflow-controller-h4e2b` | Done | - | workflow-controller-h4e2 |
 | 81 | [Codex worker, step 5d: apply-plan-review and apply-implementation-review on Codex](items/workflow-controller-h4e3.md) `workflow-controller-h4e3` | Next | - | workflow-controller-h4e2b |
 | 82 | [Codex worker, step 6](items/workflow-controller-h4f.md) `workflow-controller-h4f` | Next | - | workflow-controller-h4e3 |
 | 83 | [Codex worker, step 7](items/workflow-controller-h4g.md) `workflow-controller-h4g` | Next | - | workflow-controller-h4f |

@@ -19,14 +19,14 @@ class DeclaredFactsTest(unittest.TestCase):
         a = harness.ADAPTERS["claude-code"]
         self.assertEqual(
             (a.name, a.reviewer_name, a.family, a.roles, a.can_restrict_agents, a.can_restrict_tools, a.usage, a.pinned_version, a.fails_closed_on_unknown_version, a.build_verification),
-            ("claude-code", "claude", "anthropic", ("worker", "reviewer", "functional-tester"), True, True, "reported", "2.1.296 (Claude Code)", True, "verify-claude"),
+            ("claude-code", "claude", "anthropic", ("worker", "local-reviewer", "reviewer", "functional-tester"), True, True, "reported", "2.1.296 (Claude Code)", True, "verify-claude"),
         )
 
     def test_codex(self) -> None:
         a = harness.ADAPTERS["codex"]
         self.assertEqual(
             (a.name, a.reviewer_name, a.family, a.roles, a.usage, a.pinned_version, a.fails_closed_on_unknown_version, a.build_verification),
-            ("codex", "codex", "openai", ("reviewer", "functional-tester"), "derived", "codex-cli 0.163.0", True, "verify-codex"),
+            ("codex", "codex", "openai", ("local-reviewer", "reviewer", "functional-tester"), "derived", "codex-cli 0.163.0", True, "verify-codex"),
         )
 
     def test_registry_is_closed(self) -> None:
@@ -127,7 +127,7 @@ class LookupTest(unittest.TestCase):
         with self.assertRaises(HarnessRoleError) as ctx:
             harness.for_role("codex", "worker")
         self.assertIsInstance(ctx.exception, ControllerError)
-        self.assertEqual(ctx.exception.evidence, {"harness": "codex", "role": "worker", "declared_roles": ["reviewer", "functional-tester"]})
+        self.assertEqual(ctx.exception.evidence, {"harness": "codex", "role": "worker", "declared_roles": ["local-reviewer", "reviewer", "functional-tester"]})
         self.assertIn("codex", ctx.exception.message)
 
     def test_declared_role_passes(self) -> None:

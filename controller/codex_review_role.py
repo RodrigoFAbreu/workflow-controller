@@ -8,8 +8,8 @@ the recorder's ``check`` values, so the vendor, model, round and identity are th
 role's claim. Nothing is landed and nothing is copied back from the clone. Every path ends in one :class:`Ending`
 and the clone is removed on each.
 
-Nothing calls :func:`run_review` outside its tests: no role is routed to it until H4e2b. :func:`recover` is what a
-job's recovery site will call for a record holding the ``codex_review`` block; this module does not import
+:mod:`controller.job` calls :func:`run_review` for a local review role routed to ``codex`` (H4e2b, D3) and
+:func:`recover` at every recovery site of a record holding the ``codex_review`` block (D4); this module does not import
 ``codex_worker_landing``.
 """
 
@@ -392,6 +392,47 @@ def _emptied(result: worker.WorkerResult) -> worker.WorkerResult:
     return worker.WorkerResult(**{**fields, "result": "", "stdout": "", "stderr": "", "stream_diagnosis": diagnosis})
 
 
+def without_message(result: worker.WorkerResult) -> worker.WorkerResult:
+    """``result`` with its final message (the verdict) emptied, for the job record's ``worker`` block (review I1)."""
+    fields = {f.name: getattr(result, f.name) for f in dataclasses.fields(result)}
+    return worker.WorkerResult(**{**fields, "result": "", "stream_diagnosis": _diagnosis_without_message(result)})
+
+
+def _diagnosis_without_message(result: worker.WorkerResult) -> dict | None:
+    """``result.stream_diagnosis`` with the final message kept out of ``detail`` (review round 5, I1). A non-zero
+    exit's detail is the tail of stdout and stderr (a ``sandbox_breach`` after a non-zero exit keeps that detail), so a
+    detail equal to that tail is rebuilt from the streams as :func:`without_message_streams` leaves them (the cut tail
+    can start inside a message line, which a line match would miss); any other detail drops the lines that are lines of
+    the message. The classification (``subtype``, ``breach``, outcome) is untouched."""
+    if result.stream_diagnosis is None:
+        return None
+    diagnosis = dict(result.stream_diagnosis)
+    detail = str(diagnosis.get("detail") or "")
+    from_streams = detail == (result.stdout + result.stderr).strip()[-codex_worker.DETAIL_CHARS:]
+    if diagnosis.get("subtype") == codex_worker.SUBTYPE_EXIT or (from_streams and result.returncode):
+        stdout, stderr = without_message_streams(result)
+        text = (stdout + stderr).strip()[-codex_worker.DETAIL_CHARS:]
+        diagnosis["detail"] = text or f"codex exec exited {result.returncode}"
+    else:
+        message_lines = {line.strip() for line in (result.stdout or "").splitlines()} - {""}
+        kept = [line for line in str(diagnosis.get("detail") or "").splitlines(keepends=True)
+                if line.strip() not in message_lines]
+        diagnosis["detail"] = "".join(kept)
+    return diagnosis
+
+
+def without_message_streams(result: worker.WorkerResult) -> tuple[str, str]:
+    """``(stdout, stderr)`` of a routed review with the final message (the verdict) kept out (review round 3, I1).
+    Non-``--json`` ``codex exec`` prints the final message alone on stdout and repeats it in the stderr transcript, so
+    stdout is emptied and every stderr line that is a line of the message (compared stripped) is dropped; the rest of
+    the transcript, the banner and the warnings stay as the diagnostic. The message is read from ``stdout`` alone (the
+    pinned contract, ``tests/harness_contract/codex/stderr_shapes.txt``), never from the guarded ``result`` field."""
+    message_lines = {line.strip() for line in (result.stdout or "").splitlines()}
+    message_lines.discard("")
+    kept = [line for line in (result.stderr or "").splitlines(keepends=True) if line.strip() not in message_lines]
+    return "", "".join(kept)
+
+
 def _recorded_block(code: str, recorded: Mapping[str, Any]) -> dict:
     return {"code": code, **recorded}
 
@@ -478,11 +519,13 @@ def _run(managed_repo: Any, *, runtime_root: Path, job_id: str, operator_home: P
         raw = layout.last_message.read_bytes()
     except OSError:
         raw = b""
+    # The final message is the verdict: once read, the role's own copy goes, so the verdict file written below (and
+    # the Workflow's feedback) are its only retained copies (review I1).
+    try:
+        runtime.remove_tree(runtime_root, layout.rel("last-message.md"))
+    except (OSError, ControllerError):
+        pass
     if _worker_output_holds_armour(raw, result):
-        try:
-            runtime.remove_tree(runtime_root, layout.rel("last-message.md"))
-        except (OSError, ControllerError):
-            pass
         return Ending(REFUSED, "credential_in_verdict", _emptied(result), {
             "message": "the role's output holds a private-key armour line; nothing was recorded",
             "message_sha256": _sha256(raw), "message_length": len(raw), "worker_outcome": result.outcome,

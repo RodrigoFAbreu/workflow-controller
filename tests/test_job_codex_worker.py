@@ -86,7 +86,7 @@ class JobFixture(cwtest.LaunchFixture):
         fixture = dataclasses.replace(harness.CODEX, name=FIXTURE, reviewer_name=None, roles=(harness.WORKER,))
         self.enterContext(mock.patch.object(harness, "ADAPTERS", {**harness.ADAPTERS, FIXTURE: fixture}))
         self.enterContext(mock.patch.object(worker_launch, "LAUNCHERS",
-                                            {**worker_launch.LAUNCHERS, FIXTURE: self.launcher}))
+                                            {**worker_launch.LAUNCHERS, (FIXTURE, harness.WORKER): self.launcher}))
         self.enterContext(mock.patch.object(job, "_new_job_id", self.next_id))
         self.enterContext(mock.patch.object(job, "CODEX_WORKTREE_PREPARER", self.prepare))
         self.enterContext(mock.patch.object(job, "CODEX_LANDER", process_fixtures.nothing_lander))
@@ -472,7 +472,7 @@ class ProtocolDecisionTest(unittest.TestCase):
 
 class UnchangedClaudePathTest(unittest.TestCase):
     def test_the_real_registrations_and_the_claude_stream_format_are_unchanged(self) -> None:
-        self.assertEqual(set(worker_launch.LAUNCHERS), {harness.CLAUDE_CODE.name})
+        self.assertNotIn((harness.CODEX.name, harness.WORKER), worker_launch.LAUNCHERS)
         self.assertNotIn(harness.WORKER, harness.CODEX.roles)
         self.assertEqual(job.WORKER_STREAM_FORMAT, "stream-json")
         self.assertFalse(job._is_codex_launcher(worker_launch.for_harness(harness.CLAUDE_CODE.name)))

@@ -68016,7 +68016,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-h4e3-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4e3-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 12,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -68168,12 +68168,12 @@
           "external": 4
         },
         "implementation": {
-          "local": 0,
+          "local": 1,
           "external": 0
         }
       },
-      "state_revision": 61,
-      "last_transition": "2026-11-10T20:43:39Z",
+      "state_revision": 62,
+      "last_transition": "2026-11-10T20:56:41Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -68414,6 +68414,34 @@
               "review_content_id": "c0518e9e85ef3eeccc13e829d702b31ab62d6418e479efd550da3e44185fba97",
               "verdict": "REVISE",
               "at": "2026-11-10T18:45:08Z"
+            }
+          ]
+        },
+        "F-f9018db9678e": {
+          "digest": "f9018db9678e84b316ec2be2c618655e2864e7f932299841358c7c4f540dd78e",
+          "text": "**H4E3-I1-O1 (D10):** `CAUSE_CASES[\"carry_managed_changed\"]` points at `test_another_items_entry_changed_meanwhile_is_kept_and_the_job_ends_at_the_gate`, which asserts the job did *not* fail. The test that proves the cause through the job is `test_a_managed_member_changed_by_someone_else_is_refused_and_nothing_is_written`. Point the table at it, so that the \"every cause has a case\" check names a test that actually produces the cause.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "c54ea3fe13125dc2cb01756ea1c18d2fc6d07f3e8456eef5ed581b6c2fa32ea0",
+              "verdict": "REVISE",
+              "at": "2026-11-10T20:56:41Z"
+            }
+          ]
+        },
+        "F-b75263b6eacf": {
+          "digest": "b75263b6eacf0a8e6ad702fe91ed1281056828260d7ce9bfb02f16c650d93d05",
+          "text": "**H4E3-I1-O2 (D9):** `--abandon` and a drifted release at stage `out` leave the members already written in place (as `test_abandon_ends_each_stage_without_carrying_out` acknowledges), but `_end_carry_without_carry_out` adds no `codex_carry` progress to the evidence. The operator is not told that the managed tree now holds some of the worker's files and the old state file. Add `_carry_progress` (stage, written, not written) to the abandon and drift evidence, as the post-spawn handler does, and say so on `docs/common-problems.md`.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "c54ea3fe13125dc2cb01756ea1c18d2fc6d07f3e8456eef5ed581b6c2fa32ea0",
+              "verdict": "REVISE",
+              "at": "2026-11-10T20:56:41Z"
             }
           ]
         }

@@ -340,11 +340,23 @@ class RowTests:
         self.assertFalse(self.layout.worktree.exists())
         self.assert_valid(record)
 
+    def realistic(self, marker: str) -> str:
+        """Script a ``codex exec`` that prints what a real non-``--json`` run prints: the final message alone on stdout
+        and a transcript on stderr that repeats it (``tests/harness_contract/codex/stderr_shapes.txt``)."""
+        text = message("APPROVE", extra=" " + marker)
+        self.script(message=text, stdout=text, stderr="OpenAI Codex v0.162.1\nuser\nreview it\ncodex\n" + text + "\ntokens used\n")
+        return text
+
+    def holders(self, marker: str) -> list[str]:
+        return [p.relative_to(self.runtime).as_posix() for p in sorted(self.runtime.rglob("*"))
+                if p.is_file() and marker.encode() in p.read_bytes()]
+
     def test_a_refused_record_leaves_the_verdict_text_in_no_file_but_the_one_verdict_file(self) -> None:
-        """Review I1: the returned record, every runtime file and every event hold the verdict marker only in
-        ``reviews/<job>-verdict.md`` (0600): not in ``worker.result_excerpt``, the streams or ``last-message.md``."""
+        """Review I1 (rounds 2 and 3): with a realistic stdout and stderr, the returned record, every runtime file and
+        every event hold the verdict marker only in ``reviews/<job>-verdict.md`` (0600): not in
+        ``worker.result_excerpt``, ``worker.stdout``, ``worker.stderr`` or ``last-message.md``."""
         marker = "UNIQUE-VERDICT-MARKER-4f1c9"
-        self.script(message=message("APPROVE", extra=" " + marker))
+        self.realistic(marker)
 
         def refused(*args, **kw):
             raise WorkflowQueryError("timed out", evidence={})
@@ -353,9 +365,19 @@ class RowTests:
             record = self.step()
         self.assertEqual(record["status"], job.STATUS_FAILED)
         self.assertNotIn(marker, json.dumps(record, default=str))
-        holders = [p for p in self.runtime.rglob("*") if p.is_file() and marker.encode() in p.read_bytes()]
-        self.assertEqual([p.relative_to(self.runtime).as_posix() for p in holders], ["reviews/job1-verdict.md"])
-        self.assertEqual(holders[0].stat().st_mode & 0o777, 0o600)
+        self.assertEqual(self.holders(marker), ["reviews/job1-verdict.md"])
+        self.assertEqual((self.runtime / "reviews/job1-verdict.md").stat().st_mode & 0o777, 0o600)
+        stderr = (self.runtime / "jobs/job1/worker.stderr").read_text()
+        self.assertEqual((self.runtime / "jobs/job1/worker.stdout").read_text(), "")
+        self.assertIn("OpenAI Codex v0.162.1", stderr)  # the rest of the transcript stays as the diagnostic
+
+    def test_a_recorded_review_leaves_the_verdict_text_in_no_stream_file(self) -> None:
+        marker = "UNIQUE-VERDICT-MARKER-7b2e8"
+        self.realistic(marker)
+        record = self.step()
+        self.assertNotIn(marker, json.dumps(record, default=str))
+        self.assertNotIn("jobs/job1/worker.stdout", self.holders(marker))
+        self.assertNotIn("jobs/job1/worker.stderr", self.holders(marker))
 
 
 class UsageTests:
@@ -583,7 +605,7 @@ class RecoveryTests:
         elif stage == "recording":
             patch = mock.patch.object(review_recorder, "record", side_effect=RuntimeError("fault"))
         else:
-            patch = mock.patch.object(codex_worker_job, "stream_texts", side_effect=RuntimeError("fault"))
+            patch = mock.patch.object(crr, "without_message_streams", side_effect=RuntimeError("fault"))
         with patch, self.assertRaises(RuntimeError):
             self.step()
         return self.only_record()

@@ -9324,7 +9324,8 @@ def _run_codex_review(
         record = state["record"]
         result = ending.worker
         if result is not None:
-            stdout_text, stderr_text = codex_worker_job.stream_texts(result)
+            # The verdict is kept once, at reviews/<job>-verdict.md: neither stream file keeps it (review round 3, I1).
+            stdout_text, stderr_text = codex_review_role.without_message_streams(result)
             runtime.fill_log_file(runtime_root, f"jobs/{job_id}/worker.stdout", stdout_text.encode("utf-8"))
             runtime.fill_log_file(runtime_root, f"jobs/{job_id}/worker.stderr", stderr_text.encode("utf-8"))
             completed_at = _now()

@@ -454,6 +454,9 @@ of each ending:
 | `workflow_release_changed` | `FAILED` with `WORKFLOW_RELEASE_CHANGED_REASON`, nothing recorded |
 | `CodexReviewRecordRefused` | `FAILED`, the Workflow's class as the cause; the composed verdict is kept once at `reviews/<job id>-verdict.md` (mode 0600) and its path and SHA-256 are in the evidence, so the operator can record it by hand |
 
+A routed review keeps the verdict text nowhere else: the job's `worker.stdout` is empty (non-`--json` `codex exec` prints
+only the final message there) and `worker.stderr` keeps the banner and transcript without the lines of the final message.
+
 The recovery sites (`resume` of a launched record, `abandon`, a drifted Workflow release and the post-spawn exception
 handler) call `recover`, record nothing again and leave no clone: `CodexReviewNotRecorded` (stage `preparing`) is
 `INTERRUPTED`; `CodexReviewRecordInterrupted` (stage `recording`) takes `reconcile`'s judgement of the phase; a `recorded`

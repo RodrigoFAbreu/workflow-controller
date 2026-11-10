@@ -398,6 +398,17 @@ def without_message(result: worker.WorkerResult) -> worker.WorkerResult:
     return worker.WorkerResult(**{**fields, "result": ""})
 
 
+def without_message_streams(result: worker.WorkerResult) -> tuple[str, str]:
+    """``(stdout, stderr)`` of a routed review with the final message (the verdict) kept out (review round 3, I1).
+    Non-``--json`` ``codex exec`` prints the final message alone on stdout and repeats it in the stderr transcript, so
+    stdout is emptied and every stderr line that is a line of the message (compared stripped) is dropped; the rest of
+    the transcript, the banner and the warnings stay as the diagnostic."""
+    message_lines = {line.strip() for text in (result.result or "", result.stdout or "") for line in text.splitlines()}
+    message_lines.discard("")
+    kept = [line for line in (result.stderr or "").splitlines(keepends=True) if line.strip() not in message_lines]
+    return "", "".join(kept)
+
+
 def _recorded_block(code: str, recorded: Mapping[str, Any]) -> dict:
     return {"code": code, **recorded}
 

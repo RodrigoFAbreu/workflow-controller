@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-h4e3",
+  "requirements": {
+    "R1": {
+      "description": "apply-plan-review and apply-implementation-review can be routed to codex through the existing harness field, behind their own adapter role, with the default and every Claude record unchanged (#315)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The carry set of each role is derived and closed, the implementation role starts clean through the Workflow's writer, and carry in and out are guarded, ordered and recoverable (#315)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "A routed apply runs the carry around the Codex worker inside the job's record and stops after the landing at the existing bundle gate, running no script of the managed repository, with one job status per ending and one test each (#334)",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R4": {
+      "description": "Every recovery site of a codex_carry record completes or ends it without writing twice and without losing the work (#315)",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R5": {
+      "description": "The routed path is tested adversarially through the job, with a test for every cause and refusal and for the boundary the item draws (#334)",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "R6": {
+      "description": "An opt-in operator live proof of both roles exists, and the pages say what is selectable, what the Controller leaves to the operator and how each refusal is cleared (#334)",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    }
+  }
+}

@@ -545,9 +545,12 @@ generator copies, and it never runs anything else of the managed tree (no other 
   1. *The landing.* The implementation role's landed range (`carry base..landed head`, read as name-status records with renames
      split) may touch nothing under `scripts/` or `.workflow-manager/`, whatever the status letter. A range that cannot be read,
      or a head that is not a descendant of the base, is refused the same way. The plan role makes no commit, so the tree check
-     is its whole guard. For the implementation role this check runs *first*, before any Workflow query of the job (the
-     `reconcile` after the landing included): the queries check `scripts/` against the installation record, a committed file
-     the landing may have edited together with a script, so a refused landing ends at the gate with no query run.
+     is its whole guard. For the implementation role this check runs before the generator, not before every query. **Known gap:** the Controller's
+     own protocol queries after a landing (the `reconcile` included) run the managed `scripts/workflow_protocol.py`, and the
+     record they check `scripts/` against is a committed file the landing may have edited together with a script. A landed
+     edit of a managed script whose record digest is edited to match is therefore run by the first protocol query after the
+     landing, before this check can refuse it. This is recorded by an `expectedFailure` test and not fixed here; keep the
+     Codex route for repositories whose landings you review.
   2. *The tree.* Every file of `scripts/` that `.workflow-manager/installation.json` records must be a regular file whose
      digest equals the record's, and `scripts/prepare-ai-review.sh` must be one of them; the directory may hold no other entry
      than those, `__pycache__` and names starting with `.` (a `sitecustomize.py`, a module that shadows the standard library, a

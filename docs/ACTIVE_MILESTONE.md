@@ -2,6 +2,10 @@
 
 ## Status
 
+**In progress.** `workflow-controller-h4e3b` (H4e3b, issue [#334](https://github.com/RodrigoFAbreu/workflow-controller/issues/334)): plan `docs/ai-workflow/CONTROLLER_H4E3B_PLAN.md` (revision 4), four checkpoints. It lets the Controller run the managed repository's review-bundle generator after a Codex apply role's landing, only when it can show that nothing the worker could have written is on what the interpreter loads or what the generator copies; otherwise the lane stops at H4e3's gate `carry_bundle_regeneration_pending`, now naming the cause. CP1 is complete: `controller/generator_run.py` holds `check_landing` (D2), `check_tree` (D3), `check_copy_sources` (D5a) and `run` (D4, D5, the three checks, the generator, the checks again), with `generator_run.CAUSES` and `GeneratorRefused`; `workflow_contract.run_in_place` runs a command in the target with the five interpreter pins, a private `python3` and the hook/filter isolation of the query runner; `gitrepo.diff_name_status` reads a range or the working tree as name-status records. The job does not call it yet (CP2). Verified with `tests.test_generator_run`, `tests.test_workflow_contract`, `tests.test_gitrepo`, `tests.test_package_structure` and `tests.test_write_containment`.
+
+## Previous milestone (H4e3)
+
 **Complete.** `workflow-controller-h4e3` (H4e3, issue [#334](https://github.com/RodrigoFAbreu/workflow-controller/issues/334)):
 plan `docs/ai-workflow/CONTROLLER_H4E3_PLAN.md` (revision 12), five checkpoints. It routes `apply-plan-review` and
 `apply-implementation-review` to Codex through a bounded carry of the uncommitted working set, and stops after the landing

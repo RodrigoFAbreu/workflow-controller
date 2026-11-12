@@ -68016,7 +68016,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-h4e3-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4e3-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 12,
       "implementation_revision": 3,
       "functional_review_round": null,
@@ -68168,12 +68168,12 @@
           "external": 4
         },
         "implementation": {
-          "local": 2,
-          "external": 1
+          "local": 3,
+          "external": 2
         }
       },
-      "state_revision": 66,
-      "last_transition": "2026-11-12T08:31:15Z",
+      "state_revision": 68,
+      "last_transition": "2026-11-12T08:42:41Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -68472,6 +68472,34 @@
               "at": "2026-11-12T06:15:02Z"
             }
           ]
+        },
+        "F-cc134cd07664": {
+          "digest": "cc134cd0766420d6182e2092b27020f5c9ef35729b449e0740b78fb1d54609a2",
+          "text": "**H4E3-I3-O1 (docs, D8/D9):** `carry_managed_changed` can now be raised at carry in, before the worker is launched. `job._run_codex_worker` then records `WorkerNotStarted` and removes the clone. `docs/common-problems.md` lists only `carry_foreign_dirt`, `carry_commit_pending_failed` and `carry_member_refused` as before-launch causes, and its `carry_managed_changed` bullet says to reconcile \"from the kept clone\", which does not exist in this case. Add `carry_managed_changed` to the before-launch list and say that a refusal at carry in wrote nothing and kept no clone, so running again after the operator's own edit settles is the remedy.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "5b6b9b8efef32c731cfbd3b26ce71d7ef62999746b7ac19622ede5f26a693d1a",
+              "verdict": "APPROVE",
+              "at": "2026-11-12T08:39:11Z"
+            }
+          ]
+        },
+        "F-d920cfa8ce1a": {
+          "digest": "d920cfa8ce1ab519124f8726329f2a5d1620aa59231ec1bfc78d84cd18ef5dcb",
+          "text": "**H4E3-I3-O2:** the bundle's `TEST_RESULTS.md` is still headed \"implementation revision 1\" and describes the run at `2b03d78` (the same as H4E3-I2-O2). The revision 3 results are only in `IMPLEMENTATION_SUMMARY.md`. Update it when the bundle is next generated.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "5b6b9b8efef32c731cfbd3b26ce71d7ef62999746b7ac19622ede5f26a693d1a",
+              "verdict": "APPROVE",
+              "at": "2026-11-12T08:39:11Z"
+            }
+          ]
         }
       },
       "amendment_history": [
@@ -68595,13 +68623,13 @@
       ],
       "amendment_base_commit": "bc89f9b0d0de0b424585f95f150079eb35003eea",
       "implementation_review_stages": {
-        "review_content_id": "db6d6a430c211389054f3a27361c6bacbc62b039d20de33bd8453bdb3795d67e",
+        "review_content_id": "5b6b9b8efef32c731cfbd3b26ce71d7ef62999746b7ac19622ede5f26a693d1a",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "c0f6122d7944ad1e8993e2a0f346edceb6369f08e85b5a7d38044e333f70d6e1",
+          "bundle_id": "280bff77ef878a63aa279a41c2f6b25be7374d595ce9244a68b7ec9629c14c18",
           "verdict": "APPROVE",
-          "round": 2,
-          "completed_at": "2026-11-12T06:15:02Z",
-          "verdict_sha256": "01532685411403b165d3e1a68a8f550f2f6aa80d269bf4d3065106d06d9ef0c2",
+          "round": 3,
+          "completed_at": "2026-11-12T08:39:11Z",
+          "verdict_sha256": "463610107b56c5a2dcac08d87a9732e68d60ea03ae2e239aeb1a8ace52c75378",
           "run_ref": "session:local .ai-review/workflow-controller-h4e3/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },

@@ -86,6 +86,7 @@ from __future__ import annotations
 
 import calendar
 import contextlib
+import copy
 import dataclasses
 import datetime
 import fcntl
@@ -107,7 +108,7 @@ from typing import Any, Callable
 
 from controller import harness as adapters
 from controller import (
-    codex_review_role, codex_tester, codex_worker, codex_worker_job, codex_worker_landing, codex_worker_sandbox, codex_worker_tree, evidence, functional_review, gitrepo, identity, lock, milestone_branch, notify, pr_report, protocol, protocol_decision, review, review_mode, review_rounds,
+    codex_carry, codex_review_role, codex_tester, codex_worker, codex_worker_job, codex_worker_landing, codex_worker_sandbox, codex_worker_tree, evidence, functional_review, gitrepo, identity, lock, milestone_branch, notify, pr_report, protocol, protocol_decision, review, review_mode, review_rounds,
     route_select, routing, runtime, target_state, telemetry, usage, usage_record, worker, worker_launch, worker_stream, workflow_contract,
 )
 from controller.decision import (
@@ -117,6 +118,7 @@ from controller.decision import (
     Decision,
     branch_human_gate,
     decide_no_work_item,
+    explain_gate_command,
     phase_from_wire,
     phase_to_wire,
 )
@@ -3114,6 +3116,9 @@ def _resume_drifted_protocol(record: JobRecord, *, managed_repo: Any, runtime_ro
     elif _is_codex_worker_record(record):
         # An ended `LAUNCHED` record keeps `tree` and the sessions alone (D7); the caller settled the credentials.
         _settle_codex_worker_dir(runtime_root, str(record["job_id"]), keep_tree=True)
+    elif _is_codex_carry_record(record):
+        # H4e3 (D9): the drift ending of a routed apply carries nothing out and keeps the clone when the worker ran.
+        record, recovery = _end_carry_without_carry_out(record, managed_repo=managed_repo, runtime_root=runtime_root)
     review_ending = None
     if _is_codex_review_record(record):
         # H4e2b (D4): the drift ending of a routed Codex review removes its clone and records nothing.
@@ -3140,7 +3145,11 @@ def _resume_drifted_protocol(record: JobRecord, *, managed_repo: Any, runtime_ro
     if review_ending is not None:
         failed["reconciliation_evidence"] = {**failed["reconciliation_evidence"],
                                              "codex_review": dict(review_ending.evidence)}
-    if _is_codex_worker_record(record):
+    if _is_codex_carry_record(record):
+        # H4e3 (D9, O2): what the managed repository holds of the worker's work, as the post-spawn handler names it.
+        failed["reconciliation_evidence"] = {**failed["reconciliation_evidence"],
+                                             "codex_carry": _carry_progress(record["codex_carry"], managed_repo.root)}
+    if _is_codex_worker_record(record) or _is_codex_carry_record(record):
         # H4e leftovers, D1 site 4: a clone this ending kept is named (a refused landing already carries its own).
         failed = _name_kept_clone(failed, runtime_root)
     return _persist(runtime_root, record["job_id"], failed, event="reconciled", details=_reconciled_details(failed))
@@ -3182,7 +3191,7 @@ _REVIEW_KILL_SETTLE_SECONDS = 5.0
 
 def _group_label(record: Mapping) -> str:
     """What a group-ending message calls the record: a Codex worker's own name, else ``<harness> review``."""
-    if _is_codex_worker_record(record):
+    if _is_codex_worker_record(record) or _is_codex_carry_record(record):
         return "Codex worker"
     if _is_codex_review_record(record):
         return "Codex review"
@@ -3193,13 +3202,23 @@ def _is_codex_worker_record(record: Mapping) -> bool:
     """A Codex worker's record (H4c2, D5): a non-review, non-tester record carrying the ``codex_worker`` block that
     ``_run_codex_worker`` persists before it prepares the tree. The adapter's name is never read."""
     return (not is_review_record(record) and not is_functional_record(record)
-            and isinstance(record.get("codex_worker"), Mapping))
+            and isinstance(record.get("codex_worker"), Mapping) and not _is_codex_carry_record(record))
 
 
 def _is_codex_owned_record(record: Mapping) -> bool:
     """A record whose process is a Codex one -- a Codex worker or a routed Codex review. `resume` ends such an
     orphan and never follows it (H4c2, D7), so process handling tests this, not :func:`_is_codex_worker_record`."""
-    return _is_codex_worker_record(record) or _is_codex_review_record(record)
+    return _is_codex_worker_record(record) or _is_codex_review_record(record) or _is_codex_carry_record(record)
+
+
+def _is_codex_carry_record(record: Mapping) -> bool:
+    """A routed Codex apply role's record (workflow-controller-h4e3, D9): a protocol job record carrying the
+    ``codex_carry`` block that :func:`_run_codex_apply` persists before it makes the clone. The block, never the
+    adapter's name, identifies it. It also carries the ``codex_worker`` block (the credentials, the clone and the
+    landing), but it is kept apart from :func:`_is_codex_worker_record`: a carry record never reaches
+    :func:`_reconcile_codex_worker`, whose recovery knows nothing of the members to carry out."""
+    return (not is_review_record(record) and not is_functional_record(record)
+            and isinstance(record.get("codex_carry"), Mapping))
 
 
 def _is_codex_review_record(record: Mapping) -> bool:
@@ -3777,6 +3796,11 @@ def _resume_records(managed_repo: Any, *, identity: Any, runtime_root: Path) -> 
             results.append({**_reconcile_codex_review(record, managed_repo=managed_repo, runtime_root=runtime),
                             "reconciled_this_call": True})
         elif (not drifted and status in (STATUS_LAUNCHED, STATUS_COMPLETED)
+              and _is_codex_carry_record(record)):
+            # H4e3 (D9): a routed apply record never reaches the Codex worker's reconciler.
+            results.append({**_reconcile_codex_carry(record, managed_repo=managed_repo, runtime_root=runtime),
+                            "reconciled_this_call": True})
+        elif (not drifted and status in (STATUS_LAUNCHED, STATUS_COMPLETED)
               and _is_codex_worker_record(record)):
             results.append({**_reconcile_codex_worker(record, managed_repo=managed_repo, runtime_root=runtime),
                             "reconciled_this_call": True})
@@ -3785,7 +3809,7 @@ def _resume_records(managed_repo: Any, *, identity: Any, runtime_root: Path) -> 
             if marked is not None:
                 results.append(marked)
             elif _drift_decides(record, managed_repo):
-                if _is_codex_worker_record(record) or _is_codex_review_record(record):
+                if _is_codex_owned_record(record):
                     _settle_codex_credentials(record, runtime)
                 results.append({**_resume_drifted_protocol(record, managed_repo=managed_repo, runtime_root=runtime),
                                 "reconciled_this_call": True})
@@ -5067,6 +5091,10 @@ def _abandon_mark_failed(managed_repo: Any, *, identity: Any, runtime_root: Path
         else:
             # An ended `LAUNCHED` record keeps `tree` and the sessions alone (D7), as `resume` does (round 3, O1).
             _settle_codex_worker_dir(runtime_root, job_id, keep_tree=True)
+    elif _is_codex_carry_record(record):
+        # H4e3 (D9): the abandon of a routed apply carries nothing out, keeps the clone when the worker ran.
+        _settle_codex_credentials(record, runtime_root)
+        record, recovery = _end_carry_without_carry_out(record, managed_repo=managed_repo, runtime_root=runtime_root)
     review_ending = None
     if _is_codex_review_record(record):
         # H4e2b (D4): the abandon of a routed Codex review removes its clone and records nothing.
@@ -5092,7 +5120,11 @@ def _abandon_mark_failed(managed_repo: Any, *, identity: Any, runtime_root: Path
     if review_ending is not None:
         abandoned["reconciliation_evidence"] = {**abandoned["reconciliation_evidence"],
                                                 "codex_review": dict(review_ending.evidence)}
-    if _is_codex_worker_record(record):
+    if _is_codex_carry_record(record):
+        abandoned["reconciliation_evidence"] = {
+            **abandoned["reconciliation_evidence"],
+            "codex_carry": _carry_progress(record["codex_carry"], managed_repo.root)}
+    if _is_codex_worker_record(record) or _is_codex_carry_record(record):
         # H4e leftovers, D1 site 5: the abandon of a `COMPLETED` or `LAUNCHED` record names the clone it kept (a
         # refused landing already carries its own).
         abandoned = _name_kept_clone(abandoned, runtime_root)
@@ -9009,7 +9041,8 @@ def _codex_clone_of(record: Mapping) -> codex_worker_tree.Prepared | None:
 
 
 def _land_codex_worker(managed_repo: Any, *, runtime_root: Path, job_id: str, record: JobRecord,
-                       result: worker.WorkerResult) -> tuple[JobRecord, codex_worker_landing.Landing]:
+                       result: worker.WorkerResult | None, breach: bool | None = None,
+                       ) -> tuple[JobRecord, codex_worker_landing.Landing]:
     """H4e D6, D7: land the clone's commits after the ``COMPLETED`` write. The intent block is persisted by the
     lander's ``on_intent`` callback before the fetch. Returns the record (carrying the intent block when one was
     written) and the :class:`~controller.codex_worker_landing.Landing`; nothing here raises for a Git failure, and an
@@ -9028,7 +9061,8 @@ def _land_codex_worker(managed_repo: Any, *, runtime_root: Path, job_id: str, re
         current["record"] = _persist(runtime_root, job_id, {**held, "codex_worker": block, "updated_at": _now()},
                                      event="codex_landing_started", details={"tip": tip})
 
-    breach = result.subtype == codex_worker.SUBTYPE_BREACH
+    if breach is None:
+        breach = result is not None and result.subtype == codex_worker.SUBTYPE_BREACH
     try:
         landing = CODEX_LANDER(managed_repo, prepared, runtime_root, job_id, worker_breach=breach,
                                on_intent=on_intent)
@@ -9098,18 +9132,33 @@ def _landing_refusal_evidence(block: Mapping, clone: str | None) -> dict:
             "clone": clone, "landing": dict(block)}
 
 
+def _carry_progress(block: Mapping, root: Path) -> dict:
+    """The stage of a carry and the members its carry out has not written (D8): what an ending that stopped part-way
+    names, so the operator knows what the managed repository holds."""
+    with contextlib.suppress(Exception):
+        return {"stage": block.get("stage"), "not_written": codex_carry.not_written(block, Path(root))}
+    return {"stage": block.get("stage"), "not_written": None}
+
+
 def _run_codex_worker(
     managed_repo: Any, *, runtime_root: Path, run_id: str | None, job_id: str, record: JobRecord, decision: Decision,
     route: routing.ResolvedRoute, timeout: float | None, launcher: Any,
     worker_not_started: Callable[..., None], ticker: usage.RenewalTicker | None = None,
-    base: str | None = None,
+    base: str | None = None, carry: tuple[codex_carry.CarrySet, dict] | None = None,
 ) -> tuple[worker.WorkerResult, JobRecord, dict]:
     """The call-and-wait block of a Codex worker (H4c1, D2, D4, D8): the tree and Codex home from their seams, the
     launch with the eight options of D4, ``worker_process`` flushed on spawn and the two stream files filled after
     the run. Returns ``(result, record, spawned)``. A ``ControllerError`` before the spawn is a terminal
     ``WorkerNotStarted``; ``KeyboardInterrupt`` leaves the record ``LAUNCHED``; any other exception (or any once
-    ``worker_process`` is flushed) ends the record ``FAILED`` naming it. Every case re-raises."""
+    ``worker_process`` is flushed) ends the record ``FAILED`` naming it. Every case re-raises. ``carry`` is a routed
+    apply role's ``(CarrySet, block)`` (workflow-controller-h4e3, D8): the carry in (D5) then makes the clone in place
+    of the preparer, and the block rides in every write from the clone's on."""
     spawned: dict[str, Any] = {}
+
+    def persist_carry(block: dict) -> None:
+        nonlocal record
+        record = _persist(runtime_root, job_id, {**record, "codex_carry": dict(block), "updated_at": _now()},
+                          event=f"codex_carry_{block.get('stage')}")
 
     def on_spawn(pid: int, pgid: int) -> None:
         nonlocal record
@@ -9130,13 +9179,17 @@ def _run_codex_worker(
                 "captured_digest": review._sha256_file(Path(operator_home) / review.CODEX.credential_file),
                 "lock_inherited": False},
             "updated_at": _now()}, event="codex_worker_prepared")
-        preparer = CODEX_WORKTREE_PREPARER
-        if preparer is None:
-            raise WorkerLaunchError(
-                "no worktree is prepared for a Codex worker: how the tree is made and how its commits return to the "
-                "managed repository is not decided yet",
-                evidence={"job_id": job_id, "harness": route.harness})
-        prepared = preparer(managed_repo, codex_worker_sandbox.WorkerLayout(runtime_root, job_id), base)
+        layout = codex_worker_sandbox.WorkerLayout(runtime_root, job_id)
+        if carry is not None:
+            prepared = codex_carry.carry_in(managed_repo, layout, carry[0], carry[1], persist=persist_carry)
+        else:
+            preparer = CODEX_WORKTREE_PREPARER
+            if preparer is None:
+                raise WorkerLaunchError(
+                    "no worktree is prepared for a Codex worker: how the tree is made and how its commits return to "
+                    "the managed repository is not decided yet",
+                    evidence={"job_id": job_id, "harness": route.harness})
+            prepared = preparer(managed_repo, layout, base)
         record = _persist(runtime_root, job_id, {
             **record, "codex_worker": {**record["codex_worker"], "clone": prepared.to_dict()},
             "updated_at": _now()}, event="codex_worker_clone")
@@ -9169,6 +9222,8 @@ def _run_codex_worker(
                 if "worker_process" in spawned:
                     if (clone := _codex_clone_path(record, runtime_root)) is not None:
                         evidence["clone"] = clone
+                    if carry is not None:
+                        evidence["codex_carry"] = _carry_progress(carry[1], managed_repo.root)
                 else:
                     evidence = _with_kept_clone(evidence, record, runtime_root) or evidence
                 failed = _persist(runtime_root, job_id, {
@@ -9184,6 +9239,471 @@ def _run_codex_worker(
         if ticker is not None:
             ticker.stop()
     return result, record, spawned
+
+
+#: ``reconciliation_evidence.code`` of a routed apply whose carry (or landing) was refused after the worker ran (D8):
+#: the cause of the carry (``codex_carry.CAUSES``) is the evidence's ``cause``, the clone is kept and named.
+CODEX_CARRY_REFUSED_CODE = "CodexCarryRefused"
+
+
+class _CarryLandingRefused(Exception):
+    """A routed implementation apply's landing was refused (or recovered as refused): ``block`` is the final
+    ``landing`` block. Nothing is carried out and the clone is kept (D8)."""
+
+    def __init__(self, block: Mapping) -> None:
+        super().__init__(str(block.get("cause")))
+        self.block = dict(block)
+
+
+def _is_codex_apply_route(route: routing.ResolvedRoute) -> bool:
+    """Whether ``route`` is one of the two apply roles routed to Codex (workflow-controller-h4e3, D8): keyed on the
+    route's role and harness. Such a route takes the apply branch (:func:`_run_codex_apply`), before the Codex
+    worker's."""
+    return (route.role in routing.LOCAL_APPLY_ROLES
+            and adapters.get(route.harness).name == adapters.CODEX.name)
+
+
+#: ``reconciliation_evidence.code`` of a routed apply that stopped after its carry out (D8): the Controller's own gate,
+#: defined here and not a member of ``codex_carry.CAUSES`` (it is no refusal).
+CARRY_BUNDLE_GATE_CODE = "carry_bundle_regeneration_pending"
+
+#: The reconcile reason a plan role's stale bundle ends with, and the Workflow's status behind it (D8).
+_PLAN_NOT_BOUND_CODE = "plan_review_not_bound"
+_BUNDLE_UNVERIFIED = "BUNDLE_UNVERIFIED"
+
+
+def _manifest_plan_revision(root: Path, work_item_id: str) -> int | None:
+    """The ``plan_revision:`` line of the managed ``current/MANIFEST.md``, read as data through the carry's bounded
+    reader (D8, condition 3); ``None`` for a missing, unreadable or non-regular manifest or a line that is not an
+    integer."""
+    try:
+        rel = f"{codex_carry.ITEM_ROOT}/{work_item_id}/current/MANIFEST.md"
+        text = codex_carry.read_member(root, rel, check_name=False)[0].decode("utf-8", "replace")
+    except (FileNotFoundError, ControllerError, OSError, ValueError):
+        return None
+    for line in text.splitlines():
+        if line.startswith("plan_revision:"):
+            value = line.partition(":")[2].strip()
+            return int(value) if value.isdigit() else None
+    return None
+
+
+def _carried_out_entry(root: Path, work_item_id: str) -> Mapping | None:
+    """This item's entry of the managed state file, as the carry out left it, read through the carry's bounded
+    reader; ``None`` when it cannot be read."""
+    try:
+        document = json.loads(codex_carry.read_member(root, codex_carry.STATE_PATH, check_name=False)[0])
+        entry = document["work_items"][work_item_id]
+    except (FileNotFoundError, ControllerError, OSError, ValueError, KeyError, TypeError):
+        return None
+    return entry if isinstance(entry, Mapping) else None
+
+
+def _is_expected_stale_bundle(fields: Mapping, record: Mapping, root: Path) -> bool:
+    """D8's narrow check: whether a plan role's ``reconcile_invalid`` ending is exactly the expected stale-bundle
+    result, never by the class alone. All four hold: (1) the role is the plan role and its carry is ``done`` after a
+    carry out that wrote every member; (2) ``invalid_reasons`` holds exactly one entry, ``plan_review_not_bound``, whose
+    text is exactly ``<observed phase> with plan_review_publication_status BUNDLE_UNVERIFIED``; (3) the managed
+    ``current/MANIFEST.md``'s ``plan_revision`` is an integer lower than the carried-out entry's; (4) no
+    ``REJECTED`` marker exists (``lstat`` only) and the entry's ``plan_review_binding`` is ``BOUND`` at the entry's own
+    ``plan_revision``. Reads files only: no script of the managed repository runs."""
+    block = record.get("codex_carry")
+    if not isinstance(block, Mapping) or block.get("role") != routing.APPLY_PLAN_REVIEW or block.get("stage") != "done":
+        return False
+    if codex_carry.not_written(block, root):
+        return False
+    found = fields.get("reconciliation_evidence")
+    reasons = found.get("invalid_reasons") if isinstance(found, Mapping) else None
+    if not (isinstance(found, Mapping) and found.get("reason") == RECONCILE_INVALID_REASON
+            and isinstance(reasons, list) and len(reasons) == 1 and isinstance(reasons[0], Mapping)
+            and reasons[0].get("code") == _PLAN_NOT_BOUND_CODE):
+        return False
+    observed = fields.get("observed_phase_after")
+    if reasons[0].get("text") != f"{observed} with plan_review_publication_status {_BUNDLE_UNVERIFIED}":
+        return False
+    work_item_id = str(record["work_item_id"])
+    entry = _carried_out_entry(root, work_item_id)
+    revision = None if entry is None else entry.get("plan_revision")
+    manifest = _manifest_plan_revision(root, work_item_id)
+    if type(revision) is not int or manifest is None or manifest >= revision:
+        return False
+    marker = root / codex_carry.ITEM_ROOT / work_item_id / "REJECTED"
+    try:
+        os.lstat(marker)
+        return False
+    except FileNotFoundError:
+        pass
+    except OSError:
+        return False
+    binding = entry.get("plan_review_binding")
+    bound = binding.get("bound") if isinstance(binding, Mapping) else None
+    return (isinstance(binding, Mapping) and binding.get("status") == "BOUND" and isinstance(bound, Mapping)
+            and bound.get("plan_revision") == revision)
+
+
+def _carry_gate_text(role: str, work_item_id: str, base_commit: str | None, resume: str, *,
+                     carry_base: str | None, landed_head: str | None) -> str:
+    """The message of the Controller's regeneration gate (D8): the steps to run in the managed repository, in order.
+    The implementation role names the landed range to read first, because the generator executes ``scripts/`` and any
+    module the landing added to its import path."""
+    base = base_commit or "<the item's base_commit>"
+    if role == routing.APPLY_PLAN_REVIEW:
+        steps = [f"run `scripts/prepare-ai-review.sh {base} plan {work_item_id}`", f"take the next step: `{resume}`"]
+        lead = ("the carried-out plan, registry and review inputs are in the managed repository, but the Controller "
+                "regenerates no bundle and runs no script of the managed repository")
+    else:
+        steps = [f"read the landed range first: `git log -p {carry_base}..{landed_head}`, because the generator "
+                 "executes `scripts/` and any module the landing added to its import path",
+                 f"run `scripts/prepare-ai-review.sh {base} post-fix {work_item_id}`", f"take the next step: `{resume}`"]
+        lead = ("the worker's commits landed and its review inputs are carried out, but the Controller regenerates no "
+                "bundle and runs no script of the managed repository")
+    numbered = "; ".join(f"({index}) {step}" for index, step in enumerate(steps, 1))
+    return f"{lead}. In the managed repository, in order: {numbered}"
+
+
+def _stored_decision(record: Mapping) -> Decision | None:
+    """A :class:`Decision` standing for the record's stored protocol decision (D9: ``resume`` has no live decision),
+    carrying only what a gate over it reads -- the document and the observed phase; ``None`` without a document."""
+    block = record.get("protocol")
+    document = block.get("decision") if isinstance(block, Mapping) else None
+    if not isinstance(document, Mapping):
+        return None
+    info = protocol_decision.ProtocolInfo(
+        document=document, row="", disposition="", action_id=None, arguments={}, state_identity=None, phase=None,
+        route=None, alternatives=(), release=None, protocol_version=None, script_digests=None)
+    return Decision(observed_phase=str((record.get("pre_state") or {}).get("phase")), evidence=(), action=None,
+                    automatic=False, gate=None, declined=False, reason="", protocol=info)
+
+
+def _carry_gate_fields(fields: Mapping, record: Mapping, *, managed_repo: Any, decision: Decision | None) -> dict | None:
+    """``fields`` ended at the Controller's regeneration gate (D8): ``GATE_BLOCKED`` with the gate pending at the phase
+    the resolution observed, the Workflow's reconcile answer kept in the record's ``protocol`` block and the cause in
+    ``reconciliation_evidence.code``. ``None`` when no gate can be made over ``decision`` (the caller then keeps the
+    resolution's own ending)."""
+    if decision is None:
+        decision = _stored_decision(record)
+    if decision is None or decision.protocol is None:
+        return None
+    root = Path(managed_repo.root)
+    work_item_id = str(record["work_item_id"])
+    block = record["codex_carry"]
+    observed = fields.get("observed_phase_after")
+    try:
+        snapshot = target_state.read(managed_repo)
+        work_item = target_state.select_work_item(snapshot, work_item_id=work_item_id)
+        landed = (_current_head(root) if block["role"] == routing.APPLY_IMPLEMENTATION_REVIEW else None)
+        text = _carry_gate_text(block["role"], work_item_id, work_item.base_commit,
+                                explain_gate_command(root, work_item_id),
+                                carry_base=block.get("base_commit"), landed_head=landed)
+        at_phase = Decision(observed_phase=observed if isinstance(observed, str) else decision.observed_phase,
+                            evidence=(), action=None, automatic=False, gate=None, declined=False, reason="",
+                            protocol=decision.protocol)
+        gate = protocol_decision.gate_for(managed_repo, work_item, at_phase, CARRY_BUNDLE_GATE_CODE, text)
+    except ControllerError:
+        return None
+    reconcile = (fields.get("protocol") or {}).get("reconcile") or {}
+    ended = {key: value for key, value in fields.items() if key != "reconciliation_evidence"}
+    ended.update(status=STATUS_GATE_BLOCKED, human_gate_pending=_human_gate_dict(gate.gate),
+                 reconciliation_evidence={"code": CARRY_BUNDLE_GATE_CODE, "reconcile_class": reconcile.get("class"),
+                                          "carry_base": block.get("base_commit"), "landed_head": landed})
+    if (gate_block := _protocol_gate_block(gate)) is not None:
+        ended["protocol_gate"] = gate_block
+    return ended
+
+
+def _carry_resolution(record: Mapping, *, managed_repo: Any, runtime_root: Path, worker_outcome: str | None,
+                      decision: Decision | None = None) -> dict:
+    """The record fields a routed apply's ending writes (D8): the Workflow's own ``reconcile`` through
+    :func:`_protocol_resolution`, unchanged, then the two carried-out rows -- a resolution that answers ``FINISHED``,
+    and a plan role's ``invalid`` answer that is exactly the expected stale-bundle result
+    (:func:`_is_expected_stale_bundle`) -- end ``GATE_BLOCKED`` at the Controller's own regeneration gate. Every other
+    answer is the resolution's own ending. The Controller regenerates nothing."""
+    fields = _protocol_resolution(record, managed_repo=managed_repo, runtime_root=runtime_root,
+                                  worker_outcome=worker_outcome)
+    if (record.get("codex_carry") or {}).get("stage") != "done":
+        return fields
+    if fields["status"] == STATUS_FINISHED:
+        violation = _branch_invariant_violation(managed_repo.root, runtime_root, record)
+        if violation is not None:
+            return {**fields, "status": STATUS_FAILED, "transition_verified": False,
+                    "reconciliation_evidence": violation}
+        if fields.get("protocol", {}).get("progress") == "none":
+            return fields  # a worker that changed nothing is the existing `no_progress` judgement
+        return _carry_gate_fields(fields, record, managed_repo=managed_repo, decision=decision) or fields
+    if (fields["status"] == STATUS_FAILED and _is_expected_stale_bundle(fields, record, Path(managed_repo.root))):
+        return _carry_gate_fields(fields, record, managed_repo=managed_repo, decision=decision) or fields
+    return fields
+
+
+def _carry_failure_fields(record: Mapping, runtime_root: Path, root: Path, exc: Exception) -> dict:
+    """The ``FAILED`` fields of a carry (or landing) refused after the worker ran (D8); the clone is kept."""
+    if isinstance(exc, _CarryLandingRefused):
+        found = _landing_refusal_evidence(exc.block, _codex_clone_path(record, runtime_root))
+        extra: dict = {"codex_worker": {**record["codex_worker"], "landing": exc.block}}
+    else:
+        progress = _carry_progress(record["codex_carry"], root)
+        refused_paths = (exc.evidence or {}).get("paths") or []
+        if codex_carry.STATE_PATH in refused_paths and isinstance(progress.get("not_written"), list):
+            # D6a (I1-002): refused at the check, the worker's state entry was never carried out.
+            progress["not_written"] = sorted({*progress["not_written"], codex_carry.STATE_PATH})
+        found = {"code": CODEX_CARRY_REFUSED_CODE, "cause": exc.cause, "message": exc.message,
+                 "evidence": dict(exc.evidence), "codex_carry": progress}
+        extra = {}
+    return {**extra, "status": STATUS_FAILED, "transition_verified": False, "reconciliation_evidence": found}
+
+
+def _complete_codex_carry(managed_repo: Any, *, runtime_root: Path, job_id: str, record: JobRecord,
+                          carry_set: codex_carry.CarrySet, digests: Mapping[str, str]) -> JobRecord:
+    """D6 and D7: carry out of a record whose worker ended, from the kept clone, and return the record with its block
+    at ``done``. The implementation role's commits land after every check and before the first write, through the
+    landing's own decision when the record already holds a landing block (a recovery). Raises
+    :class:`~controller.codex_carry.CarryError` or :class:`_CarryLandingRefused`; the clone is not removed here."""
+    layout = codex_worker_sandbox.WorkerLayout(runtime_root, job_id)
+    holder = {"record": record}
+    block = copy.deepcopy(dict(record["codex_carry"]))
+
+    def persist(updated: dict) -> None:
+        holder["record"] = _persist(runtime_root, job_id, {**holder["record"], "codex_carry": dict(updated),
+                                                           "updated_at": _now()},
+                                    event=f"codex_carry_{updated.get('stage')}")
+
+    def land() -> None:
+        if carry_set.stage != "implementation":
+            return
+        current = holder["record"]
+        if (current.get("codex_worker") or {}).get("landing") is None:
+            held, landing = _land_codex_worker(managed_repo, runtime_root=runtime_root, job_id=job_id, record=current,
+                                               result=None, breach=False)
+            holder["record"] = held
+            if landing.outcome == "refused":
+                raise _CarryLandingRefused(landing.to_block(clone_kept=True))
+            final, event = landing.to_block(clone_kept=False), (
+                "codex_landed" if landing.outcome == "landed" else "codex_nothing_to_land")
+        else:
+            recovery = codex_worker_landing.recover(managed_repo, current)
+            if recovery.delete_ref:
+                _delete_landing_ref(managed_repo, runtime_root, job_id)
+            if recovery.refused:
+                raise _CarryLandingRefused(recovery.landing)
+            final, event = dict(recovery.landing), "codex_landed"
+        holder["record"] = _persist(runtime_root, job_id, {
+            **holder["record"], "codex_worker": {**holder["record"]["codex_worker"], "landing": final},
+            "updated_at": _now()}, event=event, details={"commits": len(final.get("commits") or [])})
+
+    try:
+        codex_carry.recover(managed_repo, layout, carry_set, block, worker_started=True, persist=persist,
+                            digests=dict(digests), before_write=land)
+    except (codex_carry.CarryError, _CarryLandingRefused) as exc:
+        exc.record = holder["record"]  # the record as the stages and the landing left it, for the failure's write
+        raise
+    return holder["record"]
+
+
+def _carry_set_of(managed_repo: Any, record: Mapping) -> codex_carry.CarrySet:
+    root = Path(managed_repo.root)
+    return codex_carry.compute(root, str(record["work_item_id"]), str(record["codex_carry"]["role"]),
+                               sources=codex_carry.verified_sources(root))
+
+
+def _run_codex_apply(
+    managed_repo: Any, *, runtime_root: Path, run_id: str | None, job_id: str, record: JobRecord, decision: Decision,
+    route: routing.ResolvedRoute, timeout: float | None, launcher: Any, worker_not_started: Callable[..., None],
+    pre_state: Mapping, worker_streams: Mapping, usage_block: Mapping | None, usage_end: dict | None,
+    ticker: usage.RenewalTicker | None,
+) -> JobRecord:
+    """A routed apply role (workflow-controller-h4e3, D8): the carry around the existing Codex worker launch, inside
+    the job's own record, ending at the status D8's table gives and stopping after the landing. It computes D3's set,
+    commits a pending feedback entry for the implementation role (D4) and records the carry base and the re-captured
+    baseline before the clone is made, carries in (D5), launches as H4d does, carries out (D6, landing first for the
+    implementation role) and asks the Workflow's ``reconcile`` through the existing resolution. It runs no script of
+    the managed repository and regenerates no bundle. It returns the terminal record; an exception after the spawn
+    ends the record ``FAILED`` naming it and is re-raised, a ``KeyboardInterrupt`` leaves it ``LAUNCHED`` at its
+    stage for ``resume``."""
+    root = Path(managed_repo.root)
+    work_item_id = str(record["work_item_id"])
+    state: dict[str, Any] = {"record": record}
+
+    def refuse(exc: ControllerError) -> JobRecord:
+        failed = _persist(runtime_root, job_id, {
+            **state["record"], "status": STATUS_FAILED, "transition_verified": False,
+            "reconciliation_evidence": {"code": WORKER_NOT_STARTED_CODE, "error": type(exc).__name__,
+                                        "message": exc.message, "evidence": exc.evidence},
+            "updated_at": _now()}, event="worker_not_started", details={"error": type(exc).__name__})
+        _run_job_ended(run_id, job_id, STATUS_FAILED, failed)
+        return failed
+
+    if decision.protocol is None:
+        return refuse(WorkerLaunchError(
+            f"a routed {route.role} needs the Workflow's protocol decision, which this decision does not carry; "
+            "nothing was started", evidence={"role": route.role, "harness": route.harness}))
+    digests = dict((record.get("protocol") or {}).get("script_sha256") or {})
+    try:
+        carry_set = codex_carry.compute(root, work_item_id, route.role, sources=codex_carry.verified_sources(root))
+        pre_head = str(pre_state["target_head"])
+        base = (codex_carry.commit_pending(root, work_item_id, pre_head, digests=digests)
+                if carry_set.stage == "implementation" else pre_head)
+    except ControllerError as exc:
+        return refuse(exc)
+    # D4a: the carry base, the pre-step head and the re-captured "moved nothing" baseline are on record before the
+    # clone is made; every later judgement of a carry record reads this `pre_state`.
+    block = codex_carry.start_block(carry_set, pre_step_head=pre_head, base_commit=base)
+    baseline = {**pre_state, "target_head": base, "tracked_changes": _tracked_changes_baseline(root)}
+    state["record"] = _persist(runtime_root, job_id, {
+        **state["record"], "pre_state": _durable_pre_state(baseline), "codex_carry": copy.deepcopy(block),
+        "updated_at": _now()}, event="codex_carry_preparing", details={"base": base, "pre_step_head": pre_head})
+
+    def failed_after_spawn(exc: Exception) -> None:
+        persisted = _read_job_record(runtime_root / "jobs" / f"{job_id}.json")
+        held = state["record"]
+        if (persisted or held).get("status") in TERMINAL_STATUSES:
+            return  # `_run_codex_worker` or this branch already wrote the ending
+        with contextlib.suppress(Exception):
+            found = {"code": type(exc).__name__, "message": str(exc),
+                     "codex_carry": _carry_progress(held.get("codex_carry") or block, root)}
+            if (clone := _codex_clone_path(held, runtime_root)) is not None:
+                found["clone"] = clone
+            ended = _persist(runtime_root, job_id, {
+                **held, "status": STATUS_FAILED, "transition_verified": False, "reconciliation_evidence": found,
+                "updated_at": _now()}, event=_final_event(STATUS_FAILED), details={"error": type(exc).__name__})
+            state["record"] = ended
+            _run_job_ended(run_id, job_id, STATUS_FAILED, ended)
+
+    try:
+        try:
+            result, held, spawned = _run_codex_worker(
+                managed_repo, runtime_root=runtime_root, run_id=run_id, job_id=job_id, record=state["record"],
+                decision=decision, route=route, timeout=timeout, launcher=launcher,
+                worker_not_started=worker_not_started, ticker=ticker, base=base, carry=(carry_set, block))
+        except ControllerError:
+            # `_run_codex_worker` ended the record itself (`WorkerNotStarted`, or `FAILED` after a spawn) before it
+            # re-raised; the ending is that record.
+            persisted = _read_job_record(runtime_root / "jobs" / f"{job_id}.json")
+            if persisted is not None and persisted.get("status") == STATUS_FAILED:
+                return persisted
+            raise
+        state["record"] = held
+        # Step 6: the worker's end is recorded, the block moves to `worker_ran` (D7), and the usage is read.
+        if (held.get("worker_state") or {}).get("state") != worker.ENDED:
+            held = _with_worker_state(held, worker.ENDED, {})
+        codex_carry.mark_worker_ran(block)
+        completed_at = _now()
+        telemetry_block = _codex_tester_telemetry(held, seconds=result.duration_ms / 1000)
+        held = {
+            **held, "status": STATUS_COMPLETED,
+            "worker": _worker_dict(result, stdout_path=worker_streams["stdout_path"],
+                                   stderr_path=worker_streams["stderr_path"]),
+            "worker_outcome": result.outcome, "telemetry": telemetry_block,
+            **_usage_fields(codex_worker_job.usage_builder(result, route)),
+            "worker_streams": {**worker_streams, "format": CODEX_STREAM_FORMAT},
+            "codex_carry": copy.deepcopy(block), "updated_at": completed_at}
+        if usage_block is not None:
+            readings = (result.stream_diagnosis or {}).get("readings") or []
+            held["usage"] = _codex_end_block(usage_block, readings)
+            if usage_end is not None:
+                usage_end.update(first={}, last={reading["window"]: reading for reading in readings})
+        state["record"] = held = _persist(
+            runtime_root, job_id, held, event="completed",
+            details={"outcome": result.outcome, "exit_code": result.returncode,
+                     "telemetry": telemetry.completed_summary(telemetry_block)})
+        if result.outcome == "SUCCESS":
+            try:
+                held = state["record"] = _complete_codex_carry(
+                    managed_repo, runtime_root=runtime_root, job_id=job_id, record=held, carry_set=carry_set,
+                    digests=digests)
+            except (codex_carry.CarryError, _CarryLandingRefused) as exc:
+                # D8: nothing more is written, the clone is kept and named; the rest of the worker's directory is
+                # settled as a refused landing's is.
+                held = getattr(exc, "record", held)
+                fields = _carry_failure_fields(held, runtime_root, root, exc)
+                _settle_codex_worker_dir(runtime_root, job_id, keep_tree=True)
+                ended = _name_kept_clone({**held, **fields, "updated_at": _now()}, runtime_root)
+                state["record"] = ended = _persist(runtime_root, job_id, ended, event=_final_event(STATUS_FAILED),
+                                                   details={"error": getattr(exc, "cause", None)
+                                                            or CODEX_LANDING_REFUSED_CODE})
+                _run_job_ended(run_id, job_id, STATUS_FAILED, ended)
+                return ended
+            # The clone is removed before the terminal write (D8); a removal that failed is named.
+            _settle_codex_worker_dir(runtime_root, job_id, keep_tree=False)
+        else:
+            _settle_codex_worker_dir(runtime_root, job_id, keep_tree=True)
+        fields = _carry_resolution(held, managed_repo=managed_repo, runtime_root=runtime_root,
+                                   worker_outcome=result.outcome, decision=decision)
+        ended = _name_kept_clone({**held, **fields, "updated_at": _now()}, runtime_root)
+        state["record"] = ended = _persist(runtime_root, job_id, ended, event=_final_event(ended["status"]), details={
+            "observed_phase_after": ended.get("observed_phase_after"),
+            "transition_verified": ended.get("transition_verified", False)})
+        _run_job_ended(run_id, job_id, ended["status"], ended)
+        return ended
+    except KeyboardInterrupt:
+        raise
+    except Exception as exc:
+        failed_after_spawn(exc)
+        raise
+
+
+def _carry_worker_ran(record: Mapping) -> bool:
+    """Whether a carry record's worker started (D7): its block is past ``carried_in``, or at it with a
+    ``worker_process`` recorded."""
+    block = record["codex_carry"]
+    return block.get("stage") in ("worker_ran", "out", "done") or (
+        block.get("stage") == "carried_in" and isinstance(record.get("worker_process"), Mapping))
+
+
+def _reconcile_codex_carry(record: JobRecord, *, managed_repo: Any, runtime_root: Path) -> JobRecord:
+    """The ``resume`` branch of a non-terminal routed apply record (D9, D7): end its process group and every process
+    carrying its tag, settle the credentials, then recover by the block's stage -- a carry that never ran anything
+    removes its clone and ends as an unstarted worker does; a worker that ended in failure keeps its clone and ends as
+    :func:`_protocol_resolution` says; otherwise the carry out runs from the kept clone (the implementation role's
+    landing first, after the checks) and the record ends as D8's table says. A group that cannot be judged or ended
+    raises before anything is written."""
+    _end_review_group(record, managed_repo.root)
+    _settle_codex_credentials(record, runtime_root)
+    job_id, root = str(record["job_id"]), Path(managed_repo.root)
+    outcome = record.get("worker_outcome") if record.get("status") == STATUS_COMPLETED else None
+    held: JobRecord = record
+    try:
+        carry_set = _carry_set_of(managed_repo, record)
+        if not _carry_worker_ran(record):
+            codex_carry.recover(managed_repo, codex_worker_sandbox.WorkerLayout(runtime_root, job_id), carry_set,
+                                copy.deepcopy(dict(record["codex_carry"])), worker_started=False)
+            _settle_codex_worker_dir(runtime_root, job_id, keep_tree=False)
+        elif outcome not in (None, "SUCCESS"):
+            _settle_codex_worker_dir(runtime_root, job_id, keep_tree=True)
+        else:
+            held = _complete_codex_carry(managed_repo, runtime_root=runtime_root, job_id=job_id, record=record,
+                                         carry_set=carry_set,
+                                         digests=dict((record.get("protocol") or {}).get("script_sha256") or {}))
+            _settle_codex_worker_dir(runtime_root, job_id, keep_tree=False)
+    except (codex_carry.CarryError, _CarryLandingRefused) as exc:
+        held = getattr(exc, "record", held)
+        now = _now()
+        fields = _carry_failure_fields(held, runtime_root, root, exc)
+        _settle_codex_worker_dir(runtime_root, job_id, keep_tree=True)  # the clone stays, as at the end of a run
+        failed = _name_kept_clone({**held, **fields, "reconciled_at": now, "updated_at": now}, runtime_root)
+        return _persist(runtime_root, job_id, failed, event="reconciled", details=_reconciled_details(failed))
+    fields = _carry_resolution(held, managed_repo=managed_repo, runtime_root=runtime_root, worker_outcome=outcome)
+    now = _now()
+    ended = _name_kept_clone({**held, **fields, "reconciled_at": now, "updated_at": now}, runtime_root)
+    return _persist(runtime_root, job_id, ended, event="reconciled", details=_reconciled_details(ended))
+
+
+def _end_carry_without_carry_out(record: JobRecord, *, managed_repo: Any, runtime_root: Path,
+                                 ) -> tuple[JobRecord, codex_worker_landing.Recovery | None]:
+    """The ending of an ``abandon`` or a drifted release for a routed apply record (D9): nothing is carried out and
+    nothing is written into the managed repository but the landing ref's deletion. For an implementation record whose
+    landing was begun, the landing's ``recover`` decides first (its block is the record's); the clone is kept when the
+    worker ran (it may hold work) and removed otherwise."""
+    ran = _carry_worker_ran(record)
+    recovery = None
+    block = (record.get("codex_worker") or {}).get("landing")
+    if (ran and record["codex_carry"].get("role") == routing.APPLY_IMPLEMENTATION_REVIEW
+            and isinstance(block, Mapping)):
+        recovery = codex_worker_landing.recover(managed_repo, record)
+        if recovery.delete_ref:
+            _delete_landing_ref(managed_repo, runtime_root, str(record["job_id"]))
+        record = {**record, "codex_worker": {**record["codex_worker"], "landing": dict(recovery.landing)}}
+    _settle_codex_worker_dir(runtime_root, str(record["job_id"]), keep_tree=ran)
+    return record, recovery
 
 
 #: The review stage a routed local review role runs (workflow-controller-h4e2b, D3): the role names it.
@@ -9559,6 +10079,15 @@ def _launch_job(
                            f"({currency.reason}); no worker was started, and the next run re-decides",
                 "evidence": currency.evidence(),
             }, protocol_decision.DECISION_STALE_AT_LAUNCH)
+
+    if _is_codex_apply_route(route):
+        # H4e3 (D8): a routed apply role runs the carry around the Codex worker, before the Codex worker's own and
+        # the review branch, keyed on the route's role and harness.
+        return _run_codex_apply(
+            managed_repo, runtime_root=runtime, run_id=run_id, job_id=job_id, record=record, decision=decision,
+            route=route, timeout=resolved_timeout, launcher=launcher, worker_not_started=worker_not_started,
+            pre_state=pre_state, worker_streams=worker_streams, usage_block=usage_block, usage_end=usage_end,
+            ticker=ticker)
 
     if _is_codex_review_route(route):
         # H4e2b (D1, D3): a routed review runs `run_review` in place of the launch, before the Codex worker's branch,

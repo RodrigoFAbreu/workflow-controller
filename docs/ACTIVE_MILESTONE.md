@@ -2,6 +2,81 @@
 
 ## Status
 
+**Complete.** `workflow-controller-h4e3` (H4e3, issue [#334](https://github.com/RodrigoFAbreu/workflow-controller/issues/334)):
+plan `docs/ai-workflow/CONTROLLER_H4E3_PLAN.md` (revision 12), five checkpoints. It routes `apply-plan-review` and
+`apply-implementation-review` to Codex through a bounded carry of the uncommitted working set, and stops after the landing
+(the Controller never runs the managed repository's generator; that is H4e3b). CP1 is complete: `harness.LOCAL_APPLIER` is the
+adapter role of the two apply roles (`routing.ADAPTER_ROLE`, `routing.LOCAL_APPLY_ROLES`), both adapters declare it,
+`worker_launch.LAUNCHERS` holds `(claude-code, local-applier)` (the Claude launcher) and `(codex, local-applier)` (the real
+`CodexLauncher`), `(codex, worker)` stays unregistered, and `review_mode.worker_families` counts the three roles. The default is
+unchanged. CP2 is complete: `controller/codex_carry.py` is the carry (D3 to D7): `CarrySet` is derived from the managed state
+(the plan role's plan, registry, mapping, artifacts and state file; none for the implementation role), `check_dirty` refuses a
+dirty path outside it (`carry_foreign_dirt`), `commit_pending` makes D4's commit through the Workflow's writer and returns the
+carry base (D4a), `carry_in` reads every member without following a link before any clone is made, writes them into the clone made
+by `codex_worker_tree.prepare(allow_dirty=...)` and reproduces the intent-to-add set, `check_out` runs D6's checks in D6's order
+(one cause each) and writes nothing, `write_out` writes only the changed members atomically through the new
+`runtime.write_carried_file` with the state file last through the recorder's new `carry_state` operation (D6a: only this item's
+entry, inside the Workflow's `state_transaction`), and `recover` finishes or ends a carry by stage (D7). `review_recorder` gained
+the `commit_pending` and `carry_state` operations, `gitrepo` the intent-to-add helpers. The job branch that uses the carry (CP3)
+is not written yet, so a Codex route for an apply role still reaches the plain Codex worker path until CP3; the pages follow in
+CP5. Verified with the narrow modules of the plan's CP2 list (`tests.test_codex_carry`, `tests.test_codex_worker_tree`,
+`tests.test_review_recorder`, `tests.test_package_structure`, `tests.test_write_containment`), including a run of the
+Workflow's own plan-stage generator and verifier in a carried plan clone.
+Revision 12 (the plan amendment for D8's gate endings, CP3 to CP5) left D3 to D7 unchanged, so CP2 was revalidated rather than
+reworked: the same five modules pass (158 tests) on a clean export of the checkpoint's commit.
+CP3 is complete: `job._run_codex_apply` is the apply branch (`job._is_codex_apply_route`, keyed on the route's role and harness and
+taken before the review and Codex-worker branches). It computes D3's set, makes D4's commit for the implementation role, records the
+carry base and re-captures the "moved nothing" baseline before the clone is made, carries in, launches with the eight options of H4d,
+records `usage` and `usage_record`, lands (implementation role) and carries out, then asks the Workflow's `reconcile` through
+`_protocol_resolution`. A `FINISHED` answer, and a plan role's `invalid` answer that is exactly the expected stale-bundle result
+(`job._is_expected_stale_bundle`: four conditions, files only), end `GATE_BLOCKED` at the Controller's own gate
+`carry_bundle_regeneration_pending` (`job.CARRY_BUNDLE_GATE_CODE`, not a member of `codex_carry.CAUSES`), whose message names the steps
+to run in the managed repository, the implementation role's landed range first; every other answer is the resolution's own ending. A
+refused carry or landing after the worker ran is `FAILED` (`CodexCarryRefused`, with the cause, the stage and the members not
+written) with the clone kept and named. `resume`, `abandon`, a drifted release and the post-spawn exception handler recover a
+`codex_carry` record through the carry's recovery (`_reconcile_codex_carry`, `_end_carry_without_carry_out`); a carry record never
+reaches `_reconcile_codex_worker`. `codex_carry.recover` gained `before_write` (the landing, after every check and before the first
+write), `mark_worker_ran` and `verified_sources`. `tests/test_job_codex_apply.py` drives `execute_step` with the real carry, landing
+and recorder and the fake `codex` for both roles: the gate and its message, each row of D8's table, the four conditions of the narrow
+check alone, every stage of the block at each recovery site, the implementation role's D4 commit, usage limit and kill cases, and the
+operator's regeneration steps followed by the next review's preconditions.
+CP4 is complete: `tests/test_codex_apply_safety.py` proves D10 through `job.execute_step` with the real carry, landing and
+recorder and the fake `codex`. For both roles it covers a link, a hardlink and a special file at a member, a private-key armour
+line (never in the record), a worker write outside the set (stray, tracked, `feedback/`, a new name in the item directory), a
+state change outside this item's entry (another entry, `active_work_item_id`, a top-level key, the schema), an added or dropped
+intent-to-add entry, a commit, branch or tag made by the plan role, a hook or config written into the clone, a deleted member,
+a gone clone and the implementation role's `current/` withdrawn by its own generation (nothing landed). Derived leftovers are
+discarded; another item's concurrent entry is kept; a kill at each member boundary of the carry out is finished by `resume`;
+the plant of a `scripts/sitecustomize.py`, a root `secrets.py` and a `__pycache__` file runs nothing; and the operator's
+regeneration passes the next stage's preconditions for both roles. A test fails when a member of `codex_carry.CAUSES` has no
+case (`CAUSE_CASES`). Verified with `tests.test_codex_apply_safety`, `tests.test_job_codex_apply`,
+`tests.test_package_structure` and `tests.test_write_containment` (100 tests); no product code changed.
+CP5 is complete: `tests/test_codex_apply_live.py` is the opt-in live proof (`CONTROLLER_LIVE_CODEX_TESTS=1`, skipped on `CI`, one
+real Codex turn per role, it asserts the `carry_bundle_regeneration_pending` gate, the clone gone, what the managed repository
+holds and the `usage_record`); it was collected and skipped offline and **not run live** (it spends the operator's Codex usage),
+so `tests/harness_contract/codex/apply_roles.txt` does not exist. The pages say what is selectable and what the Controller leaves
+to the operator: `docs/guide/harnesses.md` (the carry, the guards, the endings, the recovery and "What the Controller does not do
+after a landing"), `docs/common-problems.md` (each `carry_*` cause and the regeneration gate), `docs/guide/workers.md`,
+`docs/guide/development.md` and `docs/items/workflow-controller-h4e3.md`. `tools/harness_table.py --check` and
+`tools/check_docs.py` pass.
+
+All five checkpoints are implemented. The self-review fixed two things. A carry refused after the worker ran (in the run and
+in `resume`) ended `FAILED` with the clone kept but left the rest of the worker's directory behind (`carry/`, the Codex home's
+config, `scratch/`, `bin/`, `home/`, `tmp/`, `last-message.md`); it is now settled as a refused landing's is, only the clone
+and the sessions staying, and `PlanEndingsTest`'s shared carry-out refusal check asserts it (it fails without the fix). The
+pages said a hardlink at a member is refused; the carry reads a hardlink as bytes and replaces the managed file by a rename,
+never writing through it (as `tests/test_codex_apply_safety.py` proves), so `docs/guide/harnesses.md` and
+`docs/common-problems.md` now say so.
+Verification: the full suite (`python3 tools/run_tests.py`, 6306 tests in 8 shards, coverage exact) fails only the three
+known environmental `tests.test_fake_codex_contract.FakeCodexContractTest` tests (the fake Codex reads the user's
+`~/.codex` config); `tests.test_job_codex_apply` (45 tests), `tools/check_docs.py` and `tools/harness_table.py --check` pass.
+
+The milestone is implemented, functionally reviewed and accepted by policy (PR #338, checks green at the approved head).
+
+Next action: `/milestone-plan` for `workflow-controller-h4e3b` (Codex worker, step 5e: run the managed repository's generator safely after a landing), the item `python3 scripts/workflow_backlog.py next` returns.
+
+## Previous milestone (H4e2b)
+
 **Complete.** `workflow-controller-h4e2b` (H4e2b, issue [#315](https://github.com/RodrigoFAbreu/workflow-controller/issues/315)):
 plan `docs/ai-workflow/CONTROLLER_H4E2B_PLAN.md` (revision 2), four checkpoints. CP1 is complete: `harness.LOCAL_REVIEWER` is
 the adapter role of `review-plan` and `review-implementation` (`routing.ADAPTER_ROLE`, `routing.LOCAL_REVIEW_ROLES`), both
@@ -518,73 +593,73 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-h4e2b` (H4e2b, issue [#315](https://github.com/RodrigoFAbreu/workflow-controller/issues/315)),
-implementation revision 7, plan `docs/ai-workflow/CONTROLLER_H4E2B_PLAN.md` (revision 2), base commit `8ae7096`. The item lets an
-operator name `codex` as the harness of the two local review roles (`review-plan`, `review-implementation`): the roles get the
-adapter role `local-reviewer`, a routed review runs H4e2's read-only `run_review` inside the job's record (one status per
-ending), every recovery site calls `recover`, and the routed path is proved adversarially. The default is unchanged. Every flow
-runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's
-`bin/` and the system directories, and no write inside the read-only product clone. Run from the product clone with `python3 -B`
-and no `PYTHONPATH=.`; flows write only to the scratch `TMPDIR`. The tests drive the fake `codex` of `tests/fake_codex.py`
-against scratch repositories, so no flow needs a pull request or a forge call.
+Item `workflow-controller-h4e3` (H4e3, issue [#334](https://github.com/RodrigoFAbreu/workflow-controller/issues/334)),
+implementation revision 4, plan `docs/ai-workflow/CONTROLLER_H4E3_PLAN.md` (revision 12), base commit `d47ba6e`. The item lets an
+operator name `codex` as the harness of the two apply roles (`apply-plan-review`, `apply-implementation-review`): the roles get the
+adapter role `local-applier`, a routed apply runs the bounded carry of the uncommitted working set into a Codex clone and back,
+every recovery site finishes or ends a carry, and the job stops at the Controller's gate `carry_bundle_regeneration_pending`
+(the Controller never runs the managed repository's generator; that is H4e3b). The default is unchanged. Every flow runs
+offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/`
+and the system directories, and no write inside the read-only product clone. Run from the product clone with `python3 -B` and no
+`PYTHONPATH=.`; flows write only to the scratch `TMPDIR`. The tests drive the fake `codex` of `tests/fake_codex.py` against
+scratch repositories, so no flow needs a pull request or a forge call.
 
 Setup: `export TMPDIR=$(mktemp -d)`. No data to seed.
 
-**Flow 1: Codex is routable for the two review roles only.**
-Run `python3 -B -m unittest tests.test_routing tests.test_worker_launch tests.test_harness tests.test_cli 2>&1 | tail -4`.
-Expected: `OK`. These pin: `routing.ADAPTER_ROLE` maps exactly `review-plan` and `review-implementation` to `local-reviewer`;
-`(codex, local-reviewer)` is the non-spawning `CodexReviewLauncher`; `codex` is still refused for every worker role
-(`milestone-plan`); `codex` parses for both review roles; a Claude-only model or effort is refused with the existing message.
+**Flow 1: `local-applier` routes the two apply roles to Codex only.**
+Run `python3 -B -m unittest tests.test_routing tests.test_worker_launch tests.test_harness tests.test_review_mode tests.test_cli 2>&1 | tail -4`.
+Expected: `OK`. These pin: `routing.ADAPTER_ROLE` / `routing.LOCAL_APPLY_ROLES` name the two apply roles; both adapters declare
+`harness.LOCAL_APPLIER`; `(claude-code, local-applier)` is the Claude launcher, `(codex, local-applier)` the real
+`CodexLauncher`; `(codex, worker)` stays unregistered (`milestone-plan` on `codex` is still refused); `review_mode.worker_families`
+counts the three roles; no routing config means every role resolves to `claude-code`.
 
-**Flow 2: The default is unchanged.**
-Run `python3 -B -m unittest tests.test_job_codex_worker tests.test_route_select tests.test_route_select_job tests.test_settings 2>&1 | tail -4`.
-Expected: `OK` (the Claude and Codex-worker job modules pass with only the planned edits; no routing config means both roles
-resolve to `claude-code`).
+**Flow 2: The carry (D3 to D7).**
+Run `python3 -B -m unittest tests.test_codex_carry tests.test_codex_worker_tree tests.test_review_recorder 2>&1 | tail -4`.
+Expected: `OK`. The set is derived from the managed state (plan role: plan, registry, mapping, artifacts, state file; none for the
+implementation role); a dirty path outside it is refused (`carry_foreign_dirt`); members are read without following a link;
+the check-out runs in D6's order with one cause each and writes nothing; the write-out changes only changed members atomically,
+the state file last and only this item's entry; `recover` finishes or ends a carry by stage, including the state-entry guard
+at stage out and `carry_managed_changed` as a before-launch cause (revision 4 fixes).
 
-**Flow 3: Every ending of a routed review has a job status.**
-Run `python3 -B -m unittest tests.test_job_codex_review 2>&1 | tail -4`.
-Expected: `OK`, 46 or more tests. They cover each row of the plan's D3 table (recorded, record pending, not started, worker failed
-incl. usage limit and sandbox breach, refused, identity changed, release changed, record refused with the 0600 verdict file) and
-D4 (`resume`, `abandon`, drift and the exception handler call `recover`; a review record never reaches the worker reconciler; a
-routed review is never re-attached on `resume`).
+**Flow 3: Every ending of a routed apply has a job status.**
+Run `python3 -B -m unittest tests.test_job_codex_apply 2>&1 | tail -4`.
+Expected: `OK`, 45 or more tests: the gate `carry_bundle_regeneration_pending` and its message (the implementation role's landed
+range first), each row of D8's table, the expected stale-bundle `invalid` answer of the plan role, the implementation role's D4
+commit, usage limit and kill cases, a refused carry after the worker ran ending `FAILED` with only the clone and sessions kept,
+and recovery from `resume`, `abandon`, a drifted release and the exception handler.
 
-**Flow 4: Adversarial safety through `execute_step`.**
-Run `python3 -B -m unittest tests.test_codex_review_safety 2>&1 | tail -4`.
-Expected: `OK`, 39 or more tests (both stages): credentials and armour lines in inputs, final message and `stderr`; symlink,
-special file, submodule, path escape, over-bound input; hooks; crafted refs; forged `Status:` headers. Each case leaves the
-managed tree, index, refs and state unchanged, the clone gone, and no armour line in the record or any runtime file. The test
-that fails for a cause of `codex_review_role.CAUSES` with no case is among them.
+**Flow 4: Adversarial safety through `execute_step` (D10).**
+Run `python3 -B -m unittest tests.test_codex_apply_safety 2>&1 | tail -4`.
+Expected: `OK` (both roles): link, hardlink and special file at a member; private-key armour line (never in the record); a worker
+write outside the set; a state change outside this item's entry; added or dropped intent-to-add entries; a commit, branch or tag
+by the plan role; hook or config written in the clone; a deleted member; a gone clone; a kill at each member boundary finished
+by `resume`; planted `sitecustomize.py`, `secrets.py` and `__pycache__` run nothing. The test that fails for a member of
+`codex_carry.CAUSES` with no case (`CAUSE_CASES`) is among them.
 
-**Flow 5: The verdict stays out of every job-record field, and the unsafe process-group guard.**
-Run `python3 -B -m unittest tests.test_codex_review_role tests.test_unsafe_process_group 2>&1 | tail -4`.
-Expected: `OK` (the review-round fixes: the verdict text only in the verdict file, not in `worker.stdout`/`stderr` or
-`stream_diagnosis.detail`, also after a sandbox breach with a non-zero exit; `os.killpg` is never handed a non-worker process
-group, #329).
+**Flow 5: Write containment, package structure and the neighbours of the edited modules.**
+Run `python3 -B -m unittest tests.test_package_structure tests.test_write_containment tests.test_job_codex_worker tests.test_job_codex_review tests.test_route_select_job 2>&1 | tail -4`.
+Expected: `OK` (the Claude, Codex-worker and Codex-review job paths are untouched by the new branch).
 
-**Flow 6: Independence check with `codex` on both stages.**
-Run `python3 -B -m unittest tests.test_review_mode tests.test_routing_chain 2>&1 | tail -4`.
-Expected: `OK`; with `review-plan` on `codex`, other roles on `claude-code` and an external `reviewer.harness` of `codex`, the
-mixed-lane stop fires and names the collision.
+**Flow 6: Generated tables and the pages.**
+Run `python3 -B tools/harness_table.py --check; echo rc=$?` and `python3 -B tools/check_docs.py; echo rc=$?`. Then read
+`docs/guide/harnesses.md` from "Routing the two apply roles to Codex" through "What the Controller does not do after a landing",
+the `carry_*` section and "A routed apply stopped at `carry_bundle_regeneration_pending`" of `docs/common-problems.md`, and
+`docs/items/workflow-controller-h4e3.md`.
+Expected: `rc=0` each. The `codex` column is `yes` for the two apply roles; the pages give the carry, the guards, each ending
+and its recovery, say a hardlink is read as bytes and replaced by rename, and say the live proof was not run.
 
-**Flow 7: Generated tables and the pages.**
-Run `python3 -B tools/harness_table.py --check; echo rc=$?`, `python3 -B tools/check_docs.py; echo rc=$?` and
-`python3 -B tools/ci_workflows.py --check; echo rc=$?`. Then read `docs/guide/harnesses.md` from "Routing the two local review
-roles to Codex" to the end of "What a Codex review round costs", and `docs/items/workflow-controller-h4e2b.md`.
-Expected: `rc=0` each. The `codex` column is `yes` for the two review roles and both adapters declare `local-reviewer`; the page
-gives the routing, the status table of each ending and that the default is unchanged; the cost table gives formulas and the price
-file's date and reads `not measured` in every measured cell; the item page says the live proof was not run.
+**Flow 7: The live proof is opt-in and inert offline.**
+Run `python3 -B -m unittest tests.test_codex_apply_live -v 2>&1 | tail -6`.
+Expected: collected and skipped (no `CONTROLLER_LIVE_CODEX_TESTS`); no `codex` starts, no spend; the command to run it is on
+`docs/guide/development.md`.
 
-**Flow 8: The live proof is opt-in and inert offline.**
-Run `python3 -B -m unittest tests.test_codex_review_live -v 2>&1 | tail -6`.
-Expected: the tests are collected and skipped (no `CONTROLLER_LIVE_CODEX_TESTS`); no `codex` starts, no spend; the command to run
-it is on `docs/guide/development.md`.
-
-**Known limitations / out of scope.** The live proof (`CONTROLLER_LIVE_CODEX_TESTS=1 ... tests.test_codex_review_live`) has not
-been run: it spends Codex usage, so `tests/harness_contract/codex/review_role.txt` does not exist and the cost table is
-`not measured`; it is not required for acceptance. The two `apply-*` roles (H4e3) and `milestone-implement` (H4f) still cannot
-be routed to `codex`. The full suite is not a flow: three `fake_codex_contract` tests fail in a sandbox that reads `~/.codex`
-config (environmental) and `test_functional_sandbox` has a known CI flake (#206).
+**Known limitations / out of scope.** The live proof (`CONTROLLER_LIVE_CODEX_TESTS=1 ... tests.test_codex_apply_live`) has not
+been run: it spends Codex usage, so `tests/harness_contract/codex/apply_roles.txt` does not exist; it is not required for
+acceptance. The Controller stops at `carry_bundle_regeneration_pending` and never runs the managed repository's generator or
+verifier (H4e3b). `milestone-implement` (H4f) still cannot be routed to `codex`. The full suite is not a flow: three
+`tests.test_fake_codex_contract` tests fail in a sandbox that reads `~/.codex` config (environmental) and
+`test_functional_sandbox` has a known CI flake (#206).
 
 ## Next action
 
-Functional review of `workflow-controller-h4e2b` (see the checklist above), then `/accept-milestone`.
+Functional review of `workflow-controller-h4e3` (see the checklist above), then `/accept-milestone`.

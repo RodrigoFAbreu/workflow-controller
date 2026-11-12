@@ -49,6 +49,31 @@ A refused landing keeps its clone. If `clone_removed` is `true` in the landing b
 
 If `.git` or the managed root is removed under a `COMPLETED` Codex record, `resume` and `resume --abandon` both refuse (`NotARepositoryError` on the command, `GitDirectoryUnresolvableError` in the job layer) and write nothing. Removing the directory does not make `--abandon` run. Restore `.git`, or the repository at the same path, and run `resume --abandon`. If the repository is gone for good, remove the record file and the kept clone by hand.
 
+## A Codex apply was refused (`carry_*`)
+
+This applies when `apply-plan-review` or `apply-implementation-review` is routed to `codex` ([harnesses](guide/harnesses.md#routing-the-two-apply-roles-to-codex)). The job ended `FAILED`, and the shape of the record depends on when it was refused. A refusal **before the worker was launched** (`carry_foreign_dirt`, `carry_commit_pending_failed`, `carry_member_refused` and `carry_managed_changed` at carry in) has `reconciliation_evidence.code` `WorkerNotStarted` and the cause at `reconciliation_evidence.evidence.cause`; nothing was launched. A refusal **after the worker ran** has `reconciliation_evidence.code` `CodexCarryRefused` with the `cause`, the clone's path and `codex_carry` (the `stage` and `not_written`, the members the managed repository does not hold yet, the state file among them when the worker's entry was not carried out). After `--abandon` or a drifted release, `codex_carry` in the evidence says the same: the abandon writes nothing, so members already written stay and the state file is the old one. By cause:
+
+- `carry_foreign_dirt`: the managed repository has uncommitted paths outside the role's carry set (the message names them; a staged rename counts its source path as well as its destination). Commit or discard them, then run again. The Controller never carries or leaves alone a path outside the set.
+- `carry_commit_pending_failed`: the implementation role's pending feedback entry could not be committed through the Workflow's writer, or the commit is not the only step on the branch. Look at `git status` and `git log`, finish the commit with the Workflow's own command, then run again.
+- `carry_member_refused`: a carried path is a symbolic link, a special file, a submodule, outside the repository, a credential-like name, over the size bound or holds a private-key armour line, or a carried-out member went missing from the clone. The `detail` names the check; fix or remove that path. (A hardlink is not refused: its bytes are copied, and the managed file is replaced by a rename, never written through.)
+- `carry_unexpected_commit`, `clone_git_changed`, `carry_index_changed`: the worker made a commit, ref or tag in a clone that should have none (the plan role), changed the clone's `.git`, or changed the intent-to-add set. Nothing was carried out. Inspect the kept clone; do not copy from it blindly.
+- `carry_out_of_set`: the worker changed a file outside the carry set (a staged rename out of the set counts: its source is checked as well as its destination). Nothing was carried out. The clone is kept so you can see what it changed.
+- `carry_state_foreign`: the worker's state file changed something other than this work item's entry, or is not a state document. Nothing was carried out.
+- `carry_managed_changed`: a member of the managed repository, or this work item's own entry of the state file, changed while the worker ran, or between the Controller reading it and recording it as the carried-in copy (someone else edited it; this item's entry is checked even when the worker did not change the state file; another item's entry changing is kept and is not a refusal). A refusal at carry in wrote nothing and kept no clone: run again once your own edit has settled. A change found at the check, or when `resume` finishes an interrupted carry out (before its outstanding writes), writes nothing more, or a write failed part-way. Nothing already written is undone; `resume` finishes a carry out that was interrupted at a member boundary, and a member someone else changed must be reconciled by hand from the kept clone (a carry out has one).
+- `carry_clone_gone`: the clone was removed before the carry out finished. The evidence names the members not yet written; redo the apply for them.
+
+A refusal after the worker ran keeps the clone; remove it with `rm -rf` of the exact path in the evidence once you no longer need it.
+
+## A routed apply stopped at `carry_bundle_regeneration_pending`
+
+The Codex apply succeeded and its files are in the managed repository, but the Controller regenerates no review bundle and runs no script of the managed repository, so the lane stops at its own gate (the job is `GATE_BLOCKED`). This is expected, not a failure. In the managed repository, in the order the gate prints:
+
+1. After an **implementation-role** landing, read the landed range first (`git log -p <carry base>..<landed head>`, both in `reconciliation_evidence`): the generator you run next executes `scripts/` and any module the landing added to its import path.
+2. Run the generator the gate names: `scripts/prepare-ai-review.sh <base> plan <work item>` for the plan role, `scripts/prepare-ai-review.sh <base> post-fix <work item>` for the implementation role.
+3. Take the next step (the gate prints the command), for example `controller resume` or the next run.
+
+Running the generator safely without a person is [H4e3b](items/workflow-controller-h4e3b.md); until then it is yours to run.
+
 ## The command exited 45 and nothing was launched
 
 The worktree is held: another Controller, a `run` waiting for checks or a merge, or a worker that may still be running holds its lock. Nothing is wrong. Wait, or follow the message; after a Ctrl-C or a drain timeout, `workflow-controller resume <repo>` re-attaches. See [restart](guide/workers.md#restart-resume-re-attaches) and [the drain bound](guide/workers.md#owned-processes-the-daemon-list-and-the-drain-bound).

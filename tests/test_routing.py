@@ -322,7 +322,7 @@ class HarnessFieldTest(unittest.TestCase):
         accepted = {name: sorted(role for role in routing.ROLES
                                  if routing.ADAPTER_ROLE[role] in adapter.roles)
                     for name, adapter in harness.ADAPTERS.items()}
-        self.assertEqual(accepted, {"claude-code": sorted(routing.ROLES), "codex": ["functional-tester", "review-implementation", "review-plan"]})
+        self.assertEqual(accepted, {"claude-code": sorted(routing.ROLES), "codex": sorted(["functional-tester", *routing.LOCAL_REVIEW_ROLES, *routing.LOCAL_APPLY_ROLES])})
         for role in routing.ROLES:
             self.assertEqual(routing.check_role_harness(role, "claude-code"), "claude-code")
 
@@ -351,7 +351,10 @@ class HarnessFieldTest(unittest.TestCase):
         for role in routing.LOCAL_REVIEW_ROLES:
             self.assertEqual(routing.ADAPTER_ROLE[role], harness.LOCAL_REVIEWER)
         self.assertEqual(set(routing.LOCAL_REVIEW_ROLES), {"review-plan", "review-implementation"})
-        for role in routing.ROLES - {"functional-tester", *routing.LOCAL_REVIEW_ROLES}:
+        for role in routing.LOCAL_APPLY_ROLES:
+            self.assertEqual(routing.ADAPTER_ROLE[role], harness.LOCAL_APPLIER)
+        self.assertEqual(set(routing.LOCAL_APPLY_ROLES), {"apply-plan-review", "apply-implementation-review"})
+        for role in routing.ROLES - {"functional-tester", *routing.LOCAL_REVIEW_ROLES, *routing.LOCAL_APPLY_ROLES}:
             self.assertEqual(routing.ADAPTER_ROLE[role], harness.WORKER)
         for adapter_role in routing.ADAPTER_ROLE.values():
             self.assertIn(adapter_role, harness.CLAUDE_CODE.roles)
@@ -361,10 +364,10 @@ class HarnessFieldTest(unittest.TestCase):
             with self.subTest(role=role), self.assertRaises(RoutingConfigError) as ctx:
                 _config(roles={role: {"harness": "codex"}})
             self.assertIn(f"role {role!r} runs as a {routing.ADAPTER_ROLE[role]!r} and harness 'codex' "
-                          f"declares only ['local-reviewer', 'reviewer', 'functional-tester']", ctx.exception.message)
+                          f"declares only ['local-reviewer', 'local-applier', 'reviewer', 'functional-tester']", ctx.exception.message)
             self.assertEqual({k: ctx.exception.evidence[k] for k in ("role", "adapter_role", "harness", "declared_roles")},
                              {"role": role, "adapter_role": routing.ADAPTER_ROLE[role], "harness": "codex",
-                              "declared_roles": ["local-reviewer", "reviewer", "functional-tester"]})
+                              "declared_roles": ["local-reviewer", "local-applier", "reviewer", "functional-tester"]})
         with self.assertRaises(RoutingConfigError) as ctx:
             _config(default={"harness": "codex"})
         self.assertIn("role 'apply-functional-review'", ctx.exception.message)

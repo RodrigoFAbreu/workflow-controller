@@ -470,7 +470,7 @@ items:
     detail: docs/items/workflow-controller-h4e2b.md
   - id: workflow-controller-h4e3
     title: "Codex worker, step 5d: the carry and recovery for the two apply roles, without running the Workflow's generator"
-    status: next
+    status: done
     order: 81
     depends_on: [workflow-controller-h4e2b]
     detail: docs/items/workflow-controller-h4e3.md

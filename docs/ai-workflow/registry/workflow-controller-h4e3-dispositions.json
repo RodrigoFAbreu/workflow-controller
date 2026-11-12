@@ -1,0 +1,90 @@
+{
+  "dispositions": {
+    "F-26769702ef86": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/339"
+    },
+    "F-2c20d032eb23": {
+      "disposition": "fixed",
+      "note": "Plan revision 12 D10 states the expected value: after the operator's regeneration the plan role's current_bundle_id is kept as the clone wrote it and reported by the Workflow as an advisory; tests/test_job_codex_apply.py (advisory_before kept) and tests/test_codex_apply_safety.py (kept as the clone wrote it) pin it. Its second half, choosing one way to run the generator, belonged to D6b, which moved to H4e3b (noted on #334)."
+    },
+    "F-36af0b4bf948": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/339"
+    },
+    "F-4f4bce97ff0d": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/334#issuecomment-6820041466"
+    },
+    "F-65095c66190d": {
+      "disposition": "fixed",
+      "note": "Plan revision 12 uses one wording in D4a, D7 and D9: 'the non-protocol body of _reconcile_launched, below its dispatch of a record holding a protocol block to _reconcile_protocol', which a carry record never reaches; the apparent contradiction is gone."
+    },
+    "F-673690e4f5c8": {
+      "disposition": "fixed",
+      "note": "controller/codex_carry.py ITEM_ROOT_DERIVED includes review-bundle.tar.gz.tmp (plan revision 12 D3 lists it); tests/test_codex_carry.py test_every_name_the_generators_write_under_the_item_root_is_a_member_or_derived scans prepare-ai-review.sh's $ROOT_DIR/ names (ARCHIVE_TMP among them), and tests/test_codex_apply_safety.py places a partial review-bundle.tar.gz.tmp in the clone and asserts it is discarded."
+    },
+    "F-689ecd34cbee": {
+      "disposition": "fixed",
+      "note": "controller/job.py _is_expected_stale_bundle compares the reason text exactly with '<observed phase> with plan_review_publication_status BUNDLE_UNVERIFIED' (plan revision 12 D8 condition 2); tests/test_job_codex_apply.py test_condition_2_one_reason_with_exactly_the_stale_bundle_text refuses a text that only contains the token ('raised: BUNDLE_UNVERIFIED while checking')."
+    },
+    "F-95498af250ce": {
+      "disposition": "fixed",
+      "note": "Plan revision 12 D4 names the two cases (a manual-ingest REVISE, a recorder commit that failed) and says nothing is committed after a Controller-recorded REVISE; controller/review_recorder.py exposes it as its own driver operation commit_pending (beside carry_state), called by codex_carry.commit_pending."
+    },
+    "F-9890a8996849": {
+      "disposition": "fixed",
+      "note": "Plan revision 12 D7 says a carry record's interrupted ending goes through _protocol_resolution, whose no_progress ending compares no HEAD, and that the HEAD-and-tree comparison belongs only to _limit_moved_nothing and the non-protocol body of _reconcile_launched; controller/job.py _reconcile_codex_carry ends through _protocol_resolution unchanged, with no added head comparison."
+    },
+    "F-990b7c0e8fd2": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6820041766"
+    },
+    "F-b75263b6eacf": {
+      "disposition": "fixed",
+      "note": "8d533bd: controller/job.py adds 'codex_carry': _carry_progress(...) (stage and not_written) to the evidence of the --abandon and drifted-release endings of a carry record, and docs/common-problems.md says that after --abandon or a drifted release codex_carry in the evidence names it, members already written stay and the state file is the old one."
+    },
+    "F-c74d18a81455": {
+      "disposition": "fixed",
+      "note": "controller/codex_carry.py OUT_MEMBERS['plan'] carries plan-inputs/CONTEXT_FILES.txt out beside REVIEW_REQUEST.md and TEST_RESULTS.md, and plan revision 12 D3 words the set as 'the author-written inputs of the role's next regeneration'."
+    },
+    "F-cc134cd07664": {
+      "disposition": "fixed",
+      "note": "3deb806: docs/common-problems.md lists carry_managed_changed among the before-launch causes (WorkerNotStarted) and its bullet says a refusal at carry in wrote nothing and kept no clone, so run again once your own edit has settled."
+    },
+    "F-d160583ecf1f": {
+      "disposition": "fixed",
+      "note": "Same as F-9890a8996849: plan revision 12 D7 documents that recovery of a carry record goes through _protocol_resolution (no HEAD comparison) and distinguishes the non-protocol body of _reconcile_launched; controller/job.py _reconcile_codex_carry follows it."
+    },
+    "F-d920cfa8ce1a": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6820041766"
+    },
+    "F-e7ec7d308188": {
+      "disposition": "fixed",
+      "note": "Plan revision 12 D4a and D7 name the ending a carry record reaches (_protocol_resolution's no_progress ending, no HEAD comparison; the re-captured baseline is read only by _limit_moved_nothing and the non-protocol body of _reconcile_launched); controller/job.py _reconcile_codex_carry adds no head comparison to the protocol path."
+    },
+    "F-ea1dbec4bddd": {
+      "disposition": "fixed",
+      "note": "Plan revision 12 D6 drops the carry out's git add -N: members are written through a temporary file and an atomic rename that leaves the managed index as it was; controller/codex_carry.py calls gitrepo.add_intent_to_add only at carry in (in the clone), and a lost managed intent-to-add entry is carry_managed_changed."
+    },
+    "F-f019fc8b9118": {
+      "disposition": "fixed",
+      "note": "Plan revision 12 D3 defines uncommitted as git status --porcelain with the default ignore rules, says other ignored paths (__pycache__/, .ai-review/runtime/) are neither carried nor judged, carries plan-inputs/ in and treats review-bundle.tar.gz as derived (never carried); controller/codex_carry.py dirty_paths uses tracked changes plus untracked non-ignored files, and read_member applies the per-file bound and the ARMOUR scan to the raw bytes, binary or not."
+    },
+    "F-f6af226b4722": {
+      "disposition": "fixed",
+      "note": "Plan revision 12 D3 has one statement of the set: every path is judged by exactly one rule (named files, other dirty paths, carried in from feedback/, plan-inputs/ and current/, carried out, derived, any other path), with no separate role bullets."
+    },
+    "F-f9018db9678e": {
+      "disposition": "fixed",
+      "note": "8d533bd: tests/test_codex_apply_safety.py CAUSE_CASES['carry_managed_changed'] names test_a_managed_member_changed_by_someone_else_is_refused_and_nothing_is_written, the test that produces the cause through the job."
+    },
+    "F-fccfc898b082": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/339"
+    }
+  },
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-h4e3"
+}

@@ -503,6 +503,93 @@ class ImplementationStageTest(RecorderCase):
         self.assertEqual(_git(self.root, "diff", "--cached", "--name-only"), "")
         self.assertEqual(_git(self.root, "status", "--porcelain"), "")
 
+    def _pending_revise(self) -> str:
+        """The state the in-place command leaves for a manual-ingest `REVISE`: the entry written, nothing committed."""
+        values = self.check().values
+        text = self.compose(values, "REVISE")
+        fixtures.run_workflow_python(
+            self.root, IN_PLACE.replace("    ws.commit_pending_applying_review_feedback_entry(root, \"wi-1\", "
+                                        "attribution=())\n", "    pass\n"),
+            "implementation", "REVISE", COMPLETED_AT, str(values["round"]), str(self.verdict_file(text)))
+        return fixtures.current_head(self.root)
+
+    def test_commit_pending_commits_a_pending_entry_alone_and_is_then_a_no_op(self) -> None:
+        head = self._pending_revise()
+        self.assertIn(STATE, _git(self.root, "status", "--porcelain"))
+        result = review_recorder.commit_pending(self.root, WID, digests=self.check().values["digests"])
+        self.assertTrue(result.ok, result)
+        committed = result.values["committed"]
+        self.assertEqual(committed, fixtures.current_head(self.root))
+        self.assertEqual(_git(self.root, "rev-parse", f"{committed}^").strip(), head)
+        self.assertEqual(_git(self.root, "show", "--name-only", "--format=", "HEAD").split(), [STATE])
+        self.assertEqual(_git(self.root, "status", "--porcelain"), "")
+        again = review_recorder.commit_pending(self.root, WID)
+        self.assertTrue(again.ok, again)
+        self.assertIsNone(again.values["committed"])
+        self.assertEqual(fixtures.current_head(self.root), committed)
+
+    def test_commit_pending_after_a_controller_recorded_revise_has_nothing_to_commit(self) -> None:
+        values = self.check().values
+        self.record(self.compose(values, "REVISE"), values)
+        head = fixtures.current_head(self.root)
+        result = review_recorder.commit_pending(self.root, WID)
+        self.assertTrue(result.ok, result)
+        self.assertIsNone(result.values["committed"])
+        self.assertEqual(fixtures.current_head(self.root), head)
+
+    def test_commit_pending_refusal_is_recorder_commit_pending_and_a_changed_script_set_is_release_changed(self) -> None:
+        self._pending_revise()
+        state = _state(self.root)
+        state["work_items"][WID]["technical_review_block_pins"] = [
+            {"bundle_id": "d" * 64, "review_content_id": "e" * 64, "recorded_at": "2026-11-07T08:30:00Z"}]
+        (self.root / STATE).write_text(json.dumps(state, indent=2) + "\n")
+        head = fixtures.current_head(self.root)
+        result = review_recorder.commit_pending(self.root, WID)
+        self.assertEqual((result.ok, result.cause), (False, "recorder_commit_pending"))
+        self.assertEqual(fixtures.current_head(self.root), head)
+        stale = review_recorder.commit_pending(self.root, WID, digests={"scripts/workflow_state.py": "0" * 64})
+        self.assertEqual((stale.ok, stale.cause), (False, "workflow_release_changed"))
+
+    def _payload(self, **changes) -> tuple[Path, dict, dict]:
+        before = _entry(self.root)
+        after = {**before, **changes}
+        path = self._area / "carry-payload.json"
+        path.write_text(json.dumps({"before": before, "after": after}))
+        return path, before, after
+
+    def test_carry_state_replaces_only_this_items_entry_and_keeps_what_is_there_now(self) -> None:
+        path, before, after = self._payload(last_transition="2026-11-09T09:09:09Z")
+        concurrent = _state(self.root)
+        concurrent["active_work_item_id"] = WID
+        (self.root / STATE).write_text(json.dumps(concurrent, indent=2) + "\n")
+        result = review_recorder.carry_state(self.root, WID, path)
+        self.assertTrue(result.ok, result)
+        self.assertTrue(result.values["written"])
+        written = _state(self.root)
+        self.assertEqual(written["active_work_item_id"], WID)
+        self.assertEqual(written["work_items"][WID]["last_transition"], "2026-11-09T09:09:09Z")
+
+    def test_carry_state_is_a_no_op_when_the_entry_already_is_the_workers(self) -> None:
+        path, before, after = self._payload(last_transition="2026-11-09T09:09:09Z")
+        self.assertTrue(review_recorder.carry_state(self.root, WID, path).values["written"])
+        bytes_after = (self.root / STATE).read_bytes()
+        again = review_recorder.carry_state(self.root, WID, path)
+        self.assertTrue(again.ok, again)
+        self.assertFalse(again.values["written"])
+        self.assertEqual((self.root / STATE).read_bytes(), bytes_after)
+
+    def test_carry_state_refuses_an_entry_that_is_neither_and_writes_nothing(self) -> None:
+        path, before, after = self._payload(last_transition="2026-11-09T09:09:09Z")
+        moved = _state(self.root)
+        moved["work_items"][WID]["last_transition"] = "2026-11-09T01:01:01Z"
+        (self.root / STATE).write_text(json.dumps(moved, indent=2) + "\n")
+        snapshot = self.snapshot()
+        result = review_recorder.carry_state(self.root, WID, path)
+        self.assertEqual((result.ok, result.cause), (False, "carry_managed_changed"))
+        self.assertEqual(self.snapshot(), snapshot)
+        stale = review_recorder.carry_state(self.root, WID, path, digests={"scripts/workflow_state.py": "0" * 64})
+        self.assertEqual((stale.ok, stale.cause), (False, "workflow_release_changed"))
+
     def _hook_marker(self, name: str) -> Path:
         return self._area / name
 

@@ -674,3 +674,35 @@ def replace_external_file(target: Path, data: bytes, *, mode: int) -> None:
         os.replace(tmp_path, target)
     finally:
         tmp_path.unlink(missing_ok=True)
+
+
+def write_carried_file(root: Path, rel: str, data: bytes, *, mode: int) -> None:
+    """Atomically write the regular file ``<root>/<rel>`` (the carry of ``codex_carry``, H4e3 D5 and D6): every
+    directory component under ``root`` is created when missing and refused (``OSError``) when it is a symlink or not a
+    directory, the content goes to a temporary file in the target's own directory opened with ``O_NOFOLLOW`` and
+    ``O_EXCL``, is ``fsync``ed and renamed over the target, and a target that is a symlink or a directory is refused.
+    ``rel`` must be relative with no ``..`` component. A rename of a file in place leaves the Git index as it was."""
+    parts = rel.split("/")
+    if not rel or rel.startswith("/") or ".." in parts or "" in parts:
+        raise OSError(f"{rel!r} is not a relative path inside the root")
+    directory = Path(root)
+    for part in parts[:-1]:
+        directory = directory / part
+        if os.path.islink(directory):
+            raise OSError(f"refusing to write through the symlink {directory}")
+        if not directory.is_dir():
+            directory.mkdir()
+    target = directory / parts[-1]
+    if os.path.islink(target) or target.is_dir():
+        raise OSError(f"refusing to replace {target}: a symlink or a directory")
+    tmp_path = directory / f".{target.name}.{secrets.token_hex(8)}.tmp"
+    fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, mode)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(tmp_path, mode)
+        os.replace(tmp_path, target)
+    finally:
+        tmp_path.unlink(missing_ok=True)

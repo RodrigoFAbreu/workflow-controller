@@ -2,7 +2,7 @@
 
 Item id: `workflow-controller-h4e3`.
 
-Not yet planned. Run `apply-plan-review` and `apply-implementation-review` on Codex, with the carry in and out and the recovery, and without the Controller running the managed repository's generator. This item needs H4e2b. It was split from H4e2 on 2026-11-06 ([#315](https://github.com/RodrigoFAbreu/workflow-controller/issues/315)) by owner decision: the apply roles move to a follow-up. It was split again on 2026-11-10 ([#334](https://github.com/RodrigoFAbreu/workflow-controller/issues/334)); see the decision below. Complexity: medium.
+Run `apply-plan-review` and `apply-implementation-review` on Codex, with the carry in and out and the recovery, and without the Controller running the managed repository's generator. This item needs H4e2b. It was split from H4e2 on 2026-11-06 ([#315](https://github.com/RodrigoFAbreu/workflow-controller/issues/315)) by owner decision: the apply roles move to a follow-up. It was split again on 2026-11-10 ([#334](https://github.com/RodrigoFAbreu/workflow-controller/issues/334)); see the decision below. Complexity: medium.
 
 ## Scope, one mechanism
 
@@ -18,6 +18,12 @@ Running the managed repository's generator after a landing (H4e3b), `milestone-i
 
 Owner decision (SignalHub 01a1c55d, answer "split"), recorded in [#334](https://github.com/RodrigoFAbreu/workflow-controller/issues/334). The H4e3 plan did not converge. Local plan rounds 5 and 6 each found a new way a file written by the Codex worker is executed by the managed repository's generator, which the plan had the Controller run right after landing the worker's commits (design decision D6b): a `scripts/sitecustomize.py` in round 5 (H4E3-R5-001), then a module that shadows the standard library and a forged `.pyc` in round 6 (H4E3-R6-001). That is an open-ended adversarial class, found at the cap of six local rounds. H4e3 therefore keeps the carry and the recovery and drops the generator run; the generator run moves to H4e3b, which needs its own safety design. Order: H4e3, H4e3b, then H4f.
 
+## What was built
+
+Plan: `docs/ai-workflow/CONTROLLER_H4E3_PLAN.md`, five checkpoints. `apply-plan-review` and `apply-implementation-review` can be routed to `codex` as the adapter role `local-applier`; the default is unchanged. The job carries a closed set of files into the Codex clone and back (`controller/codex_carry.py`), lands the implementation role's commits, asks the Workflow's `reconcile`, and stops at the Controller's own gate `carry_bundle_regeneration_pending`, because the Controller never runs the managed repository's generator (that is H4e3b). The mechanism, the refusals and what the Controller leaves to the operator are on [harnesses](../guide/harnesses.md#routing-the-two-apply-roles-to-codex); each refusal's remedy is in [common problems](../common-problems.md#a-codex-apply-was-refused-carry_).
+
+**Live proof: not run.** `tests.test_codex_apply_live` is opt-in, operator-run and spends one Codex turn per role, so no measured result exists and `tests/harness_contract/codex/apply_roles.txt` is not written. The squash does not wait for it. Run it with the command on [development](../guide/development.md#working-from-a-checkout) and copy its output into that file.
+
 ## Planning notes
 
-Not yet planned. The rules that apply (the sizing rule: at most one new mechanism, releasable alone) are on [Planning rules](../planning-rules.md#next-in-order-and-the-sizing-rules).
+The rules that apply (the sizing rule: at most one new mechanism, releasable alone) are on [Planning rules](../planning-rules.md#next-in-order-and-the-sizing-rules).

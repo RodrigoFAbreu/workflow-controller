@@ -68,15 +68,15 @@ that declares it.
 <!-- harness-table:begin -->
 | Harness | `reviewer.harness` | Family | Roles | Restricts subagents | Restricts tools | Usage | Captured with | Build verification | Unknown version refused | Models | Efforts |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `claude-code` | `claude` | anthropic | `worker`, `local-reviewer`, `reviewer`, `functional-tester` | yes | yes | reported exactly by the harness | 2.1.296 (Claude Code) | `verify-claude` | yes | `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5`, `claude-fable-5-1`, `opus`, `sonnet`, `haiku` | `low`, `medium`, `high`, `xhigh`, `max` |
-| `codex` | `codex` | openai | `local-reviewer`, `reviewer`, `functional-tester` | yes | yes | computed from the harness's output | codex-cli 0.163.0 | `verify-codex` | yes | `gpt-6.1-sol` | `high`, `xhigh` |
+| `claude-code` | `claude` | anthropic | `worker`, `local-reviewer`, `local-applier`, `reviewer`, `functional-tester` | yes | yes | reported exactly by the harness | 2.1.296 (Claude Code) | `verify-claude` | yes | `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5`, `claude-fable-5-1`, `opus`, `sonnet`, `haiku` | `low`, `medium`, `high`, `xhigh`, `max` |
+| `codex` | `codex` | openai | `local-reviewer`, `local-applier`, `reviewer`, `functional-tester` | yes | yes | computed from the harness's output | codex-cli 0.163.0 | `verify-codex` | yes | `gpt-6.1-sol` | `high`, `xhigh` |
 
 | Routing role | Runs as | `claude-code` | `codex` |
 | --- | --- | --- | --- |
 | `milestone-implement` | `worker` | yes | no |
 | `milestone-implement-self-review` | `worker` | yes | no |
-| `apply-plan-review` | `worker` | yes | no |
-| `apply-implementation-review` | `worker` | yes | no |
+| `apply-plan-review` | `local-applier` | yes | yes |
+| `apply-implementation-review` | `local-applier` | yes | yes |
 | `review-plan` | `local-reviewer` | yes | yes |
 | `review-implementation` | `local-reviewer` | yes | yes |
 | `milestone-plan` | `worker` | yes | no |
@@ -91,6 +91,7 @@ that declares it.
 
 - `worker`: runs a Workflow command (plan, implement, apply a review) as a background job
 - `local-reviewer`: reviews a plan or an implementation in the lifecycle (the local stage), read-only, and records the verdict
+- `local-applier`: applies a review's findings to the plan or the implementation in the lifecycle (the local stage) and records the change
 - `reviewer`: reviews a plan or an implementation and returns a verdict
 - `functional-tester`: runs the functional-review checklist in a sandbox with a shell only
 <!-- harness-table:end -->
@@ -489,6 +490,74 @@ reading (`usage.PROVIDER_CODEX`, held by `usage.codex_weekly_pause_at_percent`, 
 reading reaches the cap, so the number of rounds before the hold is `(cap - reading now) / (percent of one job)`. The
 percent of one job comes from the usage reading before and after the live run, and reads `not measured` where the proof had
 no reading.
+
+#### Routing the two apply roles to Codex
+
+H4e3 ([#334](https://github.com/RodrigoFAbreu/workflow-controller/issues/334)) lets routing select Codex for
+`apply-plan-review` and `apply-implementation-review`. They run as the adapter role `local-applier`, which both adapters
+declare, so `--role-harness apply-plan-review=codex` (or a routing config or a fallback chain naming `codex`) is accepted with
+a model and an effort the adapter lists. `codex` is still refused for every other worker role. **The default is unchanged**:
+with no routing config, setting or `--role-harness`, both roles run on `claude-code` and every Claude job record is as before.
+
+A review applier edits files that a clone made from committed state does not hold (the plan role's plan edits are uncommitted),
+so the job *carries* a closed set of files into the Codex clone and back (`controller/codex_carry.py`):
+
+- **The set.** The plan role's set is derived from the managed state: the plan, the registry, the mapping and the artifacts
+  files of the work item, and the state file. The implementation role has none: the Controller first commits a pending feedback
+  entry through the Workflow's own writer, so the clone starts from a clean, committed state. Both roles also get the item's
+  `feedback/`, `plan-inputs/` and `current/` directories as read-only inputs. What is carried back is the role's
+  author-written inputs only: for the plan role `plan-inputs/REVIEW_REQUEST.md`, `TEST_RESULTS.md` and `CONTEXT_FILES.txt`; for
+  the implementation role `current/REVIEW_REQUEST.md`, `IMPLEMENTATION_SUMMARY.md`, `TEST_RESULTS.md`, `CONTEXT_FILES.txt` and
+  `PLAN.md`. Generated files (the manifest, the bundle, `.pin/`, staging leftovers) are discarded, never carried back.
+- **The guards.** Before the launch a dirty path outside the set refuses the job. Every member is read without following a link
+  and refused if it is a symbolic link, a special file, a submodule, outside the repository (a path whose parent directory is a link out is outside), over the size bound or holds a
+  private-key armour line; a hardlink is read as bytes, and a member is always written by a rename, never through a link. After the run, before anything is written, the clone is checked: no commit, branch or tag made by the plan role, no
+  change to the clone's `.git`, the same intent-to-add set, nothing changed outside the set, and the managed repository's members
+  and this work item's own entry of the state file not changed by someone else meanwhile (another item's concurrent entry is
+  deliberately kept). Only the changed members are written, atomically, with the state file
+  last and only this work item's entry replaced, under the Workflow's own state lock (another item's concurrent entry is kept).
+- **The refusals.** One cause each, listed with their remedies in
+  [common problems](../common-problems.md#a-codex-apply-was-refused-carry_): `carry_foreign_dirt`,
+  `carry_commit_pending_failed`, `carry_member_refused`, `carry_unexpected_commit`, `clone_git_changed`,
+  `carry_index_changed`, `carry_out_of_set`, `carry_managed_changed`, `carry_state_foreign` and `carry_clone_gone`. A refusal
+  after the worker ran is `FAILED` with the clone kept and named.
+- **The endings.** After the carry out (and, for the implementation role, after the existing landing of the worker's commits)
+  the Controller asks the Workflow's `reconcile`. A `FINISHED` answer, and the plan role's one expected `invalid` answer (the
+  bundle is stale because the revision moved), end `GATE_BLOCKED` at the Controller's own gate
+  `carry_bundle_regeneration_pending`, which names the steps the operator runs. Any other answer is the resolution's own
+  ending. The gate is the Controller's, not a refusal, and is not one of the carry causes.
+- **Recovery.** The record's `codex_carry` block holds the stage (`preparing`, `carried_in`, `worker_ran`, `out`, `done`).
+  `resume`, `--abandon`, a drifted Workflow release and the post-spawn exception handler recover through the carry: a carry out
+  that was killed at a member boundary is finished by `resume`; `--abandon` and a drifted release write nothing into the managed
+  repository and keep the clone when the worker ran.
+
+##### What the Controller does not do after a landing
+
+After the implementation role's commits land and after either role's members are carried out, the Controller:
+
+- does not run `scripts/prepare-ai-review.sh`, or any other script, module, generator, hook or test of the managed repository's
+  working tree;
+- does not regenerate, repair, withdraw or bind the review bundle under `.ai-review/<work item>/current/`: it writes no
+  generated file there, only the role's carried-out author-written inputs;
+- does not commit, amend or write a generation record in the managed repository, beyond landing the worker's own commits and
+  the commit of a pending feedback entry made before the clone;
+- does not run the next stage (`/review-plan`, `/review-implementation`, an approval).
+
+The only Workflow code it runs after a landing is what it already runs on every step: the Workflow's queries, `reconcile` and
+the recorder driver from a private copy of the installed release's verified bytes, never the managed tree's copies. Regenerating
+the bundle is left to you, or to a Claude session you start, through the steps the gate prints. After an implementation-role
+landing, read the landed range (`git log -p <carry base>..<landed head>`, which the gate names) before regenerating: the
+generator executes `scripts/` and any module the landing added to its import path. Running the generator safely is
+[H4e3b](../items/workflow-controller-h4e3b.md).
+
+The routed path is proved adversarially through the job in `tests/test_codex_apply_safety.py` (one test per cause, links,
+hardlinks and special files, writes outside the set, a forged state file, hooks, crafted refs, and a planted
+`sitecustomize.py` or `secrets.py` that runs nothing) and its endings in `tests/test_job_codex_apply.py`.
+
+**The live proof** is opt-in and operator-run: `CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest tests.test_codex_apply_live -v`
+(one real Codex turn per role, skipped on `CI`; it asserts the gate, the clone gone, what the managed repository holds and the
+`usage_record`, and prints the measured tokens). Its output belongs in `tests/harness_contract/codex/apply_roles.txt`.
+**It has not been run yet** (it spends the operator's Codex usage), so that file does not exist and no cost is measured.
 
 ## The shared command renderer
 

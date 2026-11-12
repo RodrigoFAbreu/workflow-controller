@@ -40,13 +40,15 @@ class CodexReviewLauncher(codex_worker.CodexLauncher):
 
 
 #: ``(adapter name, adapter role)`` -> launcher. A test requires the keys to be
-#: exactly the launchable roles each adapter declares (the worker role and the
-#: local-reviewer role); ``codex`` is registered for the local-reviewer role
-#: only, so a worker role still cannot be routed to it.
+#: exactly the launchable roles each adapter declares (the worker, local-reviewer
+#: and local-applier roles); ``codex`` is registered for the two local roles
+#: only (the applier's launcher is the real ``CodexLauncher``, h4e3 D1), so a worker role still cannot be routed to it.
 LAUNCHERS: Mapping[tuple[str, str], WorkerLauncher] = {
     (harness.CLAUDE_CODE.name, harness.WORKER): ClaudeCodeLauncher(),
     (harness.CLAUDE_CODE.name, harness.LOCAL_REVIEWER): ClaudeCodeLauncher(),
+    (harness.CLAUDE_CODE.name, harness.LOCAL_APPLIER): ClaudeCodeLauncher(),
     (harness.CODEX.name, harness.LOCAL_REVIEWER): CodexReviewLauncher(),
+    (harness.CODEX.name, harness.LOCAL_APPLIER): codex_worker.CodexLauncher(),
 }
 
 

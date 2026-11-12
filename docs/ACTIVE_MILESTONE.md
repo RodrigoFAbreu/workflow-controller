@@ -654,6 +654,8 @@ Codex usage). `milestone-implement` (H4f) still cannot be routed to `codex`. The
 flow: three `tests.test_fake_codex_contract` tests fail in a sandbox that reads `~/.codex` config (environmental), and
 `test_functional_sandbox` / the mid-rewrite kill test have known timing flakes under load (each passes alone and on replay).
 
+**Functional-review round 1 (automated tester, head da80395).** Flows 1 to 4 passed. Flow 5 failed as a defect: `docs/guide/harnesses.md` said the landing check runs before any Workflow query, and `docs/items/workflow-controller-h4e3b.md` said a landed script edit is refused before any query runs, both contradicting the known gap. Both pages now state the gap (the first protocol query after the landing runs the edit before the landing check can refuse it). No code changed; no remediation child. Re-test: flow 5 (read the two pages; run both checkers).
+
 ## Next action
 
 Functional review of `workflow-controller-h4e3b` (see the checklist above), then `/accept-milestone`.

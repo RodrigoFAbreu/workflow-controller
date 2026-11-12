@@ -68,11 +68,12 @@ class RegistryTest(unittest.TestCase):
     def test_launchers_are_exactly_the_launchable_roles_each_adapter_declares(self) -> None:
         # One entry per (adapter, role) for the worker, local-reviewer and local-applier roles; codex takes the two local roles only.
         declared = {(a.name, role) for a in harness.ADAPTERS.values()
-                    for role in (harness.WORKER, harness.LOCAL_REVIEWER, harness.LOCAL_APPLIER) if role in a.roles}
+                    for role in (harness.WORKER, harness.IMPLEMENTER, harness.LOCAL_REVIEWER, harness.LOCAL_APPLIER) if role in a.roles}
         self.assertEqual(set(worker_launch.LAUNCHERS), declared)
         self.assertEqual(declared, {("claude-code", "worker"), ("claude-code", "local-reviewer"),
-                                    ("claude-code", "local-applier"), ("codex", "local-reviewer"),
-                                    ("codex", "local-applier")})
+                                    ("claude-code", "local-applier"), ("claude-code", "implementer"),
+                                    ("codex", "local-reviewer"), ("codex", "local-applier"),
+                                    ("codex", "implementer")})
 
     def test_codex_reaches_a_launcher_for_the_local_review_roles_only(self) -> None:
         launcher = worker_launch.for_harness("codex", harness.LOCAL_REVIEWER)
@@ -83,6 +84,13 @@ class RegistryTest(unittest.TestCase):
         for role in (harness.WORKER, harness.REVIEWER, harness.FUNCTIONAL_TESTER):
             with self.subTest(role=role), self.assertRaises(HarnessRoleError):
                 worker_launch.for_harness("codex", role)
+
+    def test_codex_reaches_the_real_launcher_for_the_implementer_role(self) -> None:
+        # h4f, D1: ``(codex, implementer)`` is the real Codex worker launcher; ``(codex, worker)`` stays unregistered.
+        launcher = worker_launch.for_harness("codex", harness.IMPLEMENTER)
+        self.assertIs(type(launcher), codex_worker.CodexLauncher)
+        self.assertIsInstance(worker_launch.for_harness("claude-code", harness.IMPLEMENTER), worker_launch.ClaudeCodeLauncher)
+        self.assertNotIn(("codex", harness.WORKER), worker_launch.LAUNCHERS)
 
     def test_codex_reaches_the_real_launcher_for_the_apply_roles(self) -> None:
         # h4e3, D1: ``(codex, local-applier)`` is the real Codex worker launcher, not the review launcher; ``(codex, worker)`` stays unregistered.

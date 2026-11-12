@@ -68,12 +68,12 @@ that declares it.
 <!-- harness-table:begin -->
 | Harness | `reviewer.harness` | Family | Roles | Restricts subagents | Restricts tools | Usage | Captured with | Build verification | Unknown version refused | Models | Efforts |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `claude-code` | `claude` | anthropic | `worker`, `local-reviewer`, `local-applier`, `reviewer`, `functional-tester` | yes | yes | reported exactly by the harness | 2.1.296 (Claude Code) | `verify-claude` | yes | `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5`, `claude-fable-5-1`, `opus`, `sonnet`, `haiku` | `low`, `medium`, `high`, `xhigh`, `max` |
-| `codex` | `codex` | openai | `local-reviewer`, `local-applier`, `reviewer`, `functional-tester` | yes | yes | computed from the harness's output | codex-cli 0.163.0 | `verify-codex` | yes | `gpt-6.1-sol` | `high`, `xhigh` |
+| `claude-code` | `claude` | anthropic | `worker`, `implementer`, `local-reviewer`, `local-applier`, `reviewer`, `functional-tester` | yes | yes | reported exactly by the harness | 2.1.296 (Claude Code) | `verify-claude` | yes | `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5`, `claude-fable-5-1`, `opus`, `sonnet`, `haiku` | `low`, `medium`, `high`, `xhigh`, `max` |
+| `codex` | `codex` | openai | `implementer`, `local-reviewer`, `local-applier`, `reviewer`, `functional-tester` | yes | yes | computed from the harness's output | codex-cli 0.163.0 | `verify-codex` | yes | `gpt-6.1-sol` | `high`, `xhigh` |
 
 | Routing role | Runs as | `claude-code` | `codex` |
 | --- | --- | --- | --- |
-| `milestone-implement` | `worker` | yes | no |
+| `milestone-implement` | `implementer` | yes | yes |
 | `milestone-implement-self-review` | `worker` | yes | no |
 | `apply-plan-review` | `local-applier` | yes | yes |
 | `apply-implementation-review` | `local-applier` | yes | yes |
@@ -90,6 +90,7 @@ that declares it.
 | `functional-tester` | `functional-tester` | yes | yes |
 
 - `worker`: runs a Workflow command (plan, implement, apply a review) as a background job
+- `implementer`: implements one checkpoint of an approved plan and commits it (the checkpoint role)
 - `local-reviewer`: reviews a plan or an implementation in the lifecycle (the local stage), read-only, and records the verdict
 - `local-applier`: applies a review's findings to the plan or the implementation in the lifecycle (the local stage) and records the change
 - `reviewer`: reviews a plan or an implementation and returns a verdict

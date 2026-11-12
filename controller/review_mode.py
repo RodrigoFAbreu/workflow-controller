@@ -118,7 +118,7 @@ def worker_families(options: routing.RoutingOptions = routing.NO_OVERRIDES) -> f
     return frozenset(
         harness.get(route.harness).family
         for role, adapter_role in routing.ADAPTER_ROLE.items()
-        if adapter_role in (harness.WORKER, harness.LOCAL_REVIEWER, harness.LOCAL_APPLIER)
+        if adapter_role in (harness.WORKER, harness.IMPLEMENTER, harness.LOCAL_REVIEWER, harness.LOCAL_APPLIER)
         for route in options.chain(role))
 
 

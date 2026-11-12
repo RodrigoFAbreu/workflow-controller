@@ -49,7 +49,7 @@ def refused(entry: dict, default: dict | None = None) -> RoutingConfigError:
 def codex_registry() -> mock._patch:
     """``codex`` also takes the worker role, with Claude's models and efforts."""
     patched = dataclasses.replace(
-        harness.CODEX, roles=(harness.WORKER, harness.LOCAL_REVIEWER, harness.REVIEWER),
+        harness.CODEX, roles=(harness.WORKER, harness.IMPLEMENTER, harness.LOCAL_REVIEWER, harness.REVIEWER),
         models=harness.CLAUDE_CODE.models,
         efforts=harness.CLAUDE_CODE.efforts)
     return mock.patch.object(harness, "ADAPTERS", {harness.CLAUDE_CODE.name: harness.CLAUDE_CODE,

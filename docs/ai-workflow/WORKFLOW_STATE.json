@@ -69182,7 +69182,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-h4e3b-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4e3b-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 4,
       "implementation_revision": 3,
       "functional_review_round": null,
@@ -69330,12 +69330,12 @@
           "external": 3
         },
         "implementation": {
-          "local": 2,
-          "external": 0
+          "local": 3,
+          "external": 1
         }
       },
-      "state_revision": 30,
-      "last_transition": "2026-11-12T14:05:27Z",
+      "state_revision": 32,
+      "last_transition": "2026-11-12T14:23:29Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -69570,7 +69570,90 @@
               "at": "2026-11-12T13:57:13Z"
             }
           ]
+        },
+        "F-55709f97f589": {
+          "digest": "55709f97f5895417f7adc159f8939fc52fa5f7917e42e2c837c34b716bcd8b6c",
+          "text": "**O1.** `TEST_RESULTS.md` still has no entry for the round-2 fix (`40b9b51`, docs only). This review re-ran the narrow modules and `tools/check_docs.py` (see below). Add a one-line entry when the next bundle is generated.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "c7e5a43e812bb66ebade4b2d758ad057b25e087a4db620e618eca6f729bd3120",
+              "verdict": "APPROVE",
+              "at": "2026-11-12T14:13:50Z"
+            }
+          ]
+        },
+        "F-8ba68153f00c": {
+          "digest": "8ba68153f00c5744bc14c0999ddefb0b79dff7c2ee1edab11bbaaa434e3507af",
+          "text": "**O2.** (Carried from round 2's O1.) A `surface_landing_touched` gate text could warn that later Controller steps, `explain` included, also run the Workflow's queries over the landed `scripts/`, so the operator restores the scripts first.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "c7e5a43e812bb66ebade4b2d758ad057b25e087a4db620e618eca6f729bd3120",
+              "verdict": "APPROVE",
+              "at": "2026-11-12T14:13:50Z"
+            }
+          ]
+        },
+        "F-7efda6de749a": {
+          "digest": "7efda6de749a7be2928fbd54812ae4785ccee946cdba781c9dc786ba7751b147",
+          "text": "**O3.** (Carried from round 2's O2 and round 1's O1.) `ImplGuardedRunTest.test_a_kill_in_the_middle_of_a_bundle_rewrite_is_run_again_by_resume` failed once under full-suite load and has passed since, including in this review's run. Record a follow-up if it stays unexplained.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "c7e5a43e812bb66ebade4b2d758ad057b25e087a4db620e618eca6f729bd3120",
+              "verdict": "APPROVE",
+              "at": "2026-11-12T14:13:50Z"
+            }
+          ]
+        },
+        "F-7c25658a0de2": {
+          "digest": "7c25658a0de255be95071c6e97cf6d9e9f128165c3cf07fa94fc865e91bb1f6c",
+          "text": "**O4.** (Carried from round 2's O3.) `generator_run.run` does not run D5's second check after a `WorkflowQueryError`, so a timed-out run that changed `scripts/` is reported as `generator_timed_out`, not as the change. The ending is the gate either way.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "c7e5a43e812bb66ebade4b2d758ad057b25e087a4db620e618eca6f729bd3120",
+              "verdict": "APPROVE",
+              "at": "2026-11-12T14:13:50Z"
+            }
+          ]
+        },
+        "F-ae3d9ef3fb27": {
+          "digest": "ae3d9ef3fb273377502ba3f442d10997a19d4b92a9d29ce343b3fba142804209",
+          "text": "**O1. Timeout failures skip the second check.** `controller/generator_run.py:398` raises immediately on `WorkflowQueryError`, before `_recheck`. A timed-out generator that also changed the surface is therefore reported as `generator_timed_out`. The bundle remains unaccepted at the gate, so this is Optional. Narrow the unconditional docstring claim or perform the check after terminating the process group.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "c7e5a43e812bb66ebade4b2d758ad057b25e087a4db620e618eca6f729bd3120",
+              "verdict": "REVISE",
+              "at": "2026-11-12T14:23:29Z"
+            }
+          ]
         }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "c7e5a43e812bb66ebade4b2d758ad057b25e087a4db620e618eca6f729bd3120",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "05e490c2dbc5e1581329a700605ff83afc576e9fee2132182dd854f19db06541",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-11-12T14:13:50Z",
+          "verdict_sha256": "36dc9d9d8ca417215c061e4fae49afcb0a74588985509860736edaf473c4b3e9",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-h4e3b/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

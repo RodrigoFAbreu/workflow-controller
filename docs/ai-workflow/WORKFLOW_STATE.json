@@ -68016,7 +68016,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-h4e3-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4e3-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 12,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -68168,12 +68168,12 @@
           "external": 4
         },
         "implementation": {
-          "local": 1,
-          "external": 0
+          "local": 2,
+          "external": 1
         }
       },
-      "state_revision": 63,
-      "last_transition": "2026-11-12T06:05:19Z",
+      "state_revision": 65,
+      "last_transition": "2026-11-12T06:23:56Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -68444,6 +68444,34 @@
               "at": "2026-11-10T20:56:41Z"
             }
           ]
+        },
+        "F-26769702ef86": {
+          "digest": "26769702ef86b420cfb94e6e20540ba624789b3a6e50fe24f8504bbd80e3ea75",
+          "text": "**H4E3-I2-O1 (D8):** a `carry_managed_changed` refusal at the check (before any write) now lists the state file in `codex_carry.not_written` (`job._carry_failure_fields`), but not the plan or registry members the worker also changed, because `block[\"writes\"]` is only set at stage `out`. A member-change refusal at the same check lists nothing. So at the check, `not_written` means \"the state file was refused\", not \"what the managed repository does not hold yet\" as `docs/common-problems.md` says. Either fill `not_written` from the check's own planned writes for a refusal at the check, or say on the page that a refusal at the check writes nothing and `not_written` then names only the state file when it caused the refusal.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "db6d6a430c211389054f3a27361c6bacbc62b039d20de33bd8453bdb3795d67e",
+              "verdict": "APPROVE",
+              "at": "2026-11-12T06:15:02Z"
+            }
+          ]
+        },
+        "F-990b7c0e8fd2": {
+          "digest": "990b7c0e8fd2e6165c1f772d77fcc0ef7e129798c708ca86d17afc64f62b9c5c",
+          "text": "**H4E3-I2-O2:** the bundle's `TEST_RESULTS.md` is still headed \"implementation revision 1\" and describes the run at `2b03d78`. The revision 2 results are only in `IMPLEMENTATION_SUMMARY.md` (\"Round 1 review fixes\"). Update `TEST_RESULTS.md` when the bundle is next generated, so the file named for test results describes the reviewed head.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "db6d6a430c211389054f3a27361c6bacbc62b039d20de33bd8453bdb3795d67e",
+              "verdict": "APPROVE",
+              "at": "2026-11-12T06:15:02Z"
+            }
+          ]
         }
       },
       "amendment_history": [
@@ -68565,7 +68593,20 @@
           "resolved_review_content_id": "878b6e7ac7ccf339e74d7b38515ab40e3c66f392ee9a42631c4c4e286be70dd1"
         }
       ],
-      "amendment_base_commit": "bc89f9b0d0de0b424585f95f150079eb35003eea"
+      "amendment_base_commit": "bc89f9b0d0de0b424585f95f150079eb35003eea",
+      "implementation_review_stages": {
+        "review_content_id": "db6d6a430c211389054f3a27361c6bacbc62b039d20de33bd8453bdb3795d67e",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "c0f6122d7944ad1e8993e2a0f346edceb6369f08e85b5a7d38044e333f70d6e1",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-12T06:15:02Z",
+          "verdict_sha256": "01532685411403b165d3e1a68a8f550f2f6aa80d269bf4d3065106d06d9ef0c2",
+          "run_ref": "session:local .ai-review/workflow-controller-h4e3/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+      }
     }
   }
 }

@@ -23,6 +23,7 @@ CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest tests.test_codex_worker_clo
 CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest tests.test_codex_worker_usage_live -v  # opt-in: one live Codex worker turn under a real usage gate over a scratch runtime, the admission and the `usage` block, one model turn
 CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest tests.test_codex_review_live -v  # opt-in: a routed Codex review of each stage through execute_step on a scratch repository, one model turn per stage; prints the measured tokens for tests/harness_contract/codex/review_role.txt
 CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest tests.test_codex_apply_live -v  # opt-in: a routed Codex apply of each role (carry in and out, landing, the guarded generator run and its gate) through execute_step on a scratch repository, one model turn per role; prints the measured tokens for tests/harness_contract/codex/apply_roles.txt
+CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest tests.test_codex_implement_live -v  # opt-in: a routed Codex `milestone-implement` checkpoint through execute_step (clone, guard, surface and state checks, landing), one model turn; prints the measured tokens and whether the narrow test ran in the sandbox
 CONTROLLER_TEST_OLD_GIT=/path/to/git-2.35 python3 -m unittest tests.test_workflow_contract -k fsmonitor  # opt-in: a Git before 2.36
 python -m pip wheel --no-deps -w dist .             # a local wheel (build_origin "local")
 ```

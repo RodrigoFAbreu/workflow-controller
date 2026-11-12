@@ -597,6 +597,55 @@ cause through the job, both roles).
 `usage_record`, and prints the measured tokens). Its output belongs in `tests/harness_contract/codex/apply_roles.txt`.
 **It has not been run yet** (it spends the operator's Codex usage), so that file does not exist and no cost is measured.
 
+#### The checkpoint role on Codex
+
+H4f ([#312](https://github.com/RodrigoFAbreu/workflow-controller/issues/312)) lets routing select Codex for
+`milestone-implement`, the role that implements one checkpoint of an approved plan. It runs as the adapter role `implementer`,
+which both adapters declare, so `--role-harness milestone-implement=codex` (or a routing config or a fallback chain naming
+`codex`) is accepted with a model and an effort the adapter lists. **`milestone-implement-self-review` stays on the `worker`
+adapter role and on Claude Code only**: it writes the implementation bundle's author-written, ignored files and runs the
+generator, which needs a carry of ignored files that this item does not build (H4g, below). **The default is unchanged**:
+nothing is routed to Codex unless an operator selects it.
+
+- **What runs.** One checkpoint per invocation, as the command says: the worker claims the checkpoint, implements it, runs the
+  checkpoint's narrow test, completes the checkpoint in the state file and commits both with the Workflow's trailers, then
+  releases the claim. All of it happens in the private clone ([above](#a-codex-workers-private-clone-and-its-landing)) and
+  everything it keeps is committed, so the landing is the ordinary fast-forward of the clone's linear commits. The job record,
+  the usage record, the ownership and the recovery are the ones of the other Codex roles; the record's `codex_worker` block
+  carries `implementer: true` on this route and on no other.
+- **Before the clone is made** the Controller reads the managed repository's common directory
+  (`controller/checkpoint_claims.py`, a Controller-side literal of the Workflow's claim and amendment-witness layout, pinned to
+  the installed release by a test) and refuses, ending `WorkerNotStarted` with no clone left: `managed_tree_not_clean`,
+  `managed_claim_present`, `managed_claim_unreadable`, `managed_amendment_open`, `managed_amendment_stale`,
+  `managed_amendment_conflict` or `managed_amendment_unreadable`. A dirty tree (an earlier invocation's uncommitted work) is
+  refused, not carried: carrying it is the apply roles' mechanism applied to an open-ended file set, which this item does not do.
+- **Before the landing** (`codex_worker_landing.land(surface=LandingSurface.IMPLEMENTER)`) both passes of the range check read the
+  net `base..tip` change and refuse two more causes. `surface_touched`: a path under `scripts/`, `.workflow-manager/`,
+  `.claude/` or `.codex/` whatever its status (so a deleted script counts), a symbolic link, a mode change where both sides
+  exist, or a diff that cannot be read. `state_touched`: the state file changed outside this work item's entry, or inside it
+  outside the fields a checkpoint writes (`checkpoints`, `current_checkpoint_id`, `last_completed_checkpoint_id`, `phase`,
+  `state_revision`, `last_transition`); a test runs the Workflow's own `transition_checkpoint_in_progress` and
+  `complete_checkpoint` and fails when a release changes that set, so the landing refuses in the safe direction until the
+  constant follows. A newly added executable file outside the surface lands: the implementation review judges code the worker
+  writes, as it does for a Claude worker. The surface list is a floor and one constant, not a review.
+- **The guard.** The worker's clone holds the Workflow's own bookkeeping under `.git/ai-workflow` (identity and claim). For this
+  route only, the launcher's guard leaves that one root unrecorded (`workflow_metadata=True`); a symbolic link, a special file,
+  `config`, a hook or an alternates file anywhere under the clone's `.git` is still a `sandbox_breach`.
+- **A clone with unfinished work** is kept. After a `landed` or `nothing` landing the clone is probed once; one with a tracked,
+  staged or untracked change, or a probe that cannot read, is kept and named (`tree_left = {reason: unfinished_work, path,
+  tracked, untracked}`), on the uninterrupted ending and on `resume` alike. Recovering that work is the operator's, by reading
+  the clone; it is never carried back.
+- **Every refusal keeps the managed repository as it was.** Its refs, index, tree and state file are unchanged and the clone is
+  kept. [Common problems](../common-problems.md#a-codex-checkpoint-was-refused-surface_touched-state_touched-or-managed_)
+  has each cause and its remedy.
+
+The opt-in live proof is `CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest tests.test_codex_implement_live -v` (one real
+Codex turn, skipped on `CI`; it asserts the commit landed, the state showing the checkpoint complete, the clone gone and the
+`usage_record`, and prints the measured tokens and whether the worker could run the checkpoint's narrow test in the H4b1
+sandbox profile). Its output belongs in `tests/harness_contract/codex/implement_role.txt`. **It has not been run yet** (it
+spends the operator's Codex usage), so that file does not exist, the toolchain question is unanswered and no cost is measured. A
+repository whose tests cannot run in the sandbox keeps `claude-code` for this role.
+
 ## The shared command renderer
 
 `controller/command_files.py` holds `render_command(name, arguments, commands_dir)`, a pure function over the shared

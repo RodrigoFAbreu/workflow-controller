@@ -1092,7 +1092,7 @@ else:
         self.interrupted_publication("stale_archive")
 
     def test_a_generator_that_survives_a_kill_is_ended_before_resume_runs_it_again(self) -> None:
-        # I2 of the h4e3b review: the generator carries the job's ownership tag from its first instruction, so a run that
+        # I2 of the h4e3b review: the generator carries a tag of its own, recorded before it starts, from its first instruction, so a run that
         # outlives the Controller is found and ended by `resume` before the next run touches the bundle.
         self.worked()
         real_execute = generator_run.workflow_contract._execute_in_place
@@ -1115,7 +1115,8 @@ else:
                 environ = Path(f"/proc/{survivors[0].pid}/environ").read_bytes().split(b"\0")
                 tags = [item.split(b"=", 1)[1].split(b":") for item in environ
                         if item.startswith(b"WORKFLOW_CONTROLLER_OWNERSHIP=")]
-                self.assertTrue(tags and b"job1" in tags[0], tags)
+                recorded = self.only_record()["regeneration"]["ownership_tag"].encode()
+                self.assertTrue(tags and recorded in tags[0], (tags, recorded))
                 self.assertIsNone(survivors[0].poll())
                 (resumed,) = self.resume()
         finally:

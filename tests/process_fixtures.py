@@ -342,6 +342,9 @@ LEFTOVER_INVENTORY = (
     ("test_codex_worker_sandbox_live.py", "start:run", 2, "bounded",
      "the live `codex sandbox -P worker` probe run (timeout=180) and the one-turn `codex exec` run (timeout=600), opt-in "
      "(CONTROLLER_LIVE_CODEX_TESTS=1, skipped without codex, bwrap or a credential file): both waited by the test"),
+    ("test_job_codex_apply.py", "start:Popen", 1, "bounded",
+     "the stand-in for a generator that outlives a killed Controller: a 60 s `sleep` that `resume` ends and the test "
+     "waits for in a `finally`"),
     ("test_job_codex_worker_interrupt.py", "start:Popen", 1, "bounded",
      "the child Controller (a `unittest` run of `ChildController`) of the killed-Controller tests: killed by the test, "
      "or by its cleanup, which also ends the fake Codex and the nested child (own session, from the test-side wrapper) it left; the fake's `hang_seconds` and "

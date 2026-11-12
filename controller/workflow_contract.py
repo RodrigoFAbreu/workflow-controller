@@ -69,7 +69,7 @@ from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import Any, Callable, Mapping
 
-from controller import anchor, runtime
+from controller import runtime
 from controller.errors import (
     RuntimeContainmentError,
     UnsupportedWorkflowVersionError,
@@ -557,6 +557,11 @@ def run_in_private_copy(
     return completed
 
 
+#: The environment variable carrying a process's ownership tags (``controller.anchor.OWNERSHIP_VAR``, which this module,
+#: earlier in the dependency order, cannot import; ``test_workflow_contract`` holds the two equal).
+_OWNERSHIP_VAR = "WORKFLOW_CONTROLLER_OWNERSHIP"
+
+
 def run_in_place(
     root: Path, argv: list[str], *, timeout: float, context: dict, ownership_tag: str | None = None,
 ) -> subprocess.CompletedProcess:
@@ -612,8 +617,8 @@ def _prepare_and_execute_in_place(
     env = _git_isolation(root, private_dir, context=context, timeout=timeout, deadline=deadline, real_index=True)
     env = interpreter_environment(env, private_dir)
     if ownership_tag:
-        inherited = env.get(anchor.OWNERSHIP_VAR)
-        env[anchor.OWNERSHIP_VAR] = f"{inherited}:{ownership_tag}" if inherited else ownership_tag
+        inherited = env.get(_OWNERSHIP_VAR)
+        env[_OWNERSHIP_VAR] = f"{inherited}:{ownership_tag}" if inherited else ownership_tag
     context["argv"] = argv
     try:
         completed = _execute_in_place(argv, cwd=root, env=env, timeout=_remaining(deadline))

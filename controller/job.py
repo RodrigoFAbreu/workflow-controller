@@ -4434,12 +4434,22 @@ def _scan_record_owned(record: Mapping) -> tuple[list[dict], bool]:
     worker_state = record.get("worker_state") if isinstance(record.get("worker_state"), Mapping) else {}
     owned = worker_state.get("owned_processes")
     tag = record.get("ownership_tag")
-    return worker.scan_recorded_owned_processes(
+    entries, verifiable = worker.scan_recorded_owned_processes(
         ownership_tag=tag if isinstance(tag, str) and tag else None,
         worker_process=record.get("worker_process") if isinstance(record.get("worker_process"), Mapping) else None,
         anchor=record.get("worker_anchor") if isinstance(record.get("worker_anchor"), Mapping) else None,
         owned_processes=owned if isinstance(owned, list) else (),
     )
+    regeneration = record.get("regeneration") if isinstance(record.get("regeneration"), Mapping) else {}
+    run_tag = regeneration.get("ownership_tag")
+    if isinstance(run_tag, str) and run_tag:
+        # I2 of the h4e3b review: the guarded generator run carries a tag of its own, recorded before it starts.
+        more, more_verifiable = worker.scan_recorded_owned_processes(
+            ownership_tag=run_tag, worker_process=None, anchor=None, owned_processes=())
+        seen = {entry["pid"] for entry in entries}
+        entries = entries + [entry for entry in more if entry["pid"] not in seen]
+        verifiable = verifiable and more_verifiable
+    return entries, verifiable
 
 
 def _owned_work_hold(record: JobRecord, root: Path) -> JobRecord | None:
@@ -9455,9 +9465,14 @@ def _guarded_regeneration(fields: Mapping, record: Mapping, *, managed_repo: Any
     if not base_commit:
         return refused("generator_failed", "the item records no base commit to run the generator against")
 
+    # I2 of the h4e3b review: a tag of this run's own, recorded with the stage that precedes the spawn, so a generator
+    # that outlives a killed Controller is found by `resume` (a job id alone is not unique across concurrent runs).
+    run_tag = f"{job_id}-regeneration-{secrets.token_hex(8)}"
+
     def progress(reached: str) -> None:
         nonlocal held
-        held = _persist(runtime_root, job_id, {**held, "regeneration": {"stage": reached, "argument": stage},
+        held = _persist(runtime_root, job_id, {**held, "regeneration": {"stage": reached, "argument": stage,
+                                                                        "ownership_tag": run_tag},
                                                "updated_at": _now()}, event=f"regeneration_{reached}")
 
     try:
@@ -9465,7 +9480,7 @@ def _guarded_regeneration(fields: Mapping, record: Mapping, *, managed_repo: Any
             root, stage=stage, base_commit=base_commit, work_item_id=work_item_id,
             carry_base=block.get("base_commit") if implementation else None,
             landed_head=_current_head(root) if implementation else None, progress=progress,
-            ownership_tag=str(record.get("ownership_tag") or job_id))
+            ownership_tag=run_tag)
     except generator_run.GeneratorRefused as exc:
         evidence_extra = {key: exc.evidence[key] for key in ("returncode", "stdout_tail", "stderr_tail")
                           if key in exc.evidence}

@@ -577,8 +577,8 @@ generator copies, and it never runs anything else of the managed tree (no other 
   second `reconcile`; `--abandon` and a drifted release run no generator. The stage, not the first `reconcile`, decides
   that: the generator replaces `current/` before its archive, so a kill between the two leaves a manifest that is missing
   or already at the carried revision, the first `reconcile` calls it invalid, and `resume` still regenerates (a second
-  invalid `reconcile` after that run is the ending, as for a first run). The generator and everything it starts carry the
-  job's ownership tag from their first instruction, so one that outlives a killed Controller is found by `resume` and
+  invalid `reconcile` after that run is the ending, as for a first run). The generator and everything it starts carry a tag of
+  their own, recorded in the `regeneration` block before the run starts, so one that outlives a killed Controller is found by `resume` and
   ended, with the previous worker's group, before the generator runs again. A refusal is not a cut-off run: its job is
   `GATE_BLOCKED`, which `resume` reports and does not retry, so after a refusal you run the generator by hand.
 - **Still not done:** the Controller runs no other script, module, hook or test of the managed tree, commits, amends and

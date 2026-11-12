@@ -1630,5 +1630,11 @@ class RunInPlaceTest(unittest.TestCase):
         self.assertEqual((env["HOME"], "BASH_ENV" in env, "ENV" in env), ("/h", False, False))
 
 
+class OwnershipTagVariableTest(unittest.TestCase):
+    def test_the_variable_name_is_the_anchors(self) -> None:
+        from controller import anchor
+        self.assertEqual(workflow_contract._OWNERSHIP_VAR, anchor.OWNERSHIP_VAR)
+
+
 if __name__ == "__main__":
     unittest.main()

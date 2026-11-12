@@ -1049,6 +1049,85 @@ else:
         self.assertEqual(ended["status"], job.STATUS_FAILED)
 
 
+    def interrupted_publication(self, state: str) -> None:
+        """I1 of the h4e3b review: the generator replaces ``current/`` before the archive, so a kill between the two
+        leaves a manifest that is missing (``manifest_missing``) or already at the carried revision with the previous
+        archive still in place (``stale_archive``). The persisted regeneration stage, not the first reconcile, decides
+        that ``resume`` runs the generator again."""
+        self.worked()
+        real = generator_run.workflow_contract.run_in_place
+        archive = self.root / ITEM / "review-bundle.tar.gz"
+        before = archive.read_bytes() if archive.exists() else None
+        calls: list[list[str]] = []
+
+        def torn(root: Path, argv: list[str], **kwargs):
+            calls.append(argv)
+            if len(calls) > 1:
+                return real(root, argv, **kwargs)
+            real(root, argv, **kwargs)
+            if state == "manifest_missing":
+                (Path(root) / ITEM / "current" / "MANIFEST.md").unlink()
+            elif before is None:
+                archive.unlink(missing_ok=True)
+            else:
+                archive.write_bytes(before)
+            raise KeyboardInterrupt
+
+        with mock.patch.object(generator_run.workflow_contract, "run_in_place", side_effect=torn):
+            with self.assertRaises(KeyboardInterrupt):
+                self.step()
+            self.assertEqual(self.only_record()["regeneration"]["stage"], "started")
+            (resumed,) = self.resume()
+        self.assertEqual(len(calls), 2, f"resume did not regenerate a bundle torn as {state}")
+        self.assertEqual(resumed["status"], job.STATUS_FINISHED, resumed.get("reconciliation_evidence"))
+        self.assertEqual(resumed["regeneration"]["stage"], "finished")
+        self.assert_next_stage_passes(self.ARGUMENT)
+
+    def test_a_kill_between_the_current_and_the_archive_replacement_leaves_a_missing_manifest_that_resume_regenerates(
+            self) -> None:
+        self.interrupted_publication("manifest_missing")
+
+    def test_a_kill_between_the_current_and_the_archive_replacement_leaves_a_stale_archive_that_resume_regenerates(
+            self) -> None:
+        self.interrupted_publication("stale_archive")
+
+    def test_a_generator_that_survives_a_kill_is_ended_before_resume_runs_it_again(self) -> None:
+        # I2 of the h4e3b review: the generator carries the job's ownership tag from its first instruction, so a run that
+        # outlives the Controller is found and ended by `resume` before the next run touches the bundle.
+        self.worked()
+        real_execute = generator_run.workflow_contract._execute_in_place
+        survivors: list[subprocess.Popen] = []
+        order: list[str] = []
+
+        def spawn_then_die(argv, *, cwd, env, timeout):
+            if survivors:
+                order.append("second run: survivor " + ("gone" if survivors[0].poll() is not None else "ALIVE"))
+                return real_execute(argv, cwd=cwd, env=env, timeout=timeout)
+            survivors.append(subprocess.Popen(
+                ["sleep", "60"], cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL, start_new_session=True))
+            raise KeyboardInterrupt
+
+        try:
+            with mock.patch.object(generator_run.workflow_contract, "_execute_in_place", side_effect=spawn_then_die):
+                with self.assertRaises(KeyboardInterrupt):
+                    self.step()
+                environ = Path(f"/proc/{survivors[0].pid}/environ").read_bytes().split(b"\0")
+                tags = [item.split(b"=", 1)[1].split(b":") for item in environ
+                        if item.startswith(b"WORKFLOW_CONTROLLER_OWNERSHIP=")]
+                self.assertTrue(tags and b"job1" in tags[0], tags)
+                self.assertIsNone(survivors[0].poll())
+                (resumed,) = self.resume()
+        finally:
+            for survivor in survivors:
+                with contextlib.suppress(OSError):
+                    survivor.kill()
+                survivor.wait()
+        self.assertEqual(order, ["second run: survivor gone"])
+        self.assertEqual(resumed["status"], job.STATUS_FINISHED, resumed.get("reconciliation_evidence"))
+        self.assert_next_stage_passes(self.ARGUMENT)
+
+
 class PlanGuardedRunTest(GuardedRunMixin, PlanCase):
     ARGUMENT = "plan"
 

@@ -69,7 +69,7 @@ from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import Any, Callable, Mapping
 
-from controller import runtime
+from controller import anchor, runtime
 from controller.errors import (
     RuntimeContainmentError,
     UnsupportedWorkflowVersionError,
@@ -558,7 +558,7 @@ def run_in_private_copy(
 
 
 def run_in_place(
-    root: Path, argv: list[str], *, timeout: float, context: dict,
+    root: Path, argv: list[str], *, timeout: float, context: dict, ownership_tag: str | None = None,
 ) -> subprocess.CompletedProcess:
     """Run ``argv`` from ``root``, in the target itself, with an interpreter configuration that loads nothing the
     target could have written (``workflow-controller-h4e3b``, D4). The caller has already verified the files the
@@ -571,7 +571,10 @@ def run_in_place(
     directory (no cached bytecode, forged or not, is read) and ``PYTHONPATH`` a second, empty, non-empty-valued private
     directory (with no ``PYTHONPATH`` a caller's ``"$ROOT/scripts:${PYTHONPATH:-}"`` ends in an empty entry, which
     CPython reads as the working directory); and a private ``bin/`` first on ``PATH`` holding one symlink, ``python3``,
-    to ``sys.executable``. The run starts in its own session and a timeout ends the whole group. ``context`` carries
+    to ``sys.executable``. The run starts in its own session and a timeout ends the whole group. ``ownership_tag``,
+    when given, is appended to the run's ``WORKFLOW_CONTROLLER_OWNERSHIP`` from the first instruction, so a run that
+    outlives a killed Controller is found by the tag the job's record already carries and ended before a recovery
+    touches what it writes (I2 of the h4e3b review). ``context`` carries
     ``query``, the operation's name in messages, and is updated as :func:`run_in_private_copy`'s is. Raises only
     :class:`WorkflowQueryError`."""
     try:
@@ -580,7 +583,7 @@ def run_in_place(
         raise _private_copy_failed(context, "create the private directory", exc) from exc
     try:
         completed = _prepare_and_execute_in_place(Path(scratch.name), argv, root=root, timeout=timeout,
-                                                  context=context)
+                                                  context=context, ownership_tag=ownership_tag)
     except BaseException as exc:
         try:
             scratch.cleanup()
@@ -597,6 +600,7 @@ def run_in_place(
 
 def _prepare_and_execute_in_place(
     private_dir: Path, argv: list[str], *, root: Path, timeout: float, context: dict,
+    ownership_tag: str | None = None,
 ) -> subprocess.CompletedProcess:
     deadline = time.monotonic() + timeout
     try:
@@ -607,6 +611,9 @@ def _prepare_and_execute_in_place(
         raise _private_copy_failed(context, "prepare the private interpreter directories", exc) from exc
     env = _git_isolation(root, private_dir, context=context, timeout=timeout, deadline=deadline, real_index=True)
     env = interpreter_environment(env, private_dir)
+    if ownership_tag:
+        inherited = env.get(anchor.OWNERSHIP_VAR)
+        env[anchor.OWNERSHIP_VAR] = f"{inherited}:{ownership_tag}" if inherited else ownership_tag
     context["argv"] = argv
     try:
         completed = _execute_in_place(argv, cwd=root, env=env, timeout=_remaining(deadline))

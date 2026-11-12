@@ -9464,7 +9464,8 @@ def _guarded_regeneration(fields: Mapping, record: Mapping, *, managed_repo: Any
         ran = generator_run.run(
             root, stage=stage, base_commit=base_commit, work_item_id=work_item_id,
             carry_base=block.get("base_commit") if implementation else None,
-            landed_head=_current_head(root) if implementation else None, progress=progress)
+            landed_head=_current_head(root) if implementation else None, progress=progress,
+            ownership_tag=str(record.get("ownership_tag") or job_id))
     except generator_run.GeneratorRefused as exc:
         evidence_extra = {key: exc.evidence[key] for key in ("returncode", "stdout_tail", "stderr_tail")
                           if key in exc.evidence}
@@ -9507,6 +9508,22 @@ def _landing_gate_before_queries(record: Mapping, *, managed_repo: Any, decision
     return None
 
 
+#: The ``regeneration`` stages a record holds while a guarded run is in flight (the other, ``refused``, ends the record).
+_REGENERATION_IN_FLIGHT = ("checked", "started", "finished")
+
+
+def _interrupted_publication(fields: Mapping, record: Mapping) -> bool:
+    """I1 of the h4e3b review: a resumed record whose ``regeneration`` block shows a run in flight and whose first
+    reconcile is ``reconcile_invalid``. A kill between the generator's two publications (``current/`` is replaced
+    before the archive) leaves a manifest that is missing or already at the carried revision, which the stale-bundle
+    check refuses by design; the persisted stage is the evidence the bundle is torn, not stale, so the generator runs
+    again under the guard. The second reconcile, after that run, is still the ending."""
+    block = record.get("regeneration")
+    found = fields.get("reconciliation_evidence")
+    return (isinstance(block, Mapping) and block.get("stage") in _REGENERATION_IN_FLIGHT
+            and isinstance(found, Mapping) and found.get("reason") == RECONCILE_INVALID_REASON)
+
+
 def _carry_resolution(record: Mapping, *, managed_repo: Any, runtime_root: Path, worker_outcome: str | None,
                       decision: Decision | None = None) -> dict:
     """The record fields a routed apply's ending writes (D8): the Workflow's own ``reconcile`` through
@@ -9531,7 +9548,9 @@ def _carry_resolution(record: Mapping, *, managed_repo: Any, runtime_root: Path,
             return fields  # a worker that changed nothing is the existing `no_progress` judgement
         return _guarded_regeneration(fields, record, managed_repo=managed_repo, runtime_root=runtime_root,
                                      worker_outcome=worker_outcome, decision=decision)
-    if (fields["status"] == STATUS_FAILED and _is_expected_stale_bundle(fields, record, Path(managed_repo.root))):
+    if fields["status"] == STATUS_FAILED and (
+            _is_expected_stale_bundle(fields, record, Path(managed_repo.root))
+            or _interrupted_publication(fields, record)):
         return _guarded_regeneration(fields, record, managed_repo=managed_repo, runtime_root=runtime_root,
                                      worker_outcome=worker_outcome, decision=decision)
     return fields

@@ -372,14 +372,16 @@ def _streams(exc: WorkflowQueryError) -> tuple[bytes | str | None, bytes | str |
 
 def run(root: Path, *, stage: str, base_commit: str, work_item_id: str, carry_base: str | None = None,
         landed_head: str | None = None, progress: Callable[[str], None] | None = None,
-        timeout: float = TIMEOUT_SECONDS) -> GeneratorRun:
+        timeout: float = TIMEOUT_SECONDS, ownership_tag: str | None = None) -> GeneratorRun:
     """The guarded run: D2, D3 and D5a before the generator, ``progress("checked")`` once they pass,
     ``progress("started")`` just before it starts, the generator ``scripts/prepare-ai-review.sh <base_commit> <stage>
     <work item>`` from the repository root under ``workflow_contract.run_in_place`` (D4), D5 after it, and the exit
     status last (a failed run that also changed the tree is reported as the change; a run that timed out or could not
     start is reported as that, without the second check). Raises :class:`GeneratorRefused`
     with one cause of :data:`CAUSES`; a run that returns exited ``0`` and passed every check. ``stage`` is ``plan`` for
-    the plan role and ``post-fix`` for the implementation role."""
+    the plan role and ``post-fix`` for the implementation role. ``ownership_tag`` is the job's tag: the generator and
+    everything it starts carry it in their environment from the start, so a run that survives a killed Controller is
+    found by ``resume`` and ended before the generator is run again (I2 of the h4e3b review)."""
     if stage not in STAGES:
         raise ValueError(f"stage {stage!r} is not one of {STAGES}")
     if carry_base is not None:
@@ -395,7 +397,8 @@ def run(root: Path, *, stage: str, base_commit: str, work_item_id: str, carry_ba
     }
     argv = ["bash", str(root / GENERATOR), base_commit, stage, work_item_id]
     try:
-        completed = workflow_contract.run_in_place(root, argv, timeout=timeout, context=context)
+        completed = workflow_contract.run_in_place(root, argv, timeout=timeout, context=context,
+                                                   ownership_tag=ownership_tag)
     except WorkflowQueryError as exc:
         reason = exc.evidence.get("reason")
         cause = {"query_git_not_isolated": "git_not_isolated", "query_timeout": "generator_timed_out"}.get(

@@ -50,6 +50,11 @@ STATE_PATH = "docs/ai-workflow/WORKFLOW_STATE.json"
 #: path under one, whatever the status, is refused for the implementer route.
 SURFACE_DIRECTORIES = ("scripts", ".workflow-manager", ".claude", ".codex")
 
+#: The root-level files the Controller's next Claude worker loads as configuration (D3): the project MCP configuration
+#: starts a server's command without asking, and the Controller already treats it like ``.claude/``
+#: (``review.CLAUDE_STRIPPED_COPY_PATHS``). Refused whatever the status, like a path under a directory.
+SURFACE_FILES = (".mcp.json",)
+
 #: The fields of a work item's state entry a checkpoint invocation writes (D4): ``transition_checkpoint_in_progress``
 #: and ``complete_checkpoint`` through ``state_transaction``. Derived from the Workflow's own writers by
 #: ``tests.test_codex_worker_landing`` (the test's derived set is the authority, this constant equals it); the claim
@@ -170,7 +175,7 @@ def verify_move(managed_repo: Any, tip: str, branch: str, *, runner: gitrepo.Run
 
 
 def _on_surface(path: str) -> bool:
-    return any(path == name or path.startswith(f"{name}/") for name in SURFACE_DIRECTORIES)
+    return path in SURFACE_FILES or any(path.startswith(f"{name}/") or path == name for name in SURFACE_DIRECTORIES)
 
 
 def _check_surface(repo: Path, base: str, tip: str, work_item_id: str | None, runner: gitrepo.Runner) -> None:

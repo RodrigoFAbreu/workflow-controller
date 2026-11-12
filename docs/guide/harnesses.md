@@ -621,7 +621,7 @@ nothing is routed to Codex unless an operator selects it.
   refused, not carried: carrying it is the apply roles' mechanism applied to an open-ended file set, which this item does not do.
 - **Before the landing** (`codex_worker_landing.land(surface=LandingSurface.IMPLEMENTER)`) both passes of the range check read the
   net `base..tip` change and refuse two more causes. `surface_touched`: a path under `scripts/`, `.workflow-manager/`,
-  `.claude/` or `.codex/` whatever its status (so a deleted script counts), a symbolic link, a mode change where both sides
+  `.claude/` or `.codex/`, or the root-level `.mcp.json` (the next Claude worker starts the servers it declares), whatever its status (so a deleted script counts), a symbolic link, a mode change where both sides
   exist, or a diff that cannot be read. `state_touched`: the state file changed outside this work item's entry, or inside it
   outside the fields a checkpoint writes (`checkpoints`, `current_checkpoint_id`, `last_completed_checkpoint_id`, `phase`,
   `state_revision`, `last_transition`); a test runs the Workflow's own `transition_checkpoint_in_progress` and

@@ -58,6 +58,7 @@ SURFACE_PLANTS = {
         'p = root / ".claude/commands/milestone-implement.md"; p.write_text(p.read_text() + "\\nrun it\\n"); commit()',
         "surface_touched"),
     "a_codex_config_added": ('write(".codex/config.toml", "notify = [\\"x\\"]\\n"); commit()', "surface_touched"),
+    "a_root_mcp_configuration_added": ('write(".mcp.json", "{\\"mcpServers\\": {}}\\n"); commit()', "surface_touched"),
     "a_symlink_under_docs": ('os.symlink("/etc/passwd", root / "docs/link"); commit()', "surface_touched"),
     "an_executable_bit_flipped": ('os.chmod(root / "README.md", 0o755); commit()', "surface_touched"),
     "a_symlink_replacing_a_file": ('(root / "README.md").unlink(); os.symlink("x", root / "README.md"); commit()',

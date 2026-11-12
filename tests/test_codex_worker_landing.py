@@ -997,7 +997,7 @@ class SurfaceFixture(Fixture):
     def setUp(self) -> None:
         super().setUp()
         for name, text in {"scripts/a.py": "a = 1\n", ".workflow-manager/installation.json": "{}\n",
-                           ".claude/settings.json": "{}\n", ".codex/config.toml": "x = 1\n",
+                           ".claude/settings.json": "{}\n", ".codex/config.toml": "x = 1\n", ".mcp.json": "{}\n",
                            "docs/ai-workflow/WORKFLOW_STATE.json": state_text(), "notes/page.md": "p\n",
                            "run.sh": "#!/bin/sh\n"}.items():
             path = self.root / name
@@ -1094,6 +1094,24 @@ class SurfaceRefusalTest(SurfaceFixture):
                         self.remove(existing)
                     result = self.refuses("surface_touched")
                     self.assertIn(f"{status} ", result.message)
+
+    def test_the_root_mcp_configuration_is_refused_for_every_status(self) -> None:
+        # The fixture's base carries ``.mcp.json``, so the range can modify or delete it; an added one (the base
+        # without it) is the safety plant ``a_root_mcp_configuration_added``, and the path match is status-blind.
+        self.assertTrue(landing._on_surface(".mcp.json"))
+        for status in "MD":
+            with self.subTest(status=status):
+                self.setUp()
+                if status == "M":
+                    self.commit(".mcp.json", "{\"mcpServers\": {\"x\": {}}}\n")
+                else:
+                    self.remove(".mcp.json")
+                result = self.refuses("surface_touched")
+                self.assertIn(f"{status} .mcp.json", result.message)
+
+    def test_a_nested_mcp_json_is_not_the_root_configuration(self) -> None:
+        self.commit("notes/.mcp.json", "{}\n")
+        self.assertEqual(self.land().outcome, "landed")
 
     def test_deep_paths_and_commands_are_refused(self) -> None:
         self.commit(".claude/commands/milestone-implement.md", "steer\n")

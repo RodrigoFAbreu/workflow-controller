@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-h4f",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -70112,6 +70112,362 @@
         },
         "evaluated_at": "2026-11-12T18:00:24Z",
         "workflow_release": "2.27.0"
+      }
+    },
+    "workflow-controller-h4f": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-h4f",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_H4F_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-h4f-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4f-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 5,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "37577106d2778384ba5410098d0c61bb0ac64aff",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "f15968277f1b6c5d76b8da9d9f908b8825f580d78ca413583317e32dbdbb94ec",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "f15968277f1b6c5d76b8da9d9f908b8825f580d78ca413583317e32dbdbb94ec",
+        "approved_review_content_id": "185d9ed577778c8d67db9599175c68edf12cbe596d8fc6ccd8d4eafae1187ca4",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_H4F_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7896979ecbacb987f02ac0ae969a8a0b39223c0b"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-h4f-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c41f0535fd5d932cfac0ff25f85e1c49750c6ddf"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-h4f-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4824f05bc30e44a0948a73fcedb234e553f98173"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-12T19:50:12Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "185d9ed577778c8d67db9599175c68edf12cbe596d8fc6ccd8d4eafae1187ca4",
+            "ledger": {
+              "local": {
+                "bundle_id": "f15968277f1b6c5d76b8da9d9f908b8825f580d78ca413583317e32dbdbb94ec",
+                "verdict": "APPROVE",
+                "round": 5,
+                "verdict_sha256": "231f520cc170bf7f14086fc98cca98f58b9839c3576223b7c739eba81687c762",
+                "ledger_entry_sha256": "29f9ff136257805f21495e334f1128443734acec0689267770d10eca909d8332",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-h4f/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "f15968277f1b6c5d76b8da9d9f908b8825f580d78ca413583317e32dbdbb94ec",
+                "verdict": "APPROVE",
+                "round": 5,
+                "verdict_sha256": "5759c209c005a07a24d84f0eb98296b34e635ab56f1b2b39aa3c93cbe06f71b6",
+                "ledger_entry_sha256": "b135c3705127f41956f09a4af0ecffef4f8646c6a34ffa2ca9846b797d187fe3",
+                "run_ref": "codex:20261112T194432Z-eb577c7a",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-12T19:50:12Z",
+          "workflow_release": "2.27.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "185d9ed577778c8d67db9599175c68edf12cbe596d8fc6ccd8d4eafae1187ca4",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "f15968277f1b6c5d76b8da9d9f908b8825f580d78ca413583317e32dbdbb94ec",
+          "verdict": "APPROVE",
+          "round": 5,
+          "completed_at": "2026-11-12T19:44:16Z",
+          "verdict_sha256": "231f520cc170bf7f14086fc98cca98f58b9839c3576223b7c739eba81687c762",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-h4f/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "f15968277f1b6c5d76b8da9d9f908b8825f580d78ca413583317e32dbdbb94ec",
+          "verdict": "APPROVE",
+          "round": 5,
+          "completed_at": "2026-11-12T19:47:57Z",
+          "verdict_sha256": "5759c209c005a07a24d84f0eb98296b34e635ab56f1b2b39aa3c93cbe06f71b6",
+          "run_ref": "codex:20261112T194432Z-eb577c7a",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 5,
+          "external": 3
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 20,
+      "last_transition": "2026-11-12T19:50:12Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-12T19:41:53Z",
+        "consumed": {
+          "review_content_id": "ce959ca2620f21f08fc31d142e3180bdfdb19e437f212835eca9b59fb14c77b5",
+          "plan_revision": 4,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "185d9ed577778c8d67db9599175c68edf12cbe596d8fc6ccd8d4eafae1187ca4",
+          "plan_revision": 5
+        },
+        "bound": {
+          "review_content_id": "185d9ed577778c8d67db9599175c68edf12cbe596d8fc6ccd8d4eafae1187ca4",
+          "bundle_id": "f15968277f1b6c5d76b8da9d9f908b8825f580d78ca413583317e32dbdbb94ec",
+          "plan_revision": 5
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "4ae4f1cab37274b58b3d4fabe9a385d5570e1be8dadd5df49e07fccd9aa902c4",
+        "a5b31cb329cf3ebdf58c156b47ab91804e55efd46cc88aae77ca118f13b3c6b8",
+        "ce959ca2620f21f08fc31d142e3180bdfdb19e437f212835eca9b59fb14c77b5",
+        "d20eb27219f99e38bc092f0c1f16855baf3cd3c9cac0e832aa48f6a916e9f50a"
+      ],
+      "optional_findings": {
+        "F-e659aff254e6": {
+          "digest": "e659aff254e64af5e062ad040557356d146c89e2b04696b1f70fa61b633eccc3",
+          "text": "**O1 -- `git diff --name-status` carries no modes.** D3 judges links and mode changes but names `git diff --name-status -z --no-renames`; the mode data needs `--raw` (`controller/gitrepo.py:964` already reads `diff-tree -r -z --raw --no-renames`, and `:904` already wraps `--name-status`). Name the raw form, and say whether CP2 reuses the existing helper rather than adding \"the one helper\".",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "d20eb27219f99e38bc092f0c1f16855baf3cd3c9cac0e832aa48f6a916e9f50a",
+              "verdict": "REVISE",
+              "at": "2026-11-12T19:17:30Z"
+            }
+          ]
+        },
+        "F-bc89185d7499": {
+          "digest": "bc89185d74992ff4e4f45ff40aa659b9dc478c0fc18c8ca980812bc16c760c3a",
+          "text": "**O2 -- \"Anywhere in the range\" vs a base..tip diff.** A net `base..tip` diff does not see a path an intermediate commit adds and a later one removes. Harmless for the tree that lands, but the wording should say the check is on the net change (or the check should walk each commit), so the test plan matches.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "d20eb27219f99e38bc092f0c1f16855baf3cd3c9cac0e832aa48f6a916e9f50a",
+              "verdict": "REVISE",
+              "at": "2026-11-12T19:17:30Z"
+            }
+          ]
+        },
+        "F-8c7f1db640db": {
+          "digest": "8c7f1db640db6e9bd299812ca5d5010e4b75525a21c290b4fddc5e534582fd12",
+          "text": "**O3 -- A new executable or a new file in a new mode is not a \"mode change\".** D3 refuses a mode difference only \"where both exist\"; a newly added `100755` file passes. State that this is intended (new scripts outside the surface are code the implementation review judges) so the rule is not read as a gap later.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "d20eb27219f99e38bc092f0c1f16855baf3cd3c9cac0e832aa48f6a916e9f50a",
+              "verdict": "REVISE",
+              "at": "2026-11-12T19:17:30Z"
+            }
+          ]
+        },
+        "F-e59686b75071": {
+          "digest": "e59686b750711c292979e4c8b88c8850518111728e4e4e9cfe72bd07ea881cb1",
+          "text": "**O4 -- Open decision (1) is reasonable.** Keeping `milestone-implement-self-review` on Claude by the sizing rule is the right split; the surface check and the state check are one mechanism (a pre-fast-forward content check of the landed range) and need not be split.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "d20eb27219f99e38bc092f0c1f16855baf3cd3c9cac0e832aa48f6a916e9f50a",
+              "verdict": "REVISE",
+              "at": "2026-11-12T19:17:30Z"
+            }
+          ]
+        },
+        "F-cbfbea08dd56": {
+          "digest": "cbfbea08dd56a27895e9d1e9137ad4a4b1e264397b4cad47304697596ad5dadd",
+          "text": "**O1 -- D4's list of `CHECKPOINT_WRITTEN_FIELDS` omits `last_completed_checkpoint_id`.** `complete_checkpoint` (`scripts/workflow_state.py:5322`) sets `work_item[\"last_completed_checkpoint_id\"] = checkpoint_id`, so the derivation test D4 describes will show that field changing, and the list in D4's text (`checkpoints`, `current_checkpoint_id`, `phase`, `state_revision`, `last_transition`) is one short. The plan's own rule (\"derived, not guessed\") catches this at implementation, but the text should name it so CP2 does not start from a wrong constant.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "a5b31cb329cf3ebdf58c156b47ab91804e55efd46cc88aae77ca118f13b3c6b8",
+              "verdict": "APPROVE",
+              "at": "2026-11-12T19:22:30Z"
+            }
+          ]
+        },
+        "F-a1564ac10184": {
+          "digest": "a1564ac1018452569da16cb4b929c4354971af21f44fcbb200489add45521029",
+          "text": "**O2 -- `.workflow-controller/policy.json` is not named in or out of the surface.** It is the Controller's own repository policy, and it carries `command` adapters (`release.build` argv, run by `release_txn._run_policy_command`). A bound milestone branch reads its policy from the binding record's snapshot (`binding_policy(record)`), not from the landed HEAD, so a landed edit does not change what the Controller runs next for this item. It reaches execution only through review, merge and the CI release, the same path `.github/` takes, which the Risks section already defers. D3's reasoning should name it explicitly, as it does for `AGENTS.md`/`CLAUDE.md`, so the omission reads as a decision rather than a gap.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "a5b31cb329cf3ebdf58c156b47ab91804e55efd46cc88aae77ca118f13b3c6b8",
+              "verdict": "APPROVE",
+              "at": "2026-11-12T19:22:30Z"
+            }
+          ]
+        },
+        "F-6a081a82eb70": {
+          "digest": "6a081a82eb700e58f62d63eea0f3ac3816f9bb53f63c3073c90b7b60e85c904c",
+          "text": "**O1 -- D6b's status probe should use the landing's hardened option set.** D6b runs `git status` in the worker's clone with `no_optional_locks`, which is only `core.fsmonitor=false` (`controller/gitrepo.py:93`). A status can also run a clean filter driver on stat-dirty entries. The clone's `config` is guard-checked before the landing, so this is defence in depth, not a hole. Still, running the probe with `gitrepo.LANDING_CONFIG` (and filter drivers off, as `workflow_contract`'s isolation does) would make it independent of that ordering on the recovery path, where `decide` re-runs no check.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "4ae4f1cab37274b58b3d4fabe9a385d5570e1be8dadd5df49e07fccd9aa902c4",
+              "verdict": "REVISE",
+              "at": "2026-11-12T19:31:58Z"
+            }
+          ]
+        },
+        "F-72213b0acae3": {
+          "digest": "72213b0acae38f9c6766fb801c2933f864982edb21b2eb8587268746bc01730a",
+          "text": "**O2 -- D4b's list of `Prepared` holders omits the carry.** `controller/codex_carry.py:646` also compares against `prepared.guard`. The implementer route never carries, so nothing breaks today. Naming it keeps the \"different settings refuse\" rule from surprising a later route that both carries and sets the flag.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "4ae4f1cab37274b58b3d4fabe9a385d5570e1be8dadd5df49e07fccd9aa902c4",
+              "verdict": "REVISE",
+              "at": "2026-11-12T19:31:58Z"
+            }
+          ]
+        },
+        "F-b92cec1bc4ff": {
+          "digest": "b92cec1bc4ff0ce7548d068f2033a672764402fcbe5496a6861945e49a2a3db4",
+          "text": "**O1 -- D4 allows the fields a checkpoint writes but places no limit on their values, and the risk section does not say who checks the values.** `phase`, `checkpoints`, `current_checkpoint_id` and `last_completed_checkpoint_id` may change to any value. One commit could therefore move `phase` from `IMPLEMENTING` straight to a later review or approval phase, or mark every registry checkpoint `COMPLETE`, and still pass `state_touched`. The Workflow's `reconcile` does catch both after the landing. It reports `illegal_edge` for a phase move with no legal edge and `checkpoint_completion_unproven` for a completion it cannot prove (`scripts/workflow_protocol.py:2597`, `:2601`), and both classify the step `invalid`. By then, though, the commit is already on the managed branch, and IMPL-R2 is framed as a refusal before the fast-forward. There are two possible fixes. One is to say in D4 that the legality of the values is left to `reconcile` after the landing, and what the job's `invalid` ending tells the operator to do with the landed commit. The other is a cheap check of the values before the landing: `phase` either unchanged or exactly `IMPLEMENTING` -> `SELF_REVIEWING_IMPLEMENTATION`, at m",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "ce959ca2620f21f08fc31d142e3180bdfdb19e437f212835eca9b59fb14c77b5",
+              "verdict": "APPROVE",
+              "at": "2026-11-12T19:36:28Z"
+            }
+          ]
+        },
+        "F-35a9cf83b71c": {
+          "digest": "35a9cf83b71cb812900164f60fcf199c3fc15f2c756094e5d2f5912f3a41bd70",
+          "text": "**O2 -- D6b's probe assumes the managed repository ignores `.ai-review/`.** A checkpoint invocation in the clone writes `.ai-review/runtime/WORKFLOW_STATE.lock` and `WORKTREE_IDENTITY.json` (`scripts/workflow_state.py:212`). This repository ignores them (`.gitignore:8`). In a managed repository that does not, every clean run would keep its clone as `unfinished_work`. The worker might also commit those files, and the surface check would not refuse them. The fix is to name the assumption in D6b, or to make the probe ignore `.ai-review/runtime/`. The live proof would show which happens.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "ce959ca2620f21f08fc31d142e3180bdfdb19e437f212835eca9b59fb14c77b5",
+              "verdict": "APPROVE",
+              "at": "2026-11-12T19:36:28Z"
+            }
+          ]
+        },
+        "F-410734701257": {
+          "digest": "4107347012576865617e56e730a622ac411fe3fa62a1ddbcfc52db850be2d753",
+          "text": "**O1 — D6b attributes filter suppression to an option set that lacks it.** [LANDING_CONFIG](controller/gitrepo.py:823) disables hooks, fsmonitor and maintenance, but contains no filter overrides. Name the additional filter-disabling mechanism needed by D6b’s planned probe test, following `workflow_contract._git_named_overrides`. This is defence in depth because the normal landing already guard-checks the clone configuration.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "ce959ca2620f21f08fc31d142e3180bdfdb19e437f212835eca9b59fb14c77b5",
+              "verdict": "REVISE",
+              "at": "2026-11-12T19:40:13Z"
+            }
+          ]
+        },
+        "F-e80524d56781": {
+          "digest": "e80524d567812f0dfb1bb58b8a5f1acd38328f98329d80782afac5eb8e884f1a",
+          "text": "**O1 -- D6b's filter names come from `git config --local --name-only --list`, which does not follow `include.path`, so the probe can miss a filter.** `workflow_contract._git_named_overrides` gets its names from `config --list --show-scope --includes -z` (`controller/workflow_contract.py:932`), which covers all scopes and included files. `--local` turns includes off and does not read `config.worktree`. I checked this: in a repository whose `.git/config` has `include.path` pointing to a file that defines `filter.evil.clean`, `git config --local --name-only --list` prints only `include.path`, while `--list --includes` prints `filter.evil.clean`. As written, the probe would not override that driver, so `git status` could run it on a racily clean path. D6b's goal is that the probe \"does not depend on the clone's `config` having been guard-checked first\", and this gap breaks that. The guard compares `config` before the landing, so this is defence in depth, not a reachable path today. Fix: list the names as `workflow_contract` does (`--list --includes`, every scope), and add the include case to CP3's planted-filter test.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "185d9ed577778c8d67db9599175c68edf12cbe596d8fc6ccd8d4eafae1187ca4",
+              "verdict": "APPROVE",
+              "at": "2026-11-12T19:44:16Z"
+            }
+          ]
+        },
+        "F-585c213c343e": {
+          "digest": "585c213c343e9d9ded37d56af72f6390973ce58b472a220db27cf53308a20592",
+          "text": "**O1 — D6b’s filter discovery misses included configuration.** `git config --local --name-only --list` does not follow includes by default or cover worktree configuration. A filter defined there would escape the proposed overrides. Follow `workflow_contract`’s effective configuration enumeration with explicit `--includes`. This remains optional hardening because normal landing checks the clone’s configuration first.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "185d9ed577778c8d67db9599175c68edf12cbe596d8fc6ccd8d4eafae1187ca4",
+              "verdict": "APPROVE",
+              "at": "2026-11-12T19:47:57Z"
+            }
+          ]
+        }
       }
     }
   }

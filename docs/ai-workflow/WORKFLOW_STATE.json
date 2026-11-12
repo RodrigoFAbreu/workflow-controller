@@ -70123,7 +70123,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-h4f-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4f-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 5,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -70275,12 +70275,12 @@
           "external": 3
         },
         "implementation": {
-          "local": 0,
+          "local": 1,
           "external": 0
         }
       },
-      "state_revision": 31,
-      "last_transition": "2026-11-12T21:51:17Z",
+      "state_revision": 32,
+      "last_transition": "2026-11-12T21:56:36Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -70486,6 +70486,20 @@
               "review_content_id": "185d9ed577778c8d67db9599175c68edf12cbe596d8fc6ccd8d4eafae1187ca4",
               "verdict": "APPROVE",
               "at": "2026-11-12T19:47:57Z"
+            }
+          ]
+        },
+        "F-68b801db67b0": {
+          "digest": "68b801db67b02ac4398c06de61c562c2982d3b9e28ee279b3006e256e5107f11",
+          "text": "**O1 -- `filter_disabling_config` misses filters defined in `config.worktree`.** `controller/gitrepo.py` reads `git config --local --includes --name-only --list -z`. I checked: `--includes` does follow `include.path`. But with `extensions.worktreeConfig=true`, a driver set by `git config --worktree filter.wt.clean ...` does not appear in that listing, and `git status` would still read it. The landing's guard compares `config` and `config.worktree` before the landing, so this is defence in depth only. Dropping `--local` (every scope, as `workflow_contract._git_named_overrides` does), or adding a second `--worktree` read, would close it.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "d57e513fd711358e44cac9afb21dab4f73c49ff0f6101a25b2471629a8d7931f",
+              "verdict": "REVISE",
+              "at": "2026-11-12T21:56:36Z"
             }
           ]
         }

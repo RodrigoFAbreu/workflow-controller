@@ -69182,7 +69182,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-h4e3b-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4e3b-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 4,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -69330,12 +69330,12 @@
           "external": 3
         },
         "implementation": {
-          "local": 1,
+          "local": 2,
           "external": 0
         }
       },
-      "state_revision": 28,
-      "last_transition": "2026-11-12T13:43:16Z",
+      "state_revision": 29,
+      "last_transition": "2026-11-12T13:57:13Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -69526,6 +69526,48 @@
               "review_content_id": "c95220cbe4a3460f5135c039258fb2775870be2fddd210368cda07c61701d1cc",
               "verdict": "REVISE",
               "at": "2026-11-12T13:08:00Z"
+            }
+          ]
+        },
+        "F-5196aaa11eb0": {
+          "digest": "5196aaa11eb0533a35cfe75de319d899c4e04bb8aa6cf88439fecbcbec304853",
+          "text": "**O1.** The gate text for the implementation role says to read the landed range first \"because the generator executes `scripts/`\". Its last step, `workflow-controller ... explain`, also runs the Workflow's queries over the landed `scripts/` (checked only against the committed installation record). That is the same exposure the new pre-query landing check closes inside the job. A `surface_landing_touched` refusal could say so in its text, for example \"and so does every later Controller step\", so the operator does not run `explain` before restoring the scripts.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "bda65818fb58553d63cf8f2ba73dc100b64d97f44a0b3836fd06a94ca01ce573",
+              "verdict": "REVISE",
+              "at": "2026-11-12T13:57:13Z"
+            }
+          ]
+        },
+        "F-e9442dc2de05": {
+          "digest": "e9442dc2de056673918f22e6aac1a7a0a4bee271378212db1c71936599ad5bbc",
+          "text": "**O2.** (Carried from round 1's O1, still open.) `ImplGuardedRunTest.test_a_kill_in_the_middle_of_a_bundle_rewrite_is_run_again_by_resume` failed once under full-suite load. It has passed since, including in this review's run. Record a follow-up if it is not explained before merge.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "bda65818fb58553d63cf8f2ba73dc100b64d97f44a0b3836fd06a94ca01ce573",
+              "verdict": "REVISE",
+              "at": "2026-11-12T13:57:13Z"
+            }
+          ]
+        },
+        "F-71d26b4e99f0": {
+          "digest": "71d26b4e99f00cf9ce6363344041717b66a6823fc32b6fb11180139a5297bbb0",
+          "text": "**O3.** (Carried from round 1's O2, still open.) `generator_run.run` does not run D5's second check after a `WorkflowQueryError` (timeout, launch failure). A timed-out run that changed `scripts/` is therefore reported as `generator_timed_out`, not as the change. The ending is the gate either way.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "bda65818fb58553d63cf8f2ba73dc100b64d97f44a0b3836fd06a94ca01ce573",
+              "verdict": "REVISE",
+              "at": "2026-11-12T13:57:13Z"
             }
           ]
         }

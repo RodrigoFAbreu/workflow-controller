@@ -69182,7 +69182,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-h4e3b-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4e3b-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 4,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -69330,12 +69330,12 @@
           "external": 3
         },
         "implementation": {
-          "local": 0,
+          "local": 1,
           "external": 0
         }
       },
-      "state_revision": 26,
-      "last_transition": "2026-11-12T12:55:49Z",
+      "state_revision": 27,
+      "last_transition": "2026-11-12T13:08:00Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -69498,6 +69498,34 @@
               "review_content_id": "62807160596a2a689052578d4abc13cb4b1d6b305addc47f700261062f4faa7a",
               "verdict": "APPROVE",
               "at": "2026-11-12T11:28:02Z"
+            }
+          ]
+        },
+        "F-0300f301a358": {
+          "digest": "0300f301a358c468836b9f3633db4c9c6c6770bb05915099b9e627a4c77beb3b",
+          "text": "**O1.** `ImplGuardedRunTest.test_a_kill_in_the_middle_of_a_bundle_rewrite_is_run_again_by_resume` failed once in the full suite (`KeyboardInterrupt not raised`) and has not been explained. It passed in this review's run of `tests.test_job_codex_apply` (57 tests OK). A new test that fails without explanation under suite load is a likely CI flake. Consider finding the cause (for example, whether the patched run is reached under shard ordering) before merge, or record a follow-up.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "c95220cbe4a3460f5135c039258fb2775870be2fddd210368cda07c61701d1cc",
+              "verdict": "REVISE",
+              "at": "2026-11-12T13:08:00Z"
+            }
+          ]
+        },
+        "F-aac5a81d9a3b": {
+          "digest": "aac5a81d9a3bdddfb64db90ae0c87a823c2daf3c3003d8ff3e8f74e35f509111",
+          "text": "**O2.** `generator_run.run` does not run D5's second check on a `WorkflowQueryError` (timeout, launch failure). The ending is the gate in every case, so the bundle is not trusted anyway. But a run that timed out after changing `scripts/` is reported as `generator_timed_out` and not as the change, which goes a little beyond the docstring's \"a failed run that also changed the tree is reported as the change\".",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "c95220cbe4a3460f5135c039258fb2775870be2fddd210368cda07c61701d1cc",
+              "verdict": "REVISE",
+              "at": "2026-11-12T13:08:00Z"
             }
           ]
         }

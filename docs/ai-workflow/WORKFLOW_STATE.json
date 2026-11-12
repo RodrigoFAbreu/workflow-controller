@@ -70123,7 +70123,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-h4f-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4f-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 5,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -70275,12 +70275,12 @@
           "external": 3
         },
         "implementation": {
-          "local": 1,
-          "external": 0
+          "local": 2,
+          "external": 1
         }
       },
-      "state_revision": 33,
-      "last_transition": "2026-11-12T22:16:32Z",
+      "state_revision": 35,
+      "last_transition": "2026-11-12T22:39:07Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -70502,7 +70502,62 @@
               "at": "2026-11-12T21:56:36Z"
             }
           ]
+        },
+        "F-752188782a78": {
+          "digest": "752188782a781767c32598f3e17feb9e76f66c35961296d7493709709261dc1e",
+          "text": "**O1 -- `filter_disabling_config` misses filters defined in `config.worktree`** (carried from round 1, not applied). `controller/gitrepo.py:1013` reads `git config --local --includes --name-only --list -z`. A driver set with `git config --worktree` under `extensions.worktreeConfig=true` does not appear in that listing, but `git status` would still use it. The landing guard already compares `config` and `config.worktree`, so this is defence in depth only. The implementer's reason for deferring it (dropping `--local` would change behaviour for operator-scope drivers) is sound. A second `--worktree` read with its own test would close it.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "9598eae9c79a2f1520bb04d3f10a8393abd18ce8ee2accd77be7993ffe79ff0e",
+              "verdict": "APPROVE",
+              "at": "2026-11-12T22:35:05Z"
+            }
+          ]
+        },
+        "F-bcd6999ad4db": {
+          "digest": "bcd6999ad4db2810ace3499910ed6e74c015c91f73a839fddb1c33613183d5fe",
+          "text": "**O2 -- `TEST_RESULTS.md` was not refreshed for revision 2.** Its heading still says \"implementation revision 1\" and it records only the runs at `ae66d07`. The post-fix suite result appears only in `IMPLEMENTATION_SUMMARY.md`'s \"Review round 1 response\". A future post-fix bundle should update `TEST_RESULTS.md` (or add a revision-2 section) so it describes the content it ships with.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "9598eae9c79a2f1520bb04d3f10a8393abd18ce8ee2accd77be7993ffe79ff0e",
+              "verdict": "APPROVE",
+              "at": "2026-11-12T22:35:05Z"
+            }
+          ]
+        },
+        "F-4b286f20a741": {
+          "digest": "4b286f20a741b48692b8d3ddf22c2e062ddb504519b4a3b42b845a29fc7b2cde",
+          "text": "**O1 — Filter enumeration omits worktree configuration.** `controller/gitrepo.py:1013` uses `git config --local`, which omits filters defined in `config.worktree` when `extensions.worktreeConfig` is enabled. The subsequent status probe reads those filters. Enumerating all applicable scopes would strengthen the recovery probe; the normal landing guard already detects configuration changes.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "9598eae9c79a2f1520bb04d3f10a8393abd18ce8ee2accd77be7993ffe79ff0e",
+              "verdict": "REVISE",
+              "at": "2026-11-12T22:39:07Z"
+            }
+          ]
         }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "9598eae9c79a2f1520bb04d3f10a8393abd18ce8ee2accd77be7993ffe79ff0e",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "1c9a39948053ef415178498b2697ed1403216147dc47aceaaf1f379793520128",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-12T22:35:05Z",
+          "verdict_sha256": "308430e0fae9ae27f6378fc55fa995cc3462cb778848f4bdaf82d107fb396f66",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-h4f/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

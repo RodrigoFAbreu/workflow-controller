@@ -823,6 +823,34 @@ class RecoveryTest(Case):
         self.refused("carry_managed_changed", self.recover, carry_set, block)
         self.assertEqual((self.root / PLAN).read_text(), "someone else\n")
 
+    def test_out_with_this_items_state_entry_changed_meanwhile_is_refused_before_any_write(self) -> None:
+        """H4E3-I4: recovery at stage `out` runs the entry guard too, with the worker's state file unchanged."""
+        carry_set, block, prepared = self.go_in()
+        self.edit(prepared, PLAN_MEMBERS[0], "request by the worker\n")
+        plan = self.check(carry_set, block)
+        self.assertIsNone(plan.state)
+        block["stage"] = "out"
+        block["writes"] = {w.rel: {"sha256": w.sha256, "mode": w.mode} for w in plan.writes}
+        block["state"] = False
+        doc = json.loads((self.root / STATE).read_text())
+        doc["work_items"][WID]["state_revision"] = 7
+        write(self.root, STATE, json.dumps(doc, indent=2) + "\n")
+        self.refused("carry_managed_changed", self.recover, carry_set, block)
+        self.assertEqual((self.root / PLAN_MEMBERS[0]).read_text(), "request\n")
+        self.assertTrue(carry.prepared_from_block(block).path.is_dir())
+
+    def test_out_with_another_items_state_entry_changed_is_not_a_refusal(self) -> None:
+        carry_set, block, prepared = self.go_in()
+        self.edit(prepared, PLAN_MEMBERS[0], "request by the worker\n")
+        plan = self.check(carry_set, block)
+        block["stage"] = "out"
+        block["writes"] = {w.rel: {"sha256": w.sha256, "mode": w.mode} for w in plan.writes}
+        block["state"] = False
+        doc = json.loads((self.root / STATE).read_text())
+        doc["work_items"]["other"]["phase"] = "DONE"
+        write(self.root, STATE, json.dumps(doc, indent=2) + "\n")
+        self.assertEqual(self.recover(carry_set, block)["action"], "carried_out")
+
     def test_out_with_the_clone_gone_is_carry_clone_gone_naming_the_unwritten_members(self) -> None:
         carry_set, block, prepared = self.go_in()
         self._worker_edits(prepared)

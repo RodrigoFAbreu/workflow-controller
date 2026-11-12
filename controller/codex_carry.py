@@ -698,17 +698,23 @@ def check_out(managed_repo: Any, layout: codex_worker_sandbox.WorkerLayout, carr
         state = None
         if STATE_PATH in changed:
             state = _state_payload(layout, block, changed[STATE_PATH], carry_set.work_item_id)
-        # D6a's entry guard holds whether or not the worker changed the state file: the managed entry is the carried-in
-        # one, or (a recovery after the state write) the worker's.
-        baseline = block.get("state_entry_in_sha256")
-        if baseline is not None:
-            allowed = {baseline, *((_entry_sha(state["after"]),) if state is not None else ())}
-            if _entry_sha(managed_entry(root, carry_set.work_item_id)) not in allowed:
-                raise _refuse("carry_managed_changed", f"this item's entry of the managed state file changed while "
-                              f"the worker ran", paths=[STATE_PATH])
+        _check_state_entry(root, carry_set, block, state)
     except GitOperationError as exc:
         raise _refuse("clone_git_changed", f"the clone could not be read: {exc.message}", **exc.evidence) from exc
     return OutPlan(tuple(w for w in writes if w.rel != STATE_PATH), state)
+
+
+def _check_state_entry(root: Path, carry_set: CarrySet, block: Mapping[str, Any], state: Mapping[str, Any] | None) -> None:
+    """D6a's entry guard, whether or not the worker changed the state file: the managed item's entry is the carried-in
+    one, or (a recovery after the state write) the worker's. Run by :func:`check_out` and by recovery at stage ``out``,
+    before any outstanding write."""
+    baseline = block.get("state_entry_in_sha256")
+    if baseline is None:
+        return
+    allowed = {baseline, *((_entry_sha(state["after"]),) if state is not None else ())}
+    if _entry_sha(managed_entry(root, carry_set.work_item_id)) not in allowed:
+        raise _refuse("carry_managed_changed", "this item's entry of the managed state file changed while "
+                      "the worker ran", paths=[STATE_PATH])
 
 
 def _state_payload(layout: codex_worker_sandbox.WorkerLayout, block: Mapping[str, Any], worker_bytes: bytes,
@@ -822,6 +828,7 @@ def recover(managed_repo: Any, layout: codex_worker_sandbox.WorkerLayout, carry_
         raise _clone_gone(layout, block, Path(managed_repo.root))
     if stage == "out":
         pending = _plan_from_block(layout, block, Path(managed_repo.root))
+        _check_state_entry(Path(managed_repo.root), carry_set, block, pending.state)
         outcome = write_out(managed_repo, layout, carry_set, block, pending, persist=persist, digests=digests)
     else:
         plan = check_out(managed_repo, layout, carry_set, block, runner=runner)

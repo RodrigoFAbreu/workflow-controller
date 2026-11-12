@@ -672,6 +672,152 @@ class WindowsTest(KilledLandingFixture):
         self.assertNotIn("reconciliation_evidence", resumed)
 
 
+class ImplementerKilledFixture(KilledLandingFixture):
+    """``workflow-controller-h4f`` CP3 (D6, D6b): the checkpoint role's route, killed at a window of its landing. The
+    implementer predicate is forced on; the killing lander also takes the policy arguments the job passes."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.enterContext(mock.patch.object(job, "_is_codex_implement_route", return_value=True))
+        self.policy: list[dict] = []
+
+    def killing_lander(self, stage: str):
+        inner = super().killing_lander(stage)
+
+        def lander(managed_repo, prepared, runtime_root, job_id, *, worker_breach, on_intent, **policy):
+            self.policy.append(policy)
+            return inner(managed_repo, prepared, runtime_root, job_id, worker_breach=worker_breach,
+                         on_intent=on_intent)
+
+        return lander
+
+    def snapshot(self) -> dict:
+        return self.managed_snapshot()
+
+
+class ImplementerWindowsTest(ImplementerKilledFixture):
+    """D6: a kill at any point before the managed branch moves recovers as the refused ``landing_interrupted``, the
+    clone kept and the managed branch, tree and index untouched, whatever the checks would have said; a kill after the
+    branch moved recovers as ``landed``. The recovery re-runs no check."""
+
+    RANGES = {
+        "a range the checks would land": lambda clone, test: test.commit_in(clone, {"notes.txt": "n\n"}, "work"),
+        "a range the checks would refuse": lambda clone, test: test.commit_in(
+            clone, {"scripts/evil.py": "x = 1\n"}, "evil"),
+    }
+
+    def test_every_window_before_the_branch_moves_ends_landing_interrupted_for_either_range(self) -> None:
+        for window in ("before_intent", "before_fetch", "after_fetch"):
+            for name, work in self.RANGES.items():
+                with self.subTest(window=window, range=name):
+                    shutil.rmtree(self.runtime / "jobs", ignore_errors=True)
+                    shutil.rmtree(self.job_dir(), ignore_errors=True)
+                    self.ids = 0
+                    self.recorded = False
+                    self.after = lambda clone, work=work: work(clone, self)
+                    before = self.snapshot()
+                    self.killed(window)
+                    self.assertEqual(self.policy[-1]["surface"], codex_worker_landing.LandingSurface.IMPLEMENTER)
+                    resumed = self.resume()
+                    self.assert_refused_clone_kept(resumed, "landing_interrupted")
+                    self.assertEqual(self.branch_tip(), self.base)
+                    self.assertEqual(self.snapshot(), before)
+
+    def test_a_kill_after_the_merge_recovers_as_landed_for_either_range(self) -> None:
+        for name, work in self.RANGES.items():
+            with self.subTest(range=name):
+                shutil.rmtree(self.runtime / "jobs", ignore_errors=True)
+                shutil.rmtree(self.job_dir(), ignore_errors=True)
+                git(self.managed.root, "reset", "-q", "--hard", self.base)
+                self.ids = 0
+                self.recorded = False
+                self.after = lambda clone, work=work: work(clone, self)
+                self.killed("after_merge")
+                resumed = self.resume()
+                block = resumed["codex_worker"]["landing"]
+                self.assertEqual((block["outcome"], block["recovered"], block["clone_kept"]), ("landed", True, False))
+                self.assertEqual(block["tip"], self.branch_tip())
+                self.assertEqual(self.refs(), "")
+                self.assertFalse((self.job_dir() / "tree").exists())
+
+
+class ImplementerRecoveryTest(ImplementerKilledFixture):
+    """D6b on the recovery's twin: the clone of a landing that landed (or had nothing) is probed again, and the path is
+    recorded again."""
+
+    def dirty(self, clone: Path) -> None:
+        self.commit_in(clone, {"notes.txt": "n\n"})
+        (clone / "half.txt").write_text("half\n")
+
+    def assert_recovered_kept(self, resumed: dict, *, untracked: int, tracked: int = 0) -> None:
+        block = resumed["codex_worker"]["landing"]
+        clone = str(ws.WorkerLayout(self.runtime, self.job_id).worktree)
+        self.assertEqual((block["outcome"], block["recovered"], block["clone_kept"]), ("landed", True, True))
+        self.assertEqual(block["tree_left"], {"reason": "unfinished_work", "path": clone, "tracked": tracked,
+                                              "untracked": untracked})
+        self.assertEqual(resumed["reconciliation_evidence"]["clone"], clone)
+        self.assertTrue(self.clone_kept())
+        self.assert_only_tree_and_sessions()
+        self.assertEqual(self.refs(), "")
+
+    def test_a_kill_after_the_merge_with_a_dirty_clone_resumes_to_a_kept_and_named_clone(self) -> None:
+        self.after = self.dirty
+        self.killed("after_merge")
+        resumed = self.resume()
+        self.assert_recovered_kept(resumed, untracked=1)
+        self.assertEqual(git(self.managed.root, "status", "--porcelain", "--untracked-files=all"), "")
+        self.assertFalse((self.managed.root / "half.txt").exists())
+
+    def test_a_kill_after_the_landing_before_the_clone_is_settled_resumes_to_the_same_ending(self) -> None:
+        """The uninterrupted run landed and wrote the ``COMPLETED`` record with its final block; the Controller was lost
+        before it settled the clone. `resume` probes the clone again and records the same path."""
+        self.after = self.dirty
+        with mock.patch.object(job, "_remove_landed_clone", side_effect=KeyboardInterrupt), \
+                self.assertRaises(KeyboardInterrupt):
+            self.run_step()
+        record = self.only_record()
+        self.assertEqual((record["status"], record["codex_worker"]["landing"]["outcome"]),
+                         (job.STATUS_COMPLETED, "landed"))
+        resumed = self.resume()
+        block = resumed["codex_worker"]["landing"]
+        self.assertTrue(block["clone_kept"])
+        self.assertEqual(block["tree_left"]["reason"], "unfinished_work")
+        self.assertEqual(block["tree_left"]["untracked"], 1)
+        self.assertEqual(resumed["reconciliation_evidence"]["clone"], block["tree_left"]["path"])
+        self.assertTrue(self.clone_kept())
+
+    def test_a_clean_clone_is_still_removed_by_the_recovery(self) -> None:
+        self.killed("after_merge")
+        resumed = self.resume()
+        self.assertEqual(resumed["status"], job.STATUS_FINISHED, resumed.get("reconciliation_evidence"))
+        self.assertFalse(resumed["codex_worker"]["landing"]["clone_kept"])
+        self.assertFalse((self.job_dir() / "tree").exists())
+
+    def test_the_recovery_probe_runs_no_program_of_the_clone_whatever_its_config_says(self) -> None:
+        marker = self.tmp / "filter-ran"
+        self.after = lambda clone: self.commit_in(clone, {".gitattributes": f"{STATE} filter=plant\n"})
+        self.killed("after_merge")
+        clone = ws.WorkerLayout(self.runtime, self.job_id).worktree
+        git(clone, "config", "--local", "filter.plant.clean", f"sh -c 'touch {marker}; cat'")
+        (clone / STATE).write_bytes((clone / STATE).read_bytes())
+        os.utime(clone / STATE, (1, 1))
+        resumed = self.resume()
+        self.assertFalse(marker.exists())
+        self.assertFalse(resumed["codex_worker"]["landing"]["clone_kept"])  # judged clean, the filter never run
+        self.assertFalse((self.job_dir() / "tree").exists())
+
+    def test_an_unreadable_clone_is_kept_as_unfinished_work_with_the_reason(self) -> None:
+        self.killed("after_merge")
+        clone = ws.WorkerLayout(self.runtime, self.job_id).worktree
+        (clone / ".git" / "index").write_bytes(b"garbage")
+        resumed = self.resume()
+        block = resumed["codex_worker"]["landing"]
+        self.assertTrue(block["clone_kept"])
+        self.assertEqual(block["tree_left"]["reason"], "unfinished_work")
+        self.assertIsNone(block["tree_left"]["tracked"])
+        self.assertTrue(block["tree_left"]["unreadable"])
+
+
 class RemovedCloneTest(KilledLandingFixture):
     """H4e leftovers, D2: a refusal never says a clone is kept when its path is gone."""
 

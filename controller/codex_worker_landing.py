@@ -445,6 +445,35 @@ def land(managed_repo: Any, prepared: Any, runtime_root: Path, job_id: str, *, w
                    result.moved, True, result.dirty, result.message, f"{gitrepo.LANDING_REF_PREFIX}{job_id}")
 
 
+def unfinished_work(clone: Path | str, runtime_root: Path, job_id: str) -> dict | None:
+    """``workflow-controller-h4f`` D6b: whether the clone at ``clone`` holds work no commit carries, for the implementer
+    route's removal of a ``landed`` or ``nothing`` landing's clone. One bounded, hardened read: ``git status
+    --porcelain=v1 -z --untracked-files=all --no-renames`` (ignored files not listed) in the scrubbed environment with
+    :data:`gitrepo.LANDING_CONFIG` plus the filter-disabling set of the clone's own configuration
+    (:func:`gitrepo.filter_disabling_config`) and no optional locks, so the read runs no program of the clone and does
+    not depend on its ``config`` having been guard-checked first (the recovery path does not re-run the guard).
+
+    Returns ``None`` for a clean clone, and for a path where no clone stands (nothing to keep). Otherwise
+    ``{"path", "tracked", "untracked"}``: counts of tracked paths that differ from ``HEAD``, staged or not, and of
+    untracked ones, never file contents. A read that cannot be made is unfinished work too, with both counts ``None``
+    and the reason in ``unreadable`` (the safe direction)."""
+    path = Path(clone)
+    if path.is_symlink():
+        return {"path": str(path), "tracked": None, "untracked": None, "unreadable": "the clone path is a link"}
+    if not path.is_dir():
+        return None
+    read = _runner(codex_worker_sandbox.WorkerLayout(Path(runtime_root), job_id).base)
+    try:
+        config = (*gitrepo.LANDING_CONFIG, *gitrepo.filter_disabling_config(path, runner=read))
+        tracked, untracked = gitrepo.status_counts(path, config=config, runner=read)
+    except (GitOperationError, OSError, subprocess.TimeoutExpired) as exc:
+        return {"path": str(path), "tracked": None, "untracked": None,
+                "unreadable": str(getattr(exc, "message", exc))}
+    if not tracked and not untracked:
+        return None
+    return {"path": str(path), "tracked": tracked, "untracked": untracked}
+
+
 # ---------------------------------------------------------------------------
 # Recovery (D7): the deciding half.
 # ---------------------------------------------------------------------------

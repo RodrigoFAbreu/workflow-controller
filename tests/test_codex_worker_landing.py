@@ -1274,5 +1274,86 @@ print(json.dumps(steps))
         self.assertFalse({"amendment_history", "plan_approval"} & landing.CHECKPOINT_WRITTEN_FIELDS)
 
 
+class UnfinishedWorkTest(Fixture):
+    """``workflow-controller-h4f`` D6b: whether a clone holds work no commit carries."""
+
+    def probe(self):
+        return landing.unfinished_work(self.clone, self.runtime, JOB)
+
+    def test_a_clean_clone_and_a_clone_with_only_commits_hold_none(self) -> None:
+        self.assertIsNone(self.probe())
+        (self.clone / "new.txt").write_text("n\n")
+        git(self.clone, "add", "new.txt")
+        git(self.clone, "commit", "-q", "-m", "work")
+        self.assertIsNone(self.probe())
+
+    def test_an_ignored_file_is_not_unfinished_work(self) -> None:
+        (self.clone / "ign").mkdir()
+        (self.clone / "ign" / "z.txt").write_text("z\n")
+        self.assertIsNone(self.probe())
+
+    def test_a_tracked_change_a_staged_change_and_an_untracked_file_each_count(self) -> None:
+        (self.clone / "src.txt").write_text("changed\n")
+        self.assertEqual(self.probe(), {"path": str(self.clone), "tracked": 1, "untracked": 0})
+        git(self.clone, "checkout", "--", "src.txt")
+        (self.clone / "staged.txt").write_text("s\n")
+        git(self.clone, "add", "staged.txt")
+        self.assertEqual(self.probe(), {"path": str(self.clone), "tracked": 1, "untracked": 0})
+        git(self.clone, "reset", "-q", "--", "staged.txt")
+        self.assertEqual(self.probe(), {"path": str(self.clone), "tracked": 0, "untracked": 1})
+
+    def test_a_partial_commit_leaves_the_rest_as_unfinished_work(self) -> None:
+        (self.clone / "done.txt").write_text("d\n")
+        git(self.clone, "add", "done.txt")
+        git(self.clone, "commit", "-q", "-m", "partial")
+        (self.clone / "rest.txt").write_text("r\n")
+        self.assertEqual(self.probe(), {"path": str(self.clone), "tracked": 0, "untracked": 1})
+
+    def test_the_counts_never_carry_file_contents(self) -> None:
+        (self.clone / "secret.txt").write_text("-----BEGIN PRIVATE KEY-----\n")
+        self.assertNotIn("PRIVATE", json.dumps(self.probe()))
+
+    def test_no_clone_at_the_path_holds_nothing_to_keep(self) -> None:
+        self.assertIsNone(landing.unfinished_work(self.tmp / "gone", self.runtime, JOB))
+
+    def test_a_clone_path_that_is_a_link_is_unreadable_unfinished_work(self) -> None:
+        link = self.tmp / "link"
+        link.symlink_to(self.clone)
+        found = landing.unfinished_work(link, self.runtime, JOB)
+        self.assertEqual((found["tracked"], found["untracked"]), (None, None))
+        self.assertIn("link", found["unreadable"])
+
+    def test_a_directory_git_cannot_read_is_unfinished_work_with_the_reason(self) -> None:
+        git(self.clone, "config", "--local", "core.repositoryformatversion", "99")
+        found = self.probe()
+        self.assertEqual((found["tracked"], found["untracked"]), (None, None))
+        self.assertTrue(found["unreadable"])
+
+    def test_a_clean_filter_in_the_clone_config_does_not_run_and_the_managed_tree_is_untouched(self) -> None:
+        marker = self.tmp / "ran"
+        (self.clone / ".gitattributes").write_text("src.txt filter=plant\n")
+        git(self.clone, "add", ".gitattributes")
+        git(self.clone, "commit", "-q", "-m", "attrs")
+        git(self.clone, "config", "--local", "filter.plant.clean", f"sh -c 'touch {marker}; cat'")
+        (self.clone / "src.txt").write_text("one\n")
+        os.utime(self.clone / "src.txt", (1, 1))  # racy stat data: Git would look at the content and run the filter
+        before = out(self.root, "status", "--porcelain", "--untracked-files=all"), out(self.root, "for-each-ref")
+        self.assertIsNone(self.probe())
+        self.assertFalse(marker.exists())
+        self.assertEqual((out(self.root, "status", "--porcelain", "--untracked-files=all"),
+                          out(self.root, "for-each-ref")), before)
+
+    def test_a_hook_in_the_clone_does_not_run(self) -> None:
+        marker = self.tmp / "hook-ran"
+        hooks = self.clone / ".git" / "hooks"
+        hooks.mkdir(exist_ok=True)
+        (hooks / "post-index-change").write_text(f"#!/bin/sh\ntouch {marker}\n")
+        (hooks / "post-index-change").chmod(0o755)
+        git(self.clone, "config", "--local", "core.hooksPath", str(hooks))
+        (self.clone / "src.txt").write_text("changed\n")
+        self.assertEqual(self.probe()["tracked"], 1)
+        self.assertFalse(marker.exists())
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -767,5 +767,86 @@ class DiffRawTest(unittest.TestCase):
         self.assertIn("core.commitGraph=false", spy.calls[0])
 
 
+class FilterAndStatusTest(unittest.TestCase):
+    """``workflow-controller-h4f`` D6b: the filter-disabling set and the status counts the clone probe reads."""
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.base_dir = Path(tmp.name).resolve()
+        self.repo = self.base_dir / "repo"
+        self.repo.mkdir()
+        git_init(self.repo)
+        (self.repo / "a.txt").write_text("a\n")
+        run(["git", "add", "-A"], cwd=self.repo)
+        run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "base"], cwd=self.repo)
+
+    def config(self, *args: str) -> None:
+        run(["git", "-C", str(self.repo), "config", *args], cwd=self.repo)
+
+    def test_no_filter_gives_no_options(self) -> None:
+        self.assertEqual(gitrepo.filter_disabling_config(self.repo), ())
+
+    def test_every_named_driver_is_switched_off_whatever_its_variables(self) -> None:
+        self.config("filter.lfs.clean", "prog clean")
+        self.config("filter.lfs.required", "true")
+        self.config("filter.dotted.name.process", "p")  # a subsection with a dot in it
+        self.config("filter.only.smudge", "s")
+        self.config("core.autocrlf", "false")  # not a filter
+        options = gitrepo.filter_disabling_config(self.repo)
+        pairs = [options[i + 1] for i in range(0, len(options), 2)]
+        self.assertTrue(all(options[i] == "-c" for i in range(0, len(options), 2)))
+        for name in ("lfs", "dotted.name", "only"):
+            for variable, value in (("process", ""), ("clean", ""), ("smudge", ""), ("required", "false")):
+                self.assertIn(f"filter.{name}.{variable}={value}", pairs)
+        self.assertEqual(len(pairs), 12)
+
+    def test_a_driver_an_included_file_defines_is_named_too(self) -> None:
+        (self.repo / "extra.cfg").write_text('[filter "inc"]\n\tclean = prog\n')
+        self.config("include.path", str(self.repo / "extra.cfg"))
+        options = gitrepo.filter_disabling_config(self.repo)
+        self.assertIn("filter.inc.clean=", options)
+
+    def test_a_name_is_one_argument_never_a_shell_word(self) -> None:
+        self.config("filter.a b;c.clean", "prog")
+        options = gitrepo.filter_disabling_config(self.repo)
+        self.assertIn("filter.a b;c.clean=", options)
+
+    def test_status_counts_tracked_staged_and_untracked_and_ignores_ignored(self) -> None:
+        self.assertEqual(gitrepo.status_counts(self.repo), (0, 0))
+        (self.repo / ".gitignore").write_text("ign/\n")
+        run(["git", "add", ".gitignore"], cwd=self.repo)  # staged
+        (self.repo / "a.txt").write_text("changed\n")  # modified in the tree
+        (self.repo / "new dir").mkdir()
+        (self.repo / "new dir" / "x.txt").write_text("x\n")
+        (self.repo / "new dir" / "y.txt").write_text("y\n")
+        (self.repo / "ign").mkdir()
+        (self.repo / "ign" / "z.txt").write_text("z\n")
+        self.assertEqual(gitrepo.status_counts(self.repo), (2, 2))  # untracked files are listed one by one
+
+    def test_a_staged_rename_counts_both_sides(self) -> None:
+        run(["git", "mv", "a.txt", "b.txt"], cwd=self.repo)
+        self.assertEqual(gitrepo.status_counts(self.repo), (2, 0))
+
+    def test_an_unreadable_repository_raises(self) -> None:
+        with self.assertRaises(GitOperationError):
+            gitrepo.status_counts(self.repo / "nowhere")
+
+    def test_a_clean_filter_does_not_run_under_the_disabling_set(self) -> None:
+        marker = self.base_dir / "ran"
+        (self.repo / ".gitattributes").write_text("a.txt filter=plant\n")
+        run(["git", "add", ".gitattributes"], cwd=self.repo)
+        run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "attrs"], cwd=self.repo)
+        self.config("filter.plant.clean", f"sh -c 'touch {marker}; cat'")
+        # Racy stat data: the file's content is unchanged but its recorded stat no longer matches, so Git must look.
+        (self.repo / "a.txt").write_text("a\n")
+        os.utime(self.repo / "a.txt", (1, 1))
+        config = gitrepo.filter_disabling_config(self.repo)
+        self.assertEqual(gitrepo.status_counts(self.repo, config=config), (0, 0))
+        self.assertFalse(marker.exists())
+        gitrepo.status_counts(self.repo)  # without the set the configured program is what Git runs
+        self.assertTrue(marker.exists())
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -8,6 +8,7 @@ fake run has ended, and the real lander returns them to the managed branch. Noth
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -19,7 +20,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from controller import (  # noqa: E402
-    codex_tester, codex_worker_landing, codex_worker_sandbox as ws, codex_worker_tree, gitrepo, job, review,
+    checkpoint_claims as cc, codex_tester, codex_worker_landing, codex_worker_sandbox as ws, codex_worker_tree, gitrepo, job, review,
     usage_record, worker,
 )
 from controller.decision import phase_from_wire  # noqa: E402
@@ -459,6 +460,292 @@ class CloneNamedLiveTest(LandingFixture):
         evidence = self.only_record()["reconciliation_evidence"]
         self.assertEqual(evidence["code"], "RuntimeError")
         self.assertNotIn("clone", evidence)
+
+
+class ImplementerFixture(LandingFixture):
+    """``workflow-controller-h4f`` CP3: the checkpoint role's route through the plain Codex body. The fixture's route is
+    a worker role of the fixture adapter; the implementer predicate is forced on so the real preparer, launcher options
+    and lander see exactly what the implementer route gives them."""
+
+    implementer = True
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.prepared_with: list[dict] = []
+        self.landed_with: list[dict] = []
+        real_prepare, real_land = codex_worker_tree.prepare, codex_worker_landing.land
+
+        def prepare(managed, layout, base, **kwargs):
+            self.prepared_with.append(kwargs)
+            return real_prepare(managed, layout, base, **kwargs)
+
+        def lander(*args, **kwargs):
+            self.landed_with.append(kwargs)
+            return real_land(*args, **kwargs)
+
+        self.enterContext(mock.patch.object(job, "CODEX_WORKTREE_PREPARER", prepare))
+        self.enterContext(mock.patch.object(job, "CODEX_LANDER", lander))
+        if self.implementer:
+            self.enterContext(mock.patch.object(job, "_is_codex_implement_route", return_value=True))
+
+    def clone_path(self) -> str:
+        return str(ws.WorkerLayout(self.runtime, self.job_id).worktree)
+
+    def assert_kept(self, record: dict, *, tracked: int, untracked: int) -> dict:
+        block = record["codex_worker"]["landing"]
+        self.assertTrue(block["clone_kept"], block)
+        self.assertEqual(block["tree_left"], {"reason": "unfinished_work", "path": self.clone_path(),
+                                              "tracked": tracked, "untracked": untracked})
+        self.assertTrue(self.clone_kept())
+        self.assertEqual(self.job_dir_entries(), ["codex-home", "tree"])
+        self.assertEqual(record["reconciliation_evidence"]["clone"], self.clone_path())
+        return block
+
+    def job_dir_entries(self) -> list[str]:
+        return sorted(p.name for p in self.job_dir().iterdir())
+
+
+class ImplementerRouteTest(ImplementerFixture):
+    def test_the_policy_reaches_the_preparer_the_launcher_and_the_lander(self) -> None:
+        self.after = lambda clone: self.commit_in(clone, {"notes.txt": "n\n"})
+        record = self.run_step()
+        self.assertEqual(self.prepared_with, [{"workflow_metadata": True}])
+        (options,) = self.launcher.calls
+        self.assertIs(options["workflow_metadata"], True)
+        self.assertEqual(len(options), 9)
+        (landed,) = self.landed_with
+        self.assertIs(landed["surface"], codex_worker_landing.LandingSurface.IMPLEMENTER)
+        self.assertEqual(landed["work_item_id"], str(record["work_item_id"]))
+        self.assertEqual(record["codex_worker"]["landing"]["outcome"], "landed")
+        self.assertIs(record["codex_worker"]["implementer"], True)
+        self.assertTrue(job.validate_record(record, managed_repo=self.managed, identity=FAKE_IDENTITY).valid)
+
+    def test_a_range_that_touches_the_surface_is_refused_and_the_clone_kept(self) -> None:
+        self.after = lambda clone: self.commit_in(clone, {"scripts/evil.py": "x = 1\n"})
+        before = self.managed_snapshot()
+        record = self.run_step()
+        self.assert_refused(record, "surface_touched")
+        self.assertEqual(self.managed_snapshot(), before)
+        self.assertEqual(self.branch_tip(), self.base)
+
+    def test_a_clean_clone_is_removed_exactly_as_before(self) -> None:
+        self.after = lambda clone: self.commit_in(clone, {"notes.txt": "n\n"})
+        record = self.run_step()
+        block = record["codex_worker"]["landing"]
+        self.assertEqual((block["outcome"], block["clone_kept"]), ("landed", False))
+        self.assertNotIn("tree_left", block)
+        self.assertEqual(self.leftovers(), [])
+        self.assertFalse((self.job_dir() / "tree").exists())
+
+    def test_a_nothing_landing_with_a_clean_clone_is_removed(self) -> None:
+        record = self.run_step()
+        block = record["codex_worker"]["landing"]
+        self.assertEqual((block["outcome"], block["clone_kept"]), ("nothing", False))
+        self.assertFalse((self.job_dir() / "tree").exists())
+
+
+class ImplementerNotStartedTest(ImplementerFixture):
+    """D5: what stands in the managed repository ends the job ``WorkerNotStarted`` with the cause named and its
+    remedy, before any clone is made and before any worker starts."""
+
+    def common(self) -> Path:
+        return gitrepo.common_dir(self.managed.root)
+
+    def item(self) -> str:
+        return "wi-1"
+
+    def claims(self) -> Path:
+        path = self.common() / cc.CLAIMS_RELDIR
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def put_witness(self, **fields) -> Path:
+        self.claims()
+        path = cc.witness_path(self.common(), self.item())
+        path.write_text(json.dumps({"schema_version": 1, "work_item_id": self.item(), "status": "NONE",
+                                    "amendment_seq": 0, **fields}))
+        return path
+
+    def commit_history(self, *entries: dict) -> None:
+        state = json.loads((self.managed.root / STATE).read_text())
+        state["work_items"][self.item()]["amendment_history"] = list(entries)
+        (self.managed.root / STATE).write_text(json.dumps(state, indent=2) + "\n")
+        fixtures.commit_all(self.managed.root, "amendment history")
+
+    def refused(self, cause: str) -> dict:
+        with self.assertRaises(cc.ManagedStateRefused):
+            self.run_step()
+        record = self.assert_not_started("ManagedStateRefused")
+        evidence = record["reconciliation_evidence"]
+        self.assertEqual(evidence["evidence"]["cause"], cause)
+        self.assertTrue(evidence["message"].startswith(cause))
+        self.assertIn(cc.REMEDIES[cause], evidence["message"])
+        self.assertNotIn("clone", evidence)
+        self.assertFalse((self.job_dir() / "tree").exists())
+        # The dirty-tree refusal is the preparer's own, so it is called; every other one comes before it.
+        self.assertEqual(self.prepared_with, [{"workflow_metadata": True}] if cause == "managed_tree_not_clean" else [])
+        self.assertEqual(self.launcher.calls, [])
+        return record
+
+    def test_a_dirty_managed_tree_is_managed_tree_not_clean_with_the_remedy(self) -> None:
+        (self.managed.root / "mine.txt").write_text("uncommitted\n")
+        self.refused("managed_tree_not_clean")
+        self.assertTrue((self.managed.root / "mine.txt").exists())
+
+    def test_a_dirty_tracked_file_is_managed_tree_not_clean_too(self) -> None:
+        with (self.managed.root / STATE).open("a") as handle:
+            handle.write("\n")
+        self.refused("managed_tree_not_clean")
+
+    def test_a_checkpoint_claim_in_the_managed_common_dir_is_managed_claim_present(self) -> None:
+        cc.claim_path(self.common(), self.item()).parent.mkdir(parents=True, exist_ok=True)
+        cc.claim_path(self.common(), self.item()).write_text("{}")
+        self.refused("managed_claim_present")
+
+    def test_an_unreadable_claim_path_is_managed_claim_unreadable(self) -> None:
+        path = cc.claim_path(self.common(), self.item())
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.symlink_to(self.tmp / "nowhere")
+        self.refused("managed_claim_unreadable")
+
+    def test_an_open_or_resolving_amendment_is_managed_amendment_open(self) -> None:
+        for status in ("OPEN", "RESOLVING"):
+            with self.subTest(status=status):
+                shutil.rmtree(self.runtime / "jobs", ignore_errors=True)
+                self.put_witness(status=status, amendment_seq=1, request_projection_sha256="r", previous={})
+                self.refused("managed_amendment_open")
+
+    def test_a_resolved_amendment_the_head_lacks_is_managed_amendment_stale(self) -> None:
+        self.put_witness(status="RESOLVED", amendment_seq=1, request_projection_sha256="r",
+                         resolution_projection_sha256=cc.resolution_projection_sha256(self.entry()))
+        self.refused("managed_amendment_stale")
+
+    def test_a_resolved_amendment_the_head_contradicts_is_managed_amendment_conflict(self) -> None:
+        self.commit_history(self.entry(reconciliation_outcome="changed"))
+        self.put_witness(status="RESOLVED", amendment_seq=1, request_projection_sha256="r",
+                         resolution_projection_sha256=cc.resolution_projection_sha256(self.entry()))
+        self.refused("managed_amendment_conflict")
+
+    def test_an_unreadable_witness_is_managed_amendment_unreadable(self) -> None:
+        self.claims()
+        cc.witness_path(self.common(), self.item()).write_text("{torn")
+        self.refused("managed_amendment_unreadable")
+
+    def entry(self, **changes) -> dict:
+        return {"requested_at": "t", "resolved_at_plan_revision": 2, "reconciliation_outcome": "same_content",
+                "resolved_review_content_id": "abc", **changes}
+
+    def test_a_resolved_amendment_the_head_carries_launches(self) -> None:
+        self.commit_history(self.entry())
+        self.put_witness(status="RESOLVED", amendment_seq=1, request_projection_sha256="r",
+                         resolution_projection_sha256=cc.resolution_projection_sha256(self.entry()))
+        self.after = lambda clone: self.commit_in(clone, {"notes.txt": "n\n"})
+        record = self.run_step()
+        self.assertEqual(record["codex_worker"]["landing"]["outcome"], "landed")
+        self.assertEqual(len(self.launcher.calls), 1)
+
+    def test_another_items_claim_and_no_claims_launch(self) -> None:
+        cc.claim_path(self.common(), "other").parent.mkdir(parents=True, exist_ok=True)
+        cc.claim_path(self.common(), "other").write_text("{}")
+        self.after = lambda clone: self.commit_in(clone, {"notes.txt": "n\n"})
+        record = self.run_step()
+        self.assertEqual(record["codex_worker"]["landing"]["outcome"], "landed")
+
+class OtherRouteNotCheckedTest(ImplementerFixture):
+    implementer = False
+
+    def test_a_claim_in_the_common_dir_stops_no_other_route(self) -> None:
+        path = cc.claim_path(gitrepo.common_dir(self.managed.root), "wi-1")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}")
+        self.after = lambda clone: self.commit_in(clone, {"notes.txt": "n\n"})
+        record = self.run_step()
+        self.assertEqual(record["codex_worker"]["landing"]["outcome"], "landed")
+
+
+class ImplementerUnfinishedWorkTest(ImplementerFixture):
+    """D6b: a clone that holds work no commit carries is kept and named, never removed with the successful cleanup."""
+
+    def test_an_untracked_file_after_a_landed_commit_keeps_the_clone_and_lands_the_commit(self) -> None:
+        def after(clone: Path) -> None:
+            self.commit_in(clone, {"notes.txt": "n\n"})
+            (clone / "half.txt").write_text("half\n")
+
+        self.after = after
+        record = self.run_step()
+        block = self.assert_kept(record, tracked=0, untracked=1)
+        self.assertEqual((block["outcome"], block["moved"]), ("landed", True))
+        self.assertEqual(self.branch_tip(), block["tip"])
+        self.assertTrue((self.managed.root / "notes.txt").exists())
+        self.assertFalse((self.managed.root / "half.txt").exists())  # nothing is carried from the clone
+        self.assertEqual(git(self.managed.root, "status", "--porcelain", "--untracked-files=all"), "")
+
+    def test_a_tracked_change_and_a_staged_change_each_keep_the_clone(self) -> None:
+        def tracked(clone: Path) -> None:
+            (clone / STATE).write_text("{}\n")
+
+        def staged(clone: Path) -> None:
+            (clone / "staged.txt").write_text("s\n")
+            git(clone, "add", "staged.txt")
+
+        for how, expected in ((tracked, (1, 0)), (staged, (1, 0))):
+            with self.subTest(how=how.__name__):
+                self.after = how
+                shutil.rmtree(self.runtime / "jobs", ignore_errors=True)
+                shutil.rmtree(self.job_dir(), ignore_errors=True)
+                self.ids = 0
+                self.recorded = False
+                record = self.run_step()
+                self.assert_kept(record, tracked=expected[0], untracked=expected[1])
+
+    def test_a_nothing_landing_with_a_dirty_clone_keeps_it_and_reconcile_judges_the_unchanged_checkpoint(self) -> None:
+        self.after = lambda clone: (clone / "half.txt").write_text("half\n")
+        before = self.managed_snapshot()
+        record = self.run_step()
+        block = self.assert_kept(record, tracked=0, untracked=1)
+        self.assertEqual((block["outcome"], block["cause"]), ("nothing", codex_worker_landing.NOTHING_TO_LAND))
+        self.assertEqual(self.managed_snapshot(), before)
+        self.assertEqual(record["status"], job.STATUS_FAILED)  # the unchanged checkpoint is judged as today
+
+    def test_a_partial_commit_keeps_the_clone_with_the_rest(self) -> None:
+        def after(clone: Path) -> None:
+            self.commit_in(clone, {"done.txt": "d\n"})
+            (clone / "rest.txt").write_text("r\n")
+            (clone / STATE).write_text("{}\n")
+
+        self.after = after
+        record = self.run_step()
+        self.assert_kept(record, tracked=1, untracked=1)
+
+    def test_the_record_carries_counts_never_contents(self) -> None:
+        self.after = lambda clone: (clone / "secret.txt").write_text("-----BEGIN PRIVATE KEY-----\n")
+        record = self.run_step()
+        self.assertNotIn("PRIVATE", json.dumps(record))
+
+
+class OtherRouteTest(ImplementerFixture):
+    """The other routes are byte-identical: a dirty clone is removed, nothing new is passed or recorded."""
+
+    implementer = False
+
+    def test_a_dirty_clone_of_another_route_is_removed_and_nothing_new_is_passed_or_recorded(self) -> None:
+        def after(clone: Path) -> None:
+            self.commit_in(clone, {"notes.txt": "n\n"})
+            (clone / "half.txt").write_text("half\n")
+
+        self.after = after
+        record = self.run_step()
+        self.assertEqual(self.prepared_with, [{}])
+        (options,) = self.launcher.calls
+        self.assertNotIn("workflow_metadata", options)
+        self.assertEqual(len(options), 8)
+        (landed,) = self.landed_with
+        self.assertEqual(set(landed), {"worker_breach", "on_intent"})
+        self.assertNotIn("implementer", record["codex_worker"])
+        block = record["codex_worker"]["landing"]
+        self.assertEqual((block["outcome"], block["clone_kept"]), ("landed", False))
+        self.assertNotIn("tree_left", block)
+        self.assertFalse((self.job_dir() / "tree").exists())
 
 
 class ProtocolLandingTest(unittest.TestCase):

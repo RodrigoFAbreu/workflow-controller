@@ -476,7 +476,7 @@ class UnchangedClaudePathTest(unittest.TestCase):
         self.assertNotIn(harness.WORKER, harness.CODEX.roles)
         self.assertEqual(job.WORKER_STREAM_FORMAT, "stream-json")
         self.assertFalse(job._is_codex_launcher(worker_launch.for_harness(harness.CLAUDE_CODE.name)))
-        self.assertIsNone(job.CODEX_WORKTREE_PREPARER)
+        self.assertIs(job.CODEX_WORKTREE_PREPARER, codex_worker_tree.prepare)
         self.assertIs(job.CODEX_HOME_RESOLVER, job._codex_home)
 
     def test_the_predicate_is_on_the_launcher_object(self) -> None:

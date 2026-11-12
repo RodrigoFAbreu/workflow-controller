@@ -1001,6 +1001,48 @@ def diff_raw(repo_root: Path, base: str, tip: str, *, runner: Runner | None = No
     return changes
 
 
+_FILTER_KEY = re.compile(r"^filter\.(?P<name>.+)\.(?P<variable>[^.]+)$")
+
+
+def filter_disabling_config(repo_root: Path, *, runner: Runner | None = None) -> tuple[str, ...]:
+    """The ``-c`` options that switch off every filter driver ``repo_root``'s own configuration names
+    (``workflow-controller-h4f``, D6b): each driver's ``process``, ``clean`` and ``smudge`` set empty, which Git reads
+    as no filter, and ``required`` false, so a status of a tree whose stat data is racy runs no program of the tree's
+    configuration. Read with ``git config --local --includes --name-only --list -z``, so a driver an included file
+    defines is named too. The names are the clone's, so every one is passed as an argument, never through a shell."""
+    out = _git(repo_root, ["config", "--local", "--includes", "--name-only", "--list", "-z"], runner, quiet=True)
+    names: set[str] = set()
+    for key in out.split("\0"):
+        found = _FILTER_KEY.match(key)
+        if found:
+            names.add(found.group("name"))
+    options: list[str] = []
+    for name in sorted(names):
+        for variable, value in (("process", ""), ("clean", ""), ("smudge", ""), ("required", "false")):
+            options.extend(("-c", f"filter.{name}.{variable}={value}"))
+    return tuple(options)
+
+
+def status_counts(repo_root: Path, *, config: Sequence[str] = (), runner: Runner | None = None) -> tuple[int, int]:
+    """``(tracked, untracked)``: how many tracked paths differ from ``HEAD`` (staged or in the work tree, a rename read
+    as its two sides) and how many untracked, non-ignored paths ``git status --porcelain=v1 -z --untracked-files=all
+    --no-renames`` lists, with ``config`` (``-c`` options) ahead of the command. Ignored paths are not listed. An
+    unreadable record, or any failure, raises :class:`GitOperationError`."""
+    out = _git(repo_root, [*config, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--no-renames"], runner,
+               quiet=True)
+    tracked = untracked = 0
+    for entry in out.split("\0"):
+        if not entry:
+            continue
+        if len(entry) < 4 or entry[2] != " ":
+            raise GitOperationError(f"git status returned an unexpected record: {entry!r}", evidence={"stdout": out})
+        if entry[:2] == "??":
+            untracked += 1
+        elif entry[:2] != "!!":
+            tracked += 1
+    return tracked, untracked
+
+
 def push_branch(repo_root: Path, remote: str, branch: str, *, runner: Runner | None = None) -> str:
     """Push the local ``branch`` to the same name on ``remote`` as a
     fast-forward, returning the pushed commit. The remote ref is fetched

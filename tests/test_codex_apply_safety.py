@@ -43,7 +43,7 @@ CAUSE_CASES = {
     "clone_git_changed": ("PlanRefusalsTest", "test_a_hook_written_into_the_clone_is_refused"),
     "carry_index_changed": ("PlanRefusalsTest", "test_an_added_or_dropped_intent_to_add_entry_is_refused"),
     "carry_out_of_set": ("PlanRefusalsTest", "test_a_write_outside_the_set_is_refused"),
-    "carry_managed_changed": ("PlanBoundaryTest", "test_another_items_entry_changed_meanwhile_is_kept_and_the_job_ends_at_the_gate"),
+    "carry_managed_changed": ("PlanBoundaryTest", "test_a_managed_member_changed_by_someone_else_is_refused_and_nothing_is_written"),
     "carry_state_foreign": ("PlanRefusalsTest", "test_a_state_change_outside_this_items_entry_is_refused"),
     "carry_clone_gone": ("PlanRefusalsTest", "test_a_deleted_member_and_a_gone_clone_are_refused"),
 }
@@ -433,19 +433,29 @@ class PlanBoundaryTest(Safety, base.PlanCase):
         self.assert_carry_ended(record)
 
     def test_this_items_entry_moved_meanwhile_is_refused_as_changed(self) -> None:
+        seen: dict = {}
+
         def work(clone: Path) -> None:
             self.plan_work(clone)
             path = self.root / STATE
             document = json.loads(path.read_text())
             document["work_items"][WID]["state_revision"] += 7
             path.write_text(json.dumps(document, indent=2) + "\n")
+            seen["state"] = path.read_bytes()
+            seen["plan"] = (self.root / _entry(self.root)["plan_path"]).read_bytes()
+            seen["registry"] = (self.root / _entry(self.root)["registry_path"]).read_bytes()
 
         self.script(message="applied")
         self.after = work
         record = self.step()
         self.assertEqual(record["status"], job.STATUS_FAILED)
         self.assertEqual(self.evidence(record)["code"], job.CODEX_CARRY_REFUSED_CODE)
-        self.assertIn(self.evidence(record)["cause"], ("carry_managed_changed", "carry_state_foreign"))
+        self.assertEqual(self.evidence(record)["cause"], "carry_managed_changed")
+        # refused before any write: the plan, the registry and the state file are the bytes the other party left
+        self.assertEqual((self.root / STATE).read_bytes(), seen["state"])
+        self.assertEqual((self.root / _entry(self.root)["plan_path"]).read_bytes(), seen["plan"])
+        self.assertEqual((self.root / _entry(self.root)["registry_path"]).read_bytes(), seen["registry"])
+        self.assertIn(STATE, record["reconciliation_evidence"]["codex_carry"]["not_written"])
         self.assertTrue(self.clone().exists())
         self.no_armour(record)
 

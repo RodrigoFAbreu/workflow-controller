@@ -3145,6 +3145,10 @@ def _resume_drifted_protocol(record: JobRecord, *, managed_repo: Any, runtime_ro
     if review_ending is not None:
         failed["reconciliation_evidence"] = {**failed["reconciliation_evidence"],
                                              "codex_review": dict(review_ending.evidence)}
+    if _is_codex_carry_record(record):
+        # H4e3 (D9, O2): what the managed repository holds of the worker's work, as the post-spawn handler names it.
+        failed["reconciliation_evidence"] = {**failed["reconciliation_evidence"],
+                                             "codex_carry": _carry_progress(record["codex_carry"], managed_repo.root)}
     if _is_codex_worker_record(record) or _is_codex_carry_record(record):
         # H4e leftovers, D1 site 4: a clone this ending kept is named (a refused landing already carries its own).
         failed = _name_kept_clone(failed, runtime_root)
@@ -5116,6 +5120,10 @@ def _abandon_mark_failed(managed_repo: Any, *, identity: Any, runtime_root: Path
     if review_ending is not None:
         abandoned["reconciliation_evidence"] = {**abandoned["reconciliation_evidence"],
                                                 "codex_review": dict(review_ending.evidence)}
+    if _is_codex_carry_record(record):
+        abandoned["reconciliation_evidence"] = {
+            **abandoned["reconciliation_evidence"],
+            "codex_carry": _carry_progress(record["codex_carry"], managed_repo.root)}
     if _is_codex_worker_record(record) or _is_codex_carry_record(record):
         # H4e leftovers, D1 site 5: the abandon of a `COMPLETED` or `LAUNCHED` record names the clone it kept (a
         # refused landing already carries its own).
@@ -9433,9 +9441,13 @@ def _carry_failure_fields(record: Mapping, runtime_root: Path, root: Path, exc: 
         found = _landing_refusal_evidence(exc.block, _codex_clone_path(record, runtime_root))
         extra: dict = {"codex_worker": {**record["codex_worker"], "landing": exc.block}}
     else:
+        progress = _carry_progress(record["codex_carry"], root)
+        refused_paths = (exc.evidence or {}).get("paths") or []
+        if codex_carry.STATE_PATH in refused_paths and isinstance(progress.get("not_written"), list):
+            # D6a (I1-002): refused at the check, the worker's state entry was never carried out.
+            progress["not_written"] = sorted({*progress["not_written"], codex_carry.STATE_PATH})
         found = {"code": CODEX_CARRY_REFUSED_CODE, "cause": exc.cause, "message": exc.message,
-                 "evidence": dict(exc.evidence),
-                 "codex_carry": _carry_progress(record["codex_carry"], root)}
+                 "evidence": dict(exc.evidence), "codex_carry": progress}
         extra = {}
     return {**extra, "status": STATUS_FAILED, "transition_verified": False, "reconciliation_evidence": found}
 

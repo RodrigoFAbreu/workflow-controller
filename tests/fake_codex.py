@@ -64,7 +64,9 @@ writes an empty file), ``message_bytes`` (base64 of the raw bytes written to the
 (write a sub-agent rollout with that many total tokens),
 ``write_outside`` (list of paths to write), ``escape_to`` (a real-worktree path
 the fake writes as if the sandbox failed), ``git`` (argvs run in the working
-root), ``tool_attempts`` (feature names), ``use_web_search``,
+root), ``workflow_python`` (a list of ``[code, *args]``: each ``code`` is run in a fresh interpreter in the working
+root with its own ``scripts/`` importable as ``ws`` and ``fingerprint``, so a fake worker performs a checkpoint's
+Workflow bookkeeping during its run), ``tool_attempts`` (feature names), ``use_web_search``,
 ``refresh_auth``, ``descendant`` (a bounded sleeping child).
 """
 
@@ -540,6 +542,16 @@ def _exec(argv: list[str], scenario: dict, merged: dict, state: dict, cwd: Path,
                                 env={**os.environ, "GIT_AUTHOR_NAME": "x", "GIT_AUTHOR_EMAIL": "x@y",
                                      "GIT_COMMITTER_NAME": "x", "GIT_COMMITTER_EMAIL": "x@y"})
         record["ran"].append({"layer": "git", "command": command, "exit": result.returncode})
+    for entry in spec.get("workflow_python", []):
+        prelude = ("import sys\nfrom pathlib import Path\nsys.path.insert(0, str(Path.cwd() / 'scripts'))\n"
+                   "import workflow_fingerprint as fingerprint\nimport workflow_state as ws\n")
+        result = subprocess.run([sys.executable, "-B", "-E", "-s", "-c", prelude + entry[0], *entry[1:]], cwd=cwd,
+                                capture_output=True, text=True, check=False, stdin=subprocess.DEVNULL,
+                                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "GIT_AUTHOR_NAME": "x",
+                                     "GIT_AUTHOR_EMAIL": "x@y", "GIT_COMMITTER_NAME": "x",
+                                     "GIT_COMMITTER_EMAIL": "x@y"})
+        record["ran"].append({"layer": "workflow_python", "exit": result.returncode,
+                              "stderr": result.stderr[-400:] if result.returncode else ""})
     if spec.get("refresh_auth"):
         path = home / "auth.json"
         data = json.loads(path.read_text())

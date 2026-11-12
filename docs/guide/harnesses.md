@@ -545,7 +545,9 @@ generator copies, and it never runs anything else of the managed tree (no other 
   1. *The landing.* The implementation role's landed range (`carry base..landed head`, read as name-status records with renames
      split) may touch nothing under `scripts/` or `.workflow-manager/`, whatever the status letter. A range that cannot be read,
      or a head that is not a descendant of the base, is refused the same way. The plan role makes no commit, so the tree check
-     is its whole guard.
+     is its whole guard. For the implementation role this check runs *first*, before any Workflow query of the job (the
+     `reconcile` after the landing included): the queries check `scripts/` against the installation record, a committed file
+     the landing may have edited together with a script, so a refused landing ends at the gate with no query run.
   2. *The tree.* Every file of `scripts/` that `.workflow-manager/installation.json` records must be a regular file whose
      digest equals the record's, and `scripts/prepare-ai-review.sh` must be one of them; the directory may hold no other entry
      than those, `__pycache__` and names starting with `.` (a `sitecustomize.py`, a module that shadows the standard library, a
@@ -573,15 +575,8 @@ generator copies, and it never runs anything else of the managed tree (no other 
 - **Recovery.** The record's `regeneration` block holds the stage (`checked`, `started`, `finished`). `resume` of a run cut off
   at any of them runs the checks and the generator again from the start, so the bundle is regenerated once more before the
   second `reconcile`; `--abandon` and a drifted release run no generator.
-- **Still not done:** the Controller commits, amends and writes no generation record beyond what the generator itself writes
-  under `.ai-review/`, and it does not run the next stage (`/review-plan`, `/review-implementation`, an approval).
-- **Known gap (implementation role).** The Controller's own Workflow queries (the `reconcile` after the landing among them)
-  run `scripts/` from a private copy of bytes checked against `.workflow-manager/installation.json`, and that record is a
-  committed file. A landing that edits a managed script *and* its digest in the record is therefore run by the first query
-  after the landing, before the landing check above is reached. The landing check still refuses the generator run, but the
-  edited script has already run once. Until this is closed, treat a Codex-routed implementation role as able to run code with
-  the Controller's authority by this route, and do not route it to Codex where that matters; an `expectedFailure` test in
-  `tests/test_codex_apply_regeneration.py` records it.
+- **Still not done:** the Controller runs no other script, module, hook or test of the managed tree, commits, amends and
+  writes no generation record beyond what the generator itself writes under `.ai-review/`, and it does not run the next stage (`/review-plan`, `/review-implementation`, an approval).
 
 The routed path is proved adversarially through the job in `tests/test_codex_review_safety.py`
 (credentials, symlinks and special files, submodules, hooks, crafted refs, forged headers; one test per cause of the deny set).
@@ -651,25 +646,6 @@ so the job *carries* a closed set of files into the Codex clone and back (`contr
   `resume`, `--abandon`, a drifted Workflow release and the post-spawn exception handler recover through the carry: a carry out
   that was killed at a member boundary is finished by `resume`; `--abandon` and a drifted release write nothing into the managed
   repository and keep the clone when the worker ran.
-
-##### What the Controller does not do after a landing
-
-After the implementation role's commits land and after either role's members are carried out, the Controller:
-
-- does not run `scripts/prepare-ai-review.sh`, or any other script, module, generator, hook or test of the managed repository's
-  working tree;
-- does not regenerate, repair, withdraw or bind the review bundle under `.ai-review/<work item>/current/`: it writes no
-  generated file there, only the role's carried-out author-written inputs;
-- does not commit, amend or write a generation record in the managed repository, beyond landing the worker's own commits and
-  the commit of a pending feedback entry made before the clone;
-- does not run the next stage (`/review-plan`, `/review-implementation`, an approval).
-
-The only Workflow code it runs after a landing is what it already runs on every step: the Workflow's queries, `reconcile` and
-the recorder driver from a private copy of the installed release's verified bytes, never the managed tree's copies. Regenerating
-the bundle is left to you, or to a Claude session you start, through the steps the gate prints. After an implementation-role
-landing, read the landed range (`git log -p <carry base>..<landed head>`, which the gate names) before regenerating: the
-generator executes `scripts/` and any module the landing added to its import path. Running the generator safely is
-[H4e3b](../items/workflow-controller-h4e3b.md).
 
 The routed path is proved adversarially through the job in `tests/test_codex_apply_safety.py` (one test per cause, links,
 hardlinks and special files, writes outside the set, a forged state file, hooks, crafted refs, and a planted

@@ -376,7 +376,8 @@ def run(root: Path, *, stage: str, base_commit: str, work_item_id: str, carry_ba
     """The guarded run: D2, D3 and D5a before the generator, ``progress("checked")`` once they pass,
     ``progress("started")`` just before it starts, the generator ``scripts/prepare-ai-review.sh <base_commit> <stage>
     <work item>`` from the repository root under ``workflow_contract.run_in_place`` (D4), D5 after it, and the exit
-    status last (a failed run that also changed the tree is reported as the change). Raises :class:`GeneratorRefused`
+    status last (a failed run that also changed the tree is reported as the change; a run that timed out or could not
+    start is reported as that, without the second check). Raises :class:`GeneratorRefused`
     with one cause of :data:`CAUSES`; a run that returns exited ``0`` and passed every check. ``stage`` is ``plan`` for
     the plan role and ``post-fix`` for the implementation role."""
     if stage not in STAGES:

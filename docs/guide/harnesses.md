@@ -574,7 +574,8 @@ generator copies, and it never runs anything else of the managed tree (no other 
   [common problems](../common-problems.md#a-routed-apply-stopped-at-carry_bundle_regeneration_pending).
 - **Recovery.** The record's `regeneration` block holds the stage (`checked`, `started`, `finished`). `resume` of a run cut off
   at any of them runs the checks and the generator again from the start, so the bundle is regenerated once more before the
-  second `reconcile`; `--abandon` and a drifted release run no generator.
+  second `reconcile`; `--abandon` and a drifted release run no generator. A refusal is not a cut-off run: its job is
+  `GATE_BLOCKED`, which `resume` reports and does not retry, so after a refusal you run the generator by hand.
 - **Still not done:** the Controller runs no other script, module, hook or test of the managed tree, commits, amends and
   writes no generation record beyond what the generator itself writes under `.ai-review/`, and it does not run the next
   stage (`/review-plan`, `/review-implementation`, an approval).

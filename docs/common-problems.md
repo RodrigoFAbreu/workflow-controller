@@ -81,7 +81,7 @@ The Codex apply succeeded and its files are in the managed repository, but the C
 After you have cleared the cause, in the managed repository:
 
 1. After an **implementation-role** landing, read the landed range first (`git log -p <carry base>..<landed head>`): the generator executes `scripts/`.
-2. Run the generator the gate names: `scripts/prepare-ai-review.sh <base> plan <work item>` for the plan role, `scripts/prepare-ai-review.sh <base> post-fix <work item>` for the implementation role. Or let the Controller do it: `workflow-controller resume <repo>` runs the checks and the generator again.
+2. Run the generator the gate names: `scripts/prepare-ai-review.sh <base> plan <work item>` for the plan role, `scripts/prepare-ai-review.sh <base> post-fix <work item>` for the implementation role. A refusal ends at a gate, and `resume` leaves a gate-blocked job as it is, so it does not run the generator again: run the generator by hand. (`resume` runs the checks and the generator again only for a run that was cut off before it finished, which is not a refusal.)
 3. Take the next step (the gate prints the command).
 
 ## The command exited 45 and nothing was launched

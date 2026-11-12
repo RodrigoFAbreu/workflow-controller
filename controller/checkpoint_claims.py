@@ -20,8 +20,10 @@ from __future__ import annotations
 
 import errno
 import hashlib
+import contextlib
 import json
 import os
+import re
 import stat
 from pathlib import Path
 from typing import Any
@@ -46,6 +48,12 @@ RESOLUTION_TIME_KEYS = frozenset({"resolved_at_plan_revision", "reconciliation_o
 #: The managed repository's state file, read at ``HEAD`` for the resolution comparison.
 STATE_PATH = "docs/ai-workflow/WORKFLOW_STATE.json"
 
+#: The installation record each worktree commits, and the first release whose claim lifecycle sees a mixed-release
+#: repository (``workflow_state.INSTALLATION_RECORD_PATH``, ``LIFECYCLE_MIN_RELEASE``). A worktree whose ``HEAD`` records an
+#: older, unorderable or no release *lags*.
+INSTALLATION_RECORD_PATH = ".workflow-manager/installation.json"
+LIFECYCLE_MIN_RELEASE = "2.6.0"
+
 #: The most a claim, a witness or the committed state may weigh before it is refused as unreadable.
 MAX_BYTES = 4 * 1024 * 1024
 
@@ -61,6 +69,8 @@ REMEDIES = {
     "managed_amendment_stale": "merge the resolved amendment into this branch, or route the role to `claude-code`",
     "managed_amendment_conflict": "discard the divergent approval on this branch and merge the recorded one, or "
                                   "route the role to `claude-code`",
+    "managed_amendment_lagging": "finish or discard the amendment in that worktree, or merge the Workflow update into "
+                                 "its branch, or route the role to `claude-code`",
     "managed_amendment_unreadable": "inspect and repair the amendment witness, or the committed state, by hand, or "
                                     "route the role to `claude-code`",
 }
@@ -216,10 +226,8 @@ def check(managed_repo: Any, work_item_id: str, runner: gitrepo.Runner) -> None:
     if directory == "unreadable":
         raise ManagedStateRefused("managed_claim_unreadable",
                                   f"{common / CLAIMS_RELDIR} is a link or not a directory", evidence={"path": str(claim)})
-    if directory == "absent":
-        return
     try:
-        held = _read(claim)
+        held = _ABSENT if directory == "absent" else _read(claim)
     except OSError as exc:
         raise ManagedStateRefused("managed_claim_unreadable", f"{claim} cannot be read ({exc.strerror or exc})",
                                   evidence={"path": str(claim)}) from exc
@@ -231,16 +239,18 @@ def check(managed_repo: Any, work_item_id: str, runner: gitrepo.Runner) -> None:
                                    evidence={"path": str(witness)})
 
     try:
-        raw = _read(witness)
+        raw = _ABSENT if directory == "absent" else _read(witness)
     except OSError as exc:
         raise unreadable(f"cannot be read ({exc.strerror or exc})") from exc
     if raw is _ABSENT:
+        _check_lagging_worktrees(root, work_item_id, None, runner)
         return
     data = _witness(raw, work_item_id)  # type: ignore[arg-type]
     if data is None:
         raise unreadable("is torn, of another schema or item, or has an unknown status")
     status = data["status"]
     if status == "NONE":
+        _check_lagging_worktrees(root, work_item_id, data, runner)
         return
     if status in OPEN_STATUSES:
         raise ManagedStateRefused("managed_amendment_open",
@@ -261,3 +271,113 @@ def check(managed_repo: Any, work_item_id: str, runner: gitrepo.Runner) -> None:
                                   "the repository records",
                                   evidence={"path": str(witness), "amendment_seq": seq, "recorded": recorded,
                                             "committed": committed})
+    _check_lagging_worktrees(root, work_item_id, data, runner)
+
+
+def _release_lags(version: Any) -> bool:
+    """``workflow_state.workflow_release_lags``: a version that is not dot-separated integers, or is below
+    :data:`LIFECYCLE_MIN_RELEASE`, lags."""
+    def key(value: Any) -> tuple[int, ...] | None:
+        if not isinstance(value, str) or not value:
+            return None
+        parts = re.split(r"[.\-_]", value)
+        return None if any(not part.isdigit() for part in parts) else tuple(int(part) for part in parts)
+
+    found = key(version)
+    return found is None or found < key(LIFECYCLE_MIN_RELEASE)  # type: ignore[operator]
+
+
+def _history_of(raw: bytes | None, work_item_id: str, where: str) -> tuple[list[dict], Any]:
+    """``(amendment_history, amendment_base_commit)`` of ``work_item_id`` in a state document, empty when the document
+    or the item is absent; :class:`ManagedStateRefused` (``managed_amendment_unreadable``) for a shape that is not the
+    Workflow's."""
+    def unreadable(reason: str) -> ManagedStateRefused:
+        return ManagedStateRefused("managed_amendment_unreadable", f"the state {where} {reason}", evidence={"path": where})
+
+    if raw is None:
+        return [], None
+    try:
+        state = json.loads(raw)
+        items = state.get("work_items", {})
+        item = items.get(work_item_id)
+    except (UnicodeDecodeError, ValueError, AttributeError):
+        raise unreadable("is not the Workflow's state shape") from None
+    if item is None:
+        return [], None
+    if not isinstance(item, dict):
+        raise unreadable("holds a work item that is not an object")
+    history = item.get("amendment_history") or []
+    if not isinstance(history, list) or not all(isinstance(e, dict) for e in history):
+        raise unreadable("holds an amendment_history that is not a list of objects")
+    return history, item.get("amendment_base_commit")
+
+
+def _check_lagging_worktrees(root: Path, work_item_id: str, witness: dict | None, runner: gitrepo.Runner) -> None:
+    """The Workflow's mixed-release check (``workflow_state._lagging_checks``) for the repository's other worktrees,
+    which a private clone cannot see: while a linked worktree lags, an unresolved amendment of ``work_item_id`` in its
+    working tree or ``HEAD`` that the witness does not record refuses (``managed_amendment_lagging``). A recorded one is
+    an ``amendment_seq`` below the witness's, or equal to it with the same request projection and base commit; while the
+    witness is absent, an entry a non-lagging worktree also holds counts as recorded (what the Workflow's upgrade
+    bootstrap derives). Reads only; no lagging worktree, or none with an unresolved amendment, returns."""
+    try:
+        paths = list(gitrepo.worktree_branches(root, runner=runner))
+    except GitOperationError as exc:
+        raise ManagedStateRefused("managed_amendment_unreadable",
+                                  f"the repository's worktrees cannot be listed ({exc.message})",
+                                  evidence=dict(exc.evidence)) from exc
+    here = os.path.realpath(root)
+    views: list[tuple[str, str, str, list[dict], Any, bool]] = []  # path, version, where, history, base, lagging
+    for path in paths:
+        if not os.path.isdir(path):
+            continue
+        try:
+            record = gitrepo.show(Path(path), "HEAD", INSTALLATION_RECORD_PATH, runner=runner)
+        except GitOperationError:
+            record = None
+        version = None
+        if record is not None:
+            with contextlib.suppress(UnicodeDecodeError, ValueError):
+                installed = json.loads(record)
+                version = installed.get("workflow_version") if isinstance(installed, dict) else None
+        lagging = os.path.realpath(path) != here and _release_lags(version)
+        for where in ("working tree", "HEAD"):
+            try:
+                if where == "HEAD":
+                    raw = gitrepo.show(Path(path), "HEAD", STATE_PATH, runner=runner)
+                else:
+                    raw = _read(Path(path) / STATE_PATH)
+                    raw = None if raw is _ABSENT else raw
+            except (GitOperationError, OSError) as exc:
+                raise ManagedStateRefused("managed_amendment_unreadable",
+                                          f"the state of worktree {path} ({where}) cannot be read "
+                                          f"({getattr(exc, 'message', None) or exc})",
+                                          evidence={"path": path}) from exc
+            history, base = _history_of(raw, work_item_id, f"of worktree {path} ({where})")  # type: ignore[arg-type]
+            views.append((path, str(version), where, history, base, lagging))
+    if not any(lagging for *_, lagging in views):
+        return
+    status = witness.get("status") if witness else None
+    seq = witness.get("amendment_seq", 0) if witness else 0
+    derivable: set[tuple[int, str, Any]] = set()
+    if witness is None:
+        for _path, _version, _where, history, base, lagging in views:
+            if not lagging:
+                derivable.update((i, request_projection_sha256(e), base)
+                                 for i, e in enumerate(history, start=1) if e.get("resolved_at_plan_revision") is None)
+    for path, version, where, history, base, lagging in views:
+        if not lagging:
+            continue
+        for index, held in enumerate(history, start=1):
+            if held.get("resolved_at_plan_revision") is not None:
+                continue
+            recorded = (status not in (None, "NONE") and (
+                index < seq or (index == seq and witness is not None
+                                and request_projection_sha256(held) == witness.get("request_projection_sha256")
+                                and base == witness.get("amendment_base_commit")))
+            ) or (index, request_projection_sha256(held), base) in derivable
+            if not recorded:
+                raise ManagedStateRefused(
+                    "managed_amendment_lagging",
+                    f"worktree {path} (installed Workflow {version}) holds an unresolved amendment {index} of "
+                    f"{work_item_id} in its {where} that the repository's amendment witness does not record",
+                    evidence={"worktree": path, "installed_version": version, "seq": index})

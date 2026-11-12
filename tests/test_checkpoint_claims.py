@@ -243,6 +243,92 @@ class WitnessTest(ClaimsFixture):
         self.assertEqual(self.refused(), "managed_amendment_unreadable")
 
 
+class LaggingWorktreeTest(ClaimsFixture):
+    """The Workflow's mixed-release check (``_lagging_checks``) for a linked worktree the private clone cannot see."""
+
+    INSTALL = ".workflow-manager/installation.json"
+
+    def linked(self, version: str = "2.5.1", history=(entry(resolved_at_plan_revision=None),)) -> Path:
+        path = self.tmp / "linked"
+        git(self.root, "worktree", "add", "-q", "-B", "other", str(path))
+        (path / ".workflow-manager").mkdir(exist_ok=True)
+        (path / self.INSTALL).write_text(json.dumps({"workflow_version": version}))
+        (path / STATE).write_text(json.dumps({"work_items": {ITEM: {"amendment_history": list(history)}}}))
+        git(path, "add", "-A")
+        git(path, "commit", "-q", "-m", "linked")
+        return path
+
+    def test_an_unrecorded_amendment_in_a_lagging_worktree_refuses_for_an_absent_or_none_witness(self) -> None:
+        self.linked()
+        self.assertEqual(self.refused(), "managed_amendment_lagging")
+        self.claims.mkdir(parents=True)
+        self.assertEqual(self.refused(), "managed_amendment_lagging")
+        self.write_witness()
+        self.assertEqual(self.refused(), "managed_amendment_lagging")
+
+    def test_a_clean_lagging_worktree_or_a_current_one_is_eligible(self) -> None:
+        self.linked(history=(entry(),))
+        self.clean()
+        git(self.root, "worktree", "remove", "--force", str(self.tmp / "linked"))
+        self.linked(version="2.6.0")
+        self.clean()
+
+    def test_an_unorderable_or_missing_installation_record_lags(self) -> None:
+        path = self.linked(version="weird")
+        self.assertEqual(self.refused(), "managed_amendment_lagging")
+        (path / self.INSTALL).unlink()
+        git(path, "commit", "-q", "-am", "drop")
+        self.assertEqual(self.refused(), "managed_amendment_lagging")
+
+    def test_a_recorded_amendment_is_eligible(self) -> None:
+        self.linked(history=(entry(resolved_at_plan_revision=None),))
+        self.write_witness(status="RESOLVED", amendment_seq=2, request_projection_sha256="r" * 8,
+                           resolution_projection_sha256=cc.resolution_projection_sha256(entry()))
+        self.commit_state({"work_items": {ITEM: {"amendment_history": [entry(), entry()]}}})
+        self.clean()
+
+    def test_an_unreadable_state_in_a_linked_worktree_is_unreadable(self) -> None:
+        path = self.linked()
+        (path / STATE).write_text("{torn")
+        self.assertEqual(self.refused(), "managed_amendment_unreadable")
+
+
+class LaggingAgreementTest(ClaimsFixture):
+    """The check agrees with the admitted release's own ``_lagging_checks`` on the same repository."""
+
+    def workflow_refuses(self, release: str) -> bool:
+        code = ("import sys, json\nimport workflow_state as w\nfrom pathlib import Path\n"
+                f"root = Path({json.dumps(str(self.root))})\n"
+                "try:\n    w._lagging_checks(root, " + json.dumps(ITEM) + ", None, w._probe_worktrees(root))\n"
+                "except w.LaggingWorktreeAmendmentError:\n    print('refused')\nelse:\n    print('ok')\n")
+        result = subprocess.run([sys.executable, "-B", "-E", "-s", "-c", code],
+                                cwd=fixtures.workflow_release_tree(release) / "scripts", capture_output=True,
+                                text=True, check=True, timeout=120)
+        return result.stdout.strip() == "refused"
+
+    def test_the_decision_matches_the_release(self) -> None:
+        for release in ("2.6.0",):
+            for pending in (True, False):
+                with self.subTest(release=release, pending=pending):
+                    linked = self.tmp / f"linked-{pending}"
+                    git(self.root, "worktree", "add", "-q", "-b", f"b{pending}", str(linked))
+                    (linked / ".workflow-manager").mkdir(exist_ok=True)
+                    (linked / ".workflow-manager" / "installation.json").write_text('{"workflow_version": "2.5.1"}')
+                    (linked / STATE).write_text(json.dumps({"work_items": {ITEM: {"amendment_history": [
+                        entry(resolved_at_plan_revision=None if pending else 2)]}}}))
+                    git(linked, "add", "-A")
+                    git(linked, "commit", "-q", "-m", "x")
+                    try:
+                        cc.check(self.managed, ITEM, gitrepo.subprocess_runner())
+                        controller_refuses = False
+                    except cc.ManagedStateRefused as exc:
+                        self.assertEqual(exc.cause, "managed_amendment_lagging")
+                        controller_refuses = True
+                    self.assertEqual(controller_refuses, self.workflow_refuses(release))
+                    self.assertEqual(controller_refuses, pending)
+                    git(self.root, "worktree", "remove", "--force", str(linked))
+
+
 class PinTest(unittest.TestCase):
     """The Controller-side literal equals the release's own functions, for every admitted release that has them."""
 

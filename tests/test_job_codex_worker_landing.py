@@ -631,6 +631,17 @@ class ImplementerNotStartedTest(ImplementerFixture):
         cc.witness_path(self.common(), self.item()).write_text("{torn")
         self.refused("managed_amendment_unreadable")
 
+    def test_an_unresolved_amendment_in_a_lagging_linked_worktree_is_managed_amendment_lagging(self) -> None:
+        linked = self.tmp / "lagging-linked"
+        fixtures.run(["git", "worktree", "add", "-q", "-b", "lagging", str(linked)], cwd=self.managed.root)
+        (linked / ".workflow-manager").mkdir(exist_ok=True)
+        (linked / ".workflow-manager" / "installation.json").write_text('{"workflow_version": "2.5.1"}')
+        state = json.loads((linked / STATE).read_text())
+        state["work_items"][self.item()]["amendment_history"] = [{"requested_at": "t"}]
+        (linked / STATE).write_text(json.dumps(state, indent=2) + "\n")
+        fixtures.commit_all(linked, "lagging amendment")
+        self.refused("managed_amendment_lagging")
+
     def entry(self, **changes) -> dict:
         return {"requested_at": "t", "resolved_at_plan_revision": 2, "reconciliation_outcome": "same_content",
                 "resolved_review_content_id": "abc", **changes}

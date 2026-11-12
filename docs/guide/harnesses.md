@@ -617,7 +617,10 @@ nothing is routed to Codex unless an operator selects it.
   (`controller/checkpoint_claims.py`, a Controller-side literal of the Workflow's claim and amendment-witness layout, pinned to
   the installed release by a test) and refuses, ending `WorkerNotStarted` with no clone left: `managed_tree_not_clean`,
   `managed_claim_present`, `managed_claim_unreadable`, `managed_amendment_open`, `managed_amendment_stale`,
-  `managed_amendment_conflict` or `managed_amendment_unreadable`. A dirty tree (an earlier invocation's uncommitted work) is
+  `managed_amendment_conflict`, `managed_amendment_lagging` or `managed_amendment_unreadable`. `managed_amendment_lagging` is the
+  Workflow's mixed-release refusal kept for the clone, which cannot see the repository's other worktrees: a linked worktree whose
+  committed installation record is below Workflow 2.6.0 holds an unresolved amendment of the item that the witness does not
+  record. A dirty tree (an earlier invocation's uncommitted work) is
   refused, not carried: carrying it is the apply roles' mechanism applied to an open-ended file set, which this item does not do.
 - **Before the landing** (`codex_worker_landing.land(surface=LandingSurface.IMPLEMENTER)`) both passes of the range check read the
   net `base..tip` change and refuse two more causes. `surface_touched`: a path under `scripts/`, `.workflow-manager/`,

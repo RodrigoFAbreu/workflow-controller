@@ -111,6 +111,18 @@ def forged_pyc(base_dir: Path, marker: Path, managed: Path) -> None:
                        invalidation_mode=py_compile.PycInvalidationMode.UNCHECKED_HASH)
 
 
+def edited_script_and_digest(base_dir: Path, marker: Path, managed: Path) -> None:
+    """A managed script that would run ``marker``, and the installation record's digest for it edited to match."""
+    script = base_dir / "scripts" / "workflow_state.py"
+    script.parent.mkdir(parents=True, exist_ok=True)
+    script.write_text((managed / "scripts" / "workflow_state.py").read_text() + "\n" + _source(marker))
+    record = base_dir / ".workflow-manager" / "installation.json"
+    record.parent.mkdir(parents=True, exist_ok=True)
+    data = json.loads((managed / ".workflow-manager" / "installation.json").read_text())
+    data["managed"]["scripts/workflow_state.py"]["sha256"] = hashlib.sha256(script.read_bytes()).hexdigest()
+    record.write_text(json.dumps(data, indent=2) + "\n")
+
+
 def link_for_the_generator(base_dir: Path, marker: Path, managed: Path) -> None:
     script = base_dir / "scripts" / "prepare-ai-review.sh"
     if not script.exists():  # a staged landing: the bytes are the managed tree's
@@ -498,26 +510,13 @@ class ImplRegenerationTest(Regeneration, base.ImplCase):
                 self.again()
                 self.run_plant(name, landed=True)
 
-    @unittest.expectedFailure
     def test_an_edited_managed_script_with_its_digest_edited_to_match_is_refused_by_the_landing_alone(self) -> None:
-        """KNOWN DEFECT (found by this test, not fixed by this item): the Controller's own protocol queries run the
-        managed ``scripts/`` from a private copy of bytes verified against the installation record, and a worker's
-        landing can edit both. The first query (``describe``) of the next resolution therefore runs the edited script
-        before the guard's landing check is reached, so the marker is written. Closing it needs the landing check
-        before every protocol query of the job, which is more than CP3's tests."""
+        """The Controller's protocol queries run the managed ``scripts/`` after checking them against the installation
+        record, and a landing can edit both. The landing check therefore runs before the first post-landing query of
+        the job (D8, R4), so the edited script never runs and the marker is never written."""
         marker = self.marker
 
-        def edit(base_dir: Path, _marker: Path, managed: Path) -> None:
-            script = base_dir / "scripts" / "workflow_state.py"
-            script.parent.mkdir(parents=True, exist_ok=True)
-            script.write_text((managed / "scripts" / "workflow_state.py").read_text() + "\n" + _source(marker))
-            record = base_dir / ".workflow-manager" / "installation.json"
-            record.parent.mkdir(parents=True, exist_ok=True)
-            data = json.loads((managed / ".workflow-manager" / "installation.json").read_text())
-            data["managed"]["scripts/workflow_state.py"]["sha256"] = hashlib.sha256(script.read_bytes()).hexdigest()
-            record.write_text(json.dumps(data, indent=2) + "\n")
-
-        self.worked_with(edit)
+        self.worked_with(edited_script_and_digest)
         with self.spy() as spy:
             record = self.step()
         self.assertFalse(marker.exists())
@@ -525,6 +524,26 @@ class ImplRegenerationTest(Regeneration, base.ImplCase):
         self.assert_refused(record, "surface_landing_touched", spy)
         self.assertIn("workflow_state.py", self.evidence(record)["regeneration"]["detail"])
         generator_run.check_tree(self.root)  # the tree check alone passes: only the landing's diff refuses it
+
+    def test_a_record_cut_off_after_the_landing_runs_no_query_over_the_landed_scripts_on_resume(self) -> None:
+        from controller import runtime as runtime_module
+
+        real = runtime_module.write_carried_file
+
+        def write(root, rel, data, **kw):
+            if Path(root) == self.root:
+                raise KeyboardInterrupt
+            return real(root, rel, data, **kw)
+
+        self.worked_with(edited_script_and_digest)
+        with mock.patch.object(runtime_module, "write_carried_file", write), self.assertRaises(KeyboardInterrupt):
+            self.step()
+        self.assertEqual(self.only_record()["codex_carry"]["stage"], "out")
+        with self.spy() as spy:
+            (record,) = self.resume()
+        self.assertFalse(self.marker.exists())
+        self.assertEqual(spy.call_count, 0)
+        self.assert_refused(record, "surface_landing_touched", spy)
 
     def test_a_changed_file_link_landed_by_the_worker_is_refused_and_never_followed(self) -> None:
         canary = self.canary_file()

@@ -9478,6 +9478,35 @@ def _guarded_regeneration(fields: Mapping, record: Mapping, *, managed_repo: Any
     return {**second, "regeneration": finished, "event_seq": held.get("event_seq")}
 
 
+def _landing_gate_before_queries(record: Mapping, *, managed_repo: Any, decision: Decision | None) -> dict | None:
+    """D8 and R4 of workflow-controller-h4e3b: an implementation-role landing that changed the execution surface ends at
+    the regeneration gate (``surface_landing_touched``) *before* any Workflow query of the job runs. The Controller's
+    queries check ``scripts/`` against ``.workflow-manager/installation.json``, which is a committed file the landing
+    may have edited together with a script, so the first post-landing query would otherwise run the landed code. Only a
+    carry at ``done`` has landed; ``None`` when the landing is clean, the role is the plan role or nothing landed."""
+    block = record.get("codex_carry") or {}
+    if block.get("stage") != "done" or block.get("role") != routing.APPLY_IMPLEMENTATION_REVIEW:
+        return None
+    root = Path(managed_repo.root)
+    try:
+        generator_run.check_landing(root, str(block.get("base_commit")), _current_head(root))
+    except generator_run.GeneratorRefused as exc:
+        stored = (record.get("protocol") or {})
+        base = {"status": STATUS_FAILED, "transition_verified": False,
+                "observed_phase_after": str((record.get("pre_state") or {}).get("phase")),
+                "protocol": {**stored, "reconcile": None}}
+        regeneration = {"cause": exc.cause, "detail": exc.detail}
+        ended = _carry_gate_fields(base, record, managed_repo=managed_repo, decision=decision,
+                                   regeneration=regeneration)
+        if ended is None:
+            return {**base, "reconciliation_evidence": _protocol_failure_evidence(
+                exc.cause, observed_phase=base["observed_phase_after"], worker_outcome=None,
+                detail=exc.detail)}
+        return {**ended, "regeneration": {"stage": "refused", "argument": "post-fix", **regeneration},
+                "event_seq": record.get("event_seq")}
+    return None
+
+
 def _carry_resolution(record: Mapping, *, managed_repo: Any, runtime_root: Path, worker_outcome: str | None,
                       decision: Decision | None = None) -> dict:
     """The record fields a routed apply's ending writes (D8): the Workflow's own ``reconcile`` through
@@ -9486,6 +9515,9 @@ def _carry_resolution(record: Mapping, *, managed_repo: Any, runtime_root: Path,
     (:func:`_is_expected_stale_bundle`) -- are handed to :func:`_guarded_regeneration`: the generator runs under the
     guard and a second reconcile is the ending, or the Controller's regeneration gate names the cause. Every other
     answer is the resolution's own ending."""
+    refused = _landing_gate_before_queries(record, managed_repo=managed_repo, decision=decision)
+    if refused is not None:
+        return refused
     fields = _protocol_resolution(record, managed_repo=managed_repo, runtime_root=runtime_root,
                                   worker_outcome=worker_outcome)
     if (record.get("codex_carry") or {}).get("stage") != "done":

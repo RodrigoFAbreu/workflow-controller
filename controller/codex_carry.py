@@ -215,12 +215,12 @@ def dirty_paths(repo_root: Path, runner: gitrepo.Runner | None = None) -> list[s
     """The managed repository's uncommitted paths as ``git status`` sees them with the default ignore rules: tracked
     changes, intent-to-add paths and untracked files, sorted."""
     try:
-        changes = gitrepo.tracked_changes(repo_root, runner=runner, no_optional_locks=True)
+        changes = gitrepo.tracked_change_paths(repo_root, runner=runner, no_optional_locks=True)
         untracked = gitrepo.untracked_files(repo_root, runner=runner, no_optional_locks=True)
     except GitOperationError as exc:
         raise _refuse("carry_foreign_dirt", f"the managed repository could not be read: {exc.message}",
                       **exc.evidence) from exc
-    return sorted({*(gitrepo.status_path(entry) for entry in changes), *untracked})
+    return sorted({*changes, *untracked})
 
 
 def check_dirty(repo_root: Path, carry_set: CarrySet, runner: gitrepo.Runner | None = None) -> list[str]:
@@ -507,8 +507,15 @@ def carry_in(managed_repo: Any, layout: codex_worker_sandbox.WorkerLayout, carry
         block["clone"] = {**prepared.to_dict(), "head": gitrepo.head_state(prepared.path, runner=quiet,
                                                                           no_optional_locks=True).commit,
                           "refs": gitrepo.clone_refs(prepared.path, runner=quiet)}
+        managed = managed_digests(root, carry_set)
+        moved = sorted(rel for rel, digest in managed.items()
+                       if rel != STATE_PATH and digest != carried.digests.get(rel))  # D6a owns the state file
+        if moved:
+            raise _refuse("carry_managed_changed", f"the managed repository's members changed while they were carried "
+                          f"in: {', '.join(_head(moved))}", paths=_head(moved))
         _advance(block, persist, "carried_in", in_digests=dict(carried.digests), intent_to_add=ita,
-                 managed=managed_digests(root, carry_set), state_in_sha256=state_digest, dirty_at_start=dirty)
+                 managed=managed, state_in_sha256=state_digest, dirty_at_start=dirty,
+                 state_entry_in_sha256=_state_in_entry_sha(carried, carry_set))
     except CarryError:
         remove_carry(layout)
         raise
@@ -552,6 +559,17 @@ def _clone_gone(layout: codex_worker_sandbox.WorkerLayout, block: Mapping[str, A
 
 def _entry_sha(entry: Any) -> str:
     return _sha(json.dumps(entry, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+
+
+def _state_in_entry_sha(carried: "CarriedIn", carry_set: CarrySet) -> str | None:
+    """The digest of this item's entry in the state bytes that were carried in (``None`` when no state file went in or
+    it holds no readable entry); the baseline D6a's entry guard compares the managed entry with."""
+    if STATE_PATH not in carried.files:
+        return None
+    try:
+        return _entry_sha(json.loads(carried.files[STATE_PATH][0].decode("utf-8"))["work_items"][carry_set.work_item_id])
+    except (ValueError, KeyError, TypeError):
+        return None
 
 
 def managed_entry(repo_root: Path, work_item_id: str) -> Any:
@@ -633,8 +651,7 @@ def check_out(managed_repo: Any, layout: codex_worker_sandbox.WorkerLayout, carr
             raise _refuse("carry_index_changed", "the clone's intent-to-add set is not the carried-in one",
                           intent_to_add=ita, expected=sorted(block["intent_to_add"]))
         in_digests: Mapping[str, str] = block["in_digests"]
-        clone_dirty = {*(gitrepo.status_path(e) for e in gitrepo.tracked_changes(clone, runner=quiet,
-                                                                                  no_optional_locks=True)),
+        clone_dirty = {*gitrepo.tracked_change_paths(clone, runner=quiet, no_optional_locks=True),
                        *gitrepo.untracked_files(clone, runner=quiet, no_optional_locks=True)}
         outside = [path for path in sorted(clone_dirty) if path not in carry_set.named]
         files = _clone_files(clone, carry_set)
@@ -681,7 +698,12 @@ def check_out(managed_repo: Any, layout: codex_worker_sandbox.WorkerLayout, carr
         state = None
         if STATE_PATH in changed:
             state = _state_payload(layout, block, changed[STATE_PATH], carry_set.work_item_id)
-            if managed_entry(root, carry_set.work_item_id) not in (state["before"], state["after"]):
+        # D6a's entry guard holds whether or not the worker changed the state file: the managed entry is the carried-in
+        # one, or (a recovery after the state write) the worker's.
+        baseline = block.get("state_entry_in_sha256")
+        if baseline is not None:
+            allowed = {baseline, *((_entry_sha(state["after"]),) if state is not None else ())}
+            if _entry_sha(managed_entry(root, carry_set.work_item_id)) not in allowed:
                 raise _refuse("carry_managed_changed", f"this item's entry of the managed state file changed while "
                               f"the worker ran", paths=[STATE_PATH])
     except GitOperationError as exc:

@@ -622,6 +622,62 @@ class CarryOutTest(Case):
         git(self.root, "reset", "-q", ARTIFACTS)
         self.refused("carry_managed_changed", self.check, carry_set, block)
 
+    def test_an_edit_between_collection_and_the_baseline_is_refused_and_survives(self) -> None:
+        """H4E3-I1 (round 2): the baseline is the collected bytes, so a member edited after collection is never
+        accepted as the carried-in state and never overwritten."""
+        carry_set = self.set_for()
+        block = self.block(carry_set)
+        real = carry.collect_in
+
+        def collect_then_edit(*args, **kwargs):
+            carried = real(*args, **kwargs)
+            write(self.root, PLAN, "plan by the operator, after collection\n")
+            return carried
+
+        with mock.patch.object(carry, "collect_in", side_effect=collect_then_edit):
+            self.refused("carry_managed_changed", carry.carry_in, self.managed, self.layout, carry_set, block,
+                         persist=self.persist)
+        self.assertEqual((self.root / PLAN).read_text(), "plan by the operator, after collection\n")
+        self.assertFalse((self.layout.runtime_root / self.layout.rel("tree")).exists())
+
+    def test_this_items_state_entry_changed_meanwhile_is_refused_when_the_worker_left_state_alone(self) -> None:
+        """H4E3-I2 (round 2): the entry guard does not depend on the worker having changed the state file."""
+        carry_set, block, prepared = self.go_in()
+        self.edit(prepared, PLAN_MEMBERS[0], "request by the worker\n")
+        doc = json.loads((self.root / STATE).read_text())
+        doc["work_items"][WID]["state_revision"] = 7
+        write(self.root, STATE, json.dumps(doc, indent=2) + "\n")
+        self.refused("carry_managed_changed", self.check, carry_set, block)
+        self.assertEqual((self.root / PLAN_MEMBERS[0]).read_text(), "request\n")
+
+    def test_another_items_state_entry_changed_meanwhile_is_not_a_refusal(self) -> None:
+        carry_set, block, prepared = self.go_in()
+        self.edit(prepared, PLAN_MEMBERS[0], "request by the worker\n")
+        doc = json.loads((self.root / STATE).read_text())
+        doc["work_items"]["other"]["phase"] = "DONE"
+        write(self.root, STATE, json.dumps(doc, indent=2) + "\n")
+        self.assertEqual([w.rel for w in self.check(carry_set, block).writes], [PLAN_MEMBERS[0]])
+
+    def _rename_into_absent_artifacts(self) -> None:
+        git(self.root, "reset", "-q", ARTIFACTS)
+        (self.root / ARTIFACTS).unlink()
+
+    def test_a_staged_rename_from_outside_the_set_is_carry_foreign_dirt_at_carry_in(self) -> None:
+        """H4E3-I3 (round 2): the source of a staged rename is a changed path too."""
+        self._rename_into_absent_artifacts()
+        git(self.root, "mv", "src.txt", ARTIFACTS)
+        carry_set = self.set_for()
+        error = self.refused("carry_foreign_dirt", carry.carry_in, self.managed, self.layout, carry_set,
+                             self.block(carry_set), persist=self.persist)
+        self.assertIn("src.txt", error.evidence["paths"])
+
+    def test_a_staged_rename_from_outside_the_set_is_carry_out_of_set_at_carry_out(self) -> None:
+        self._rename_into_absent_artifacts()
+        carry_set, block, prepared = self.go_in()
+        git(prepared.path, "mv", "src.txt", ARTIFACTS)
+        error = self.refused("carry_out_of_set", self.check, carry_set, block)
+        self.assertIn("src.txt", error.evidence["paths"])
+
     def test_carry_state_foreign_each_way(self) -> None:
         carry_set, block, prepared = self.go_in()
         cases = {

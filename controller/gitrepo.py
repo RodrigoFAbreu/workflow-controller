@@ -270,6 +270,18 @@ def tracked_changes(repo_root: Path, *, runner: Runner | None = None, no_optiona
     return [entry for entry, _source in _status_records(repo_root, runner, no_optional_locks=no_optional_locks)]
 
 
+def tracked_change_paths(repo_root: Path, *, runner: Runner | None = None, no_optional_locks: bool = False
+                         ) -> list[str]:
+    """Every path a changed tracked entry touches, sorted: its path, and for a rename or copy its source as well (a
+    staged rename deletes the source, so a guard on the paths changed must see it as well as the destination)."""
+    found: set[str] = set()
+    for entry, source in _status_records(repo_root, runner, no_optional_locks=no_optional_locks):
+        found.add(status_path(entry))
+        if source:
+            found.add(source)
+    return sorted(found)
+
+
 def untracked_files(repo_root: Path, *, runner: Runner | None = None, no_optional_locks: bool = False) -> list[str]:
     """The untracked, non-ignored paths (``git ls-files --others --exclude-standard -z``), which
     :func:`tracked_changes` does not see (it passes ``--untracked-files=no``)."""

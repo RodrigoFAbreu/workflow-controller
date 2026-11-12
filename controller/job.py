@@ -108,7 +108,7 @@ from typing import Any, Callable
 
 from controller import harness as adapters
 from controller import (
-    codex_carry, codex_review_role, codex_tester, codex_worker, codex_worker_job, codex_worker_landing, codex_worker_sandbox, codex_worker_tree, evidence, functional_review, gitrepo, identity, lock, milestone_branch, notify, pr_report, protocol, protocol_decision, review, review_mode, review_rounds,
+    codex_carry, codex_review_role, codex_tester, codex_worker, codex_worker_job, codex_worker_landing, codex_worker_sandbox, codex_worker_tree, evidence, functional_review, generator_run, gitrepo, identity, lock, milestone_branch, notify, pr_report, protocol, protocol_decision, review, review_mode, review_rounds,
     route_select, routing, runtime, target_state, telemetry, usage, usage_record, worker, worker_launch, worker_stream, workflow_contract,
 )
 from controller.decision import (
@@ -9342,21 +9342,26 @@ def _is_expected_stale_bundle(fields: Mapping, record: Mapping, root: Path) -> b
 
 
 def _carry_gate_text(role: str, work_item_id: str, base_commit: str | None, resume: str, *,
-                     carry_base: str | None, landed_head: str | None) -> str:
-    """The message of the Controller's regeneration gate (D8): the steps to run in the managed repository, in order.
-    The implementation role names the landed range to read first, because the generator executes ``scripts/`` and any
-    module the landing added to its import path."""
+                     carry_base: str | None, landed_head: str | None,
+                     regeneration: Mapping | None = None) -> str:
+    """The message of the Controller's regeneration gate (D8, D6 of workflow-controller-h4e3b): the steps to run in the
+    managed repository, in order, led by the cause the guarded generator run refused or failed with. The implementation
+    role names the landed range to read first, because the generator executes ``scripts/`` and any module the landing
+    added to its import path."""
     base = base_commit or "<the item's base_commit>"
     if role == routing.APPLY_PLAN_REVIEW:
         steps = [f"run `scripts/prepare-ai-review.sh {base} plan {work_item_id}`", f"take the next step: `{resume}`"]
-        lead = ("the carried-out plan, registry and review inputs are in the managed repository, but the Controller "
-                "regenerates no bundle and runs no script of the managed repository")
+        lead = "the carried-out plan, registry and review inputs are in the managed repository"
     else:
         steps = [f"read the landed range first: `git log -p {carry_base}..{landed_head}`, because the generator "
                  "executes `scripts/` and any module the landing added to its import path",
                  f"run `scripts/prepare-ai-review.sh {base} post-fix {work_item_id}`", f"take the next step: `{resume}`"]
-        lead = ("the worker's commits landed and its review inputs are carried out, but the Controller regenerates no "
-                "bundle and runs no script of the managed repository")
+        lead = "the worker's commits landed and its review inputs are carried out"
+    if regeneration is not None:
+        lead += (f", but the Controller did not regenerate the bundle ({regeneration.get('cause')}: "
+                 f"{regeneration.get('detail')})")
+    else:
+        lead += ", but the Controller regenerated no bundle"
     numbered = "; ".join(f"({index}) {step}" for index, step in enumerate(steps, 1))
     return f"{lead}. In the managed repository, in order: {numbered}"
 
@@ -9375,7 +9380,8 @@ def _stored_decision(record: Mapping) -> Decision | None:
                     automatic=False, gate=None, declined=False, reason="", protocol=info)
 
 
-def _carry_gate_fields(fields: Mapping, record: Mapping, *, managed_repo: Any, decision: Decision | None) -> dict | None:
+def _carry_gate_fields(fields: Mapping, record: Mapping, *, managed_repo: Any, decision: Decision | None,
+                       regeneration: Mapping | None = None) -> dict | None:
     """``fields`` ended at the Controller's regeneration gate (D8): ``GATE_BLOCKED`` with the gate pending at the phase
     the resolution observed, the Workflow's reconcile answer kept in the record's ``protocol`` block and the cause in
     ``reconciliation_evidence.code``. ``None`` when no gate can be made over ``decision`` (the caller then keeps the
@@ -9394,7 +9400,8 @@ def _carry_gate_fields(fields: Mapping, record: Mapping, *, managed_repo: Any, d
         landed = (_current_head(root) if block["role"] == routing.APPLY_IMPLEMENTATION_REVIEW else None)
         text = _carry_gate_text(block["role"], work_item_id, work_item.base_commit,
                                 explain_gate_command(root, work_item_id),
-                                carry_base=block.get("base_commit"), landed_head=landed)
+                                carry_base=block.get("base_commit"), landed_head=landed,
+                                regeneration=regeneration)
         at_phase = Decision(observed_phase=observed if isinstance(observed, str) else decision.observed_phase,
                             evidence=(), action=None, automatic=False, gate=None, declined=False, reason="",
                             protocol=decision.protocol)
@@ -9405,10 +9412,70 @@ def _carry_gate_fields(fields: Mapping, record: Mapping, *, managed_repo: Any, d
     ended = {key: value for key, value in fields.items() if key != "reconciliation_evidence"}
     ended.update(status=STATUS_GATE_BLOCKED, human_gate_pending=_human_gate_dict(gate.gate),
                  reconciliation_evidence={"code": CARRY_BUNDLE_GATE_CODE, "reconcile_class": reconcile.get("class"),
-                                          "carry_base": block.get("base_commit"), "landed_head": landed})
+                                          "carry_base": block.get("base_commit"), "landed_head": landed,
+                                          **({"regeneration": dict(regeneration)} if regeneration else {})})
     if (gate_block := _protocol_gate_block(gate)) is not None:
         ended["protocol_gate"] = gate_block
     return ended
+
+
+#: The stage argument the generator is run with for each routed apply role (D4): the two invocations the gate names.
+_REGENERATION_STAGE: Mapping[str, str] = {routing.APPLY_PLAN_REVIEW: "plan",
+                                          routing.APPLY_IMPLEMENTATION_REVIEW: "post-fix"}
+
+
+def _guarded_regeneration(fields: Mapping, record: Mapping, *, managed_repo: Any, runtime_root: Path,
+                          worker_outcome: str | None, decision: Decision | None) -> dict:
+    """D6 and D7 of workflow-controller-h4e3b: the ending of a carried-out apply whose first reconcile asks for a
+    regenerated bundle. The guarded generator run (:func:`generator_run.run`) is run first; a run that exits ``0`` and
+    passes its second check is followed by a second :func:`_protocol_resolution` whose answer is the ending, and every
+    refusal or failure ends at the Controller's regeneration gate, unchanged but for the cause it names. The record's
+    ``regeneration`` block is written at each stage (``checked``, ``started``, ``finished``) so ``resume`` finds a
+    run that was cut off and runs the guard and the generator again from the start."""
+    root, block = Path(managed_repo.root), record["codex_carry"]
+    job_id, work_item_id = str(record["job_id"]), str(record["work_item_id"])
+    stage = _REGENERATION_STAGE[block["role"]]
+    implementation = block["role"] == routing.APPLY_IMPLEMENTATION_REVIEW
+    held: dict = dict(record)
+
+    def refused(cause: str, detail: str, **extra: Any) -> dict:
+        regeneration = {"cause": cause, "detail": detail}
+        ended = _carry_gate_fields(fields, held, managed_repo=managed_repo, decision=decision,
+                                   regeneration=regeneration)
+        if ended is None:
+            return dict(fields)
+        return {**ended, "regeneration": {"stage": "refused", "argument": stage, **regeneration, **extra},
+                "event_seq": held.get("event_seq")}
+
+    try:
+        snapshot = target_state.read(managed_repo)
+        base_commit = target_state.select_work_item(snapshot, work_item_id=work_item_id).base_commit
+    except ControllerError as exc:
+        return refused("generator_failed", f"the item's base commit cannot be read ({exc.message})")
+    if not base_commit:
+        return refused("generator_failed", "the item records no base commit to run the generator against")
+
+    def progress(reached: str) -> None:
+        nonlocal held
+        held = _persist(runtime_root, job_id, {**held, "regeneration": {"stage": reached, "argument": stage},
+                                               "updated_at": _now()}, event=f"regeneration_{reached}")
+
+    try:
+        ran = generator_run.run(
+            root, stage=stage, base_commit=base_commit, work_item_id=work_item_id,
+            carry_base=block.get("base_commit") if implementation else None,
+            landed_head=_current_head(root) if implementation else None, progress=progress)
+    except generator_run.GeneratorRefused as exc:
+        evidence_extra = {key: exc.evidence[key] for key in ("returncode", "stdout_tail", "stderr_tail")
+                          if key in exc.evidence}
+        return refused(exc.cause, exc.detail, **evidence_extra)
+    finished = {"stage": "finished", "argument": stage, "returncode": ran.returncode,
+                "stdout_tail": ran.stdout_tail, "stderr_tail": ran.stderr_tail}
+    held = _persist(runtime_root, job_id, {**held, "regeneration": finished, "updated_at": _now()},
+                    event="regeneration_finished")
+    second = _protocol_resolution(held, managed_repo=managed_repo, runtime_root=runtime_root,
+                                  worker_outcome=worker_outcome)
+    return {**second, "regeneration": finished, "event_seq": held.get("event_seq")}
 
 
 def _carry_resolution(record: Mapping, *, managed_repo: Any, runtime_root: Path, worker_outcome: str | None,
@@ -9416,8 +9483,9 @@ def _carry_resolution(record: Mapping, *, managed_repo: Any, runtime_root: Path,
     """The record fields a routed apply's ending writes (D8): the Workflow's own ``reconcile`` through
     :func:`_protocol_resolution`, unchanged, then the two carried-out rows -- a resolution that answers ``FINISHED``,
     and a plan role's ``invalid`` answer that is exactly the expected stale-bundle result
-    (:func:`_is_expected_stale_bundle`) -- end ``GATE_BLOCKED`` at the Controller's own regeneration gate. Every other
-    answer is the resolution's own ending. The Controller regenerates nothing."""
+    (:func:`_is_expected_stale_bundle`) -- are handed to :func:`_guarded_regeneration`: the generator runs under the
+    guard and a second reconcile is the ending, or the Controller's regeneration gate names the cause. Every other
+    answer is the resolution's own ending."""
     fields = _protocol_resolution(record, managed_repo=managed_repo, runtime_root=runtime_root,
                                   worker_outcome=worker_outcome)
     if (record.get("codex_carry") or {}).get("stage") != "done":
@@ -9429,9 +9497,11 @@ def _carry_resolution(record: Mapping, *, managed_repo: Any, runtime_root: Path,
                     "reconciliation_evidence": violation}
         if fields.get("protocol", {}).get("progress") == "none":
             return fields  # a worker that changed nothing is the existing `no_progress` judgement
-        return _carry_gate_fields(fields, record, managed_repo=managed_repo, decision=decision) or fields
+        return _guarded_regeneration(fields, record, managed_repo=managed_repo, runtime_root=runtime_root,
+                                     worker_outcome=worker_outcome, decision=decision)
     if (fields["status"] == STATUS_FAILED and _is_expected_stale_bundle(fields, record, Path(managed_repo.root))):
-        return _carry_gate_fields(fields, record, managed_repo=managed_repo, decision=decision) or fields
+        return _guarded_regeneration(fields, record, managed_repo=managed_repo, runtime_root=runtime_root,
+                                     worker_outcome=worker_outcome, decision=decision)
     return fields
 
 
@@ -9515,8 +9585,8 @@ def _run_codex_apply(
     the job's own record, ending at the status D8's table gives and stopping after the landing. It computes D3's set,
     commits a pending feedback entry for the implementation role (D4) and records the carry base and the re-captured
     baseline before the clone is made, carries in (D5), launches as H4d does, carries out (D6, landing first for the
-    implementation role) and asks the Workflow's ``reconcile`` through the existing resolution. It runs no script of
-    the managed repository and regenerates no bundle. It returns the terminal record; an exception after the spawn
+    implementation role) and asks the Workflow's ``reconcile`` through the existing resolution, which runs the
+    guarded generator (workflow-controller-h4e3b, D6) before it builds the regeneration gate. It returns the terminal record; an exception after the spawn
     ends the record ``FAILED`` naming it and is re-raised, a ``KeyboardInterrupt`` leaves it ``LAUNCHED`` at its
     stage for ``resume``."""
     root = Path(managed_repo.root)

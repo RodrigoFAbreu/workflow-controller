@@ -49,7 +49,8 @@ class GateFixture(JobFixture):
     def chain_options(self) -> routing.RoutingOptions:
         roles = {role: {"harness": FIXTURE, "model": review.DEFAULT_MODEL, "effort": review.DEFAULT_EFFORT,
                         "fallback": [{"harness": "claude-code", "model": "opus"}]}
-                 for role in sorted(routing.ROLES) if routing.ADAPTER_ROLE[role] == harness.WORKER}
+                 for role in sorted(routing.ROLES)
+                 if routing.ADAPTER_ROLE[role] in (harness.WORKER, harness.IMPLEMENTER)}
         config = routing.parse_routing_config(json.dumps({"schema_version": 1, "roles": roles}), path="<test>")
         return routing.RoutingOptions(config=config, config_source="settings")
 

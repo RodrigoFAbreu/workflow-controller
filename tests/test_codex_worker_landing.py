@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -997,7 +998,7 @@ class SurfaceFixture(Fixture):
         super().setUp()
         for name, text in {"scripts/a.py": "a = 1\n", ".workflow-manager/installation.json": "{}\n",
                            ".claude/settings.json": "{}\n", ".codex/config.toml": "x = 1\n",
-                           "docs/ai-workflow/WORKFLOW_STATE.json": state_text(), "docs/page.md": "p\n",
+                           "docs/ai-workflow/WORKFLOW_STATE.json": state_text(), "notes/page.md": "p\n",
                            "run.sh": "#!/bin/sh\n"}.items():
             path = self.root / name
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -1005,7 +1006,7 @@ class SurfaceFixture(Fixture):
         git(self.root, "add", "-A")
         git(self.root, "commit", "-q", "-m", "surface")
         self.base = out(self.root, "rev-parse", "HEAD")
-        subprocess.run(["rm", "-rf", str(self.clone)], check=True)
+        shutil.rmtree(self.clone)
         self.prepared = tree.prepare(self.managed, self.layout, self.base, workflow_metadata=True)
         self.clone = self.prepared.path
 
@@ -1105,9 +1106,9 @@ class SurfaceRefusalTest(SurfaceFixture):
         self.refuses("surface_touched")
 
     def test_a_file_replaced_by_a_link_is_refused(self) -> None:
-        (self.clone / "docs" / "page.md").unlink()
-        (self.clone / "docs" / "page.md").symlink_to("../src.txt")
-        git(self.clone, "add", "docs/page.md")
+        (self.clone / "notes" / "page.md").unlink()
+        (self.clone / "notes" / "page.md").symlink_to("../src.txt")
+        git(self.clone, "add", "notes/page.md")
         git(self.clone, "commit", "-q", "-m", "type change")
         self.refuses("surface_touched")
 
@@ -1257,7 +1258,7 @@ print(json.dumps(steps))
                  "current_checkpoint_id": None, "last_completed_checkpoint_id": None, "state_revision": 1,
                  "last_transition": "2026-11-12T19:00:00Z", "plan_approval": {"status": "CURRENT"}}
         with tempfile.TemporaryDirectory() as tmp:
-            subprocess.run(["git", "init", "-q", tmp], check=True)
+            fixtures.git_init(tmp)
             result = subprocess.run([sys.executable, "-B", "-c", self.SCRIPT, str(REPO_ROOT / "scripts"),
                                      json.dumps(entry)], cwd=tmp, capture_output=True, text=True, timeout=120)
         self.assertEqual(result.returncode, 0, result.stderr)

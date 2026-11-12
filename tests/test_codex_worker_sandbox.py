@@ -11,6 +11,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -1265,7 +1266,7 @@ class GuardWorkflowMetadataTest(GuardFixture):
         (self.git / "ai-workflow" / "checkpoint-claims" / "abc.json").write_text('{"x": 1}')
         (self.git / "ai-workflow" / "def.guardlock").unlink()
         ws.check_guard(before, ws.guard_digest(self.tree, workflow_metadata=True))
-        subprocess.run(["rm", "-rf", str(self.git / "ai-workflow")], check=True)
+        shutil.rmtree(self.git / "ai-workflow")
         ws.check_guard(after, ws.guard_digest(self.tree, workflow_metadata=True))
 
     def test_a_flagged_digest_still_refuses_everything_else(self) -> None:
@@ -1287,8 +1288,11 @@ class GuardWorkflowMetadataTest(GuardFixture):
                 with self.assertRaises(ReviewLaunchRefusedError):
                     ws.check_guard(before, ws.guard_digest(self.tree, workflow_metadata=True))
                 subprocess.run(["git", "-C", str(self.tree), "clean", "-fdxq", "--", ".git"], check=False)
-                subprocess.run(["rm", "-rf", str(self.git / "ai-workflow"), str(self.git / "hooks"),
-                                str(self.git / "objects" / "info" / "alternates")], check=True)
+                for planted in (self.git / "ai-workflow", self.git / "hooks", self.git / "objects" / "info" / "alternates"):
+                    if planted.is_dir() and not planted.is_symlink():
+                        shutil.rmtree(planted)
+                    else:
+                        planted.unlink(missing_ok=True)
                 (self.git / "config").write_text(self.original_config)
 
     def test_a_git_that_is_not_a_directory_is_refused_with_the_flag(self) -> None:

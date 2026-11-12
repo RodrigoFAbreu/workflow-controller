@@ -546,7 +546,7 @@ def _exec(argv: list[str], scenario: dict, merged: dict, state: dict, cwd: Path,
         prelude = ("import sys\nfrom pathlib import Path\nsys.path.insert(0, str(Path.cwd() / 'scripts'))\n"
                    "import workflow_fingerprint as fingerprint\nimport workflow_state as ws\n")
         result = subprocess.run([sys.executable, "-B", "-E", "-s", "-c", prelude + entry[0], *entry[1:]], cwd=cwd,
-                                capture_output=True, text=True, check=False, stdin=subprocess.DEVNULL,
+                                capture_output=True, text=True, check=False, stdin=subprocess.DEVNULL, timeout=120,
                                 env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "GIT_AUTHOR_NAME": "x",
                                      "GIT_AUTHOR_EMAIL": "x@y", "GIT_COMMITTER_NAME": "x",
                                      "GIT_COMMITTER_EMAIL": "x@y"})

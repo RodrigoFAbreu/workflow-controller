@@ -83,10 +83,13 @@ class JobFixture(cwtest.LaunchFixture):
         self.recorded = False
         self.ids = 0
         self.launcher = FixtureLauncher(self)
-        fixture = dataclasses.replace(harness.CODEX, name=FIXTURE, reviewer_name=None, roles=(harness.WORKER,))
+        fixture = dataclasses.replace(harness.CODEX, name=FIXTURE, reviewer_name=None,
+                                      roles=(harness.WORKER, harness.IMPLEMENTER))
         self.enterContext(mock.patch.object(harness, "ADAPTERS", {**harness.ADAPTERS, FIXTURE: fixture}))
         self.enterContext(mock.patch.object(worker_launch, "LAUNCHERS",
-                                            {**worker_launch.LAUNCHERS, (FIXTURE, harness.WORKER): self.launcher}))
+                                            {**worker_launch.LAUNCHERS, **dict.fromkeys(
+                                                ((FIXTURE, harness.WORKER), (FIXTURE, harness.IMPLEMENTER)),
+                                                self.launcher)}))
         self.enterContext(mock.patch.object(job, "_new_job_id", self.next_id))
         self.enterContext(mock.patch.object(job, "CODEX_WORKTREE_PREPARER", self.prepare))
         self.enterContext(mock.patch.object(job, "CODEX_LANDER", process_fixtures.nothing_lander))
@@ -106,7 +109,8 @@ class JobFixture(cwtest.LaunchFixture):
 
     def routing_options(self) -> routing.RoutingOptions:
         roles = {role: {"harness": FIXTURE, "model": review.DEFAULT_MODEL, "effort": review.DEFAULT_EFFORT}
-                 for role in sorted(routing.ROLES) if routing.ADAPTER_ROLE[role] == harness.WORKER}
+                 for role in sorted(routing.ROLES)
+                 if routing.ADAPTER_ROLE[role] in (harness.WORKER, harness.IMPLEMENTER)}
         config = routing.parse_routing_config(json.dumps({"schema_version": 1, "roles": roles}), path="<test>")
         return routing.RoutingOptions(config=config, config_source="settings")
 
@@ -237,7 +241,8 @@ class UsageGateTest(JobFixture):
                         "fallback": [{"harness": FIXTURE, "model": review.DEFAULT_MODEL,
                                       "effort": review.DEFAULT_EFFORT},
                                      {"harness": "claude-code", "model": "opus"}]}
-                 for role in sorted(routing.ROLES) if routing.ADAPTER_ROLE[role] == harness.WORKER}
+                 for role in sorted(routing.ROLES)
+                 if routing.ADAPTER_ROLE[role] in (harness.WORKER, harness.IMPLEMENTER)}
         config = routing.parse_routing_config(json.dumps({"schema_version": 1, "roles": roles}), path="<test>")
         self.options = routing.RoutingOptions(config=config, config_source="settings")
         gate = mock.Mock(return_value="token-1")

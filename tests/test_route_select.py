@@ -49,9 +49,10 @@ class Probes:
 
 
 def registry() -> mock._patch:
-    """``codex`` also takes the worker role, and a third harness of its own
-    family-less name exists to prove an added adapter does not raise."""
-    codex = dataclasses.replace(harness.CODEX, roles=(harness.WORKER, harness.LOCAL_REVIEWER, harness.REVIEWER),
+    """``codex`` also takes the worker role (and the implementer role ``milestone-implement`` runs as), and a
+    third harness of its own family-less name exists to prove an added adapter does not raise."""
+    codex = dataclasses.replace(harness.CODEX,
+                                roles=(harness.WORKER, harness.IMPLEMENTER, harness.LOCAL_REVIEWER, harness.REVIEWER),
                                 models=harness.CLAUDE_CODE.models, efforts=harness.CLAUDE_CODE.efforts)
     extra = dataclasses.replace(harness.CODEX, name="gemini", reviewer_name=None, family="google",
                                 roles=(harness.WORKER,))

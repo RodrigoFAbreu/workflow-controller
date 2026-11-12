@@ -69300,7 +69300,7 @@
         }
       },
       "technical_approval": {
-        "status": "CURRENT",
+        "status": "STALE",
         "basis": "POLICY_SATISFIED",
         "reviewed_bundle_id": "fa23c216dcbaa015f59e6a4d4763606d4eee78e51b506c1cdf0455cd0c5de844",
         "approved_review_content_id": "8de442192f9d3537fa36a873e68f65077d9bd6e1d7e8f35e91ce99a2042dd02a",
@@ -69501,8 +69501,8 @@
           "external": 2
         }
       },
-      "state_revision": 36,
-      "last_transition": "2026-11-12T15:03:44Z",
+      "state_revision": 37,
+      "last_transition": "2026-11-12T15:13:09Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -69842,6 +69842,93 @@
           "verdict_sha256": "161c9984a0ceec36848b27e8820fb4edd062d205cd8e970125ad72eddaf604fb",
           "run_ref": "codex:20261112T145319Z-8ec7d37d",
           "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "gate_evidence": {
+        "functional": {
+          "flow-1": {
+            "flow_id": "flow-1",
+            "status": "passed",
+            "head": "da803959d8a37ed8bee9b03b3dd337333661ea15",
+            "ran_at": "2026-11-12T15:12:45Z",
+            "summary": {
+              "checklist_blob": "308a9fb5f3bb2d0d8f404d01590d7659db15f596",
+              "text": "170 tests OK (1 skipped)."
+            },
+            "log_digest": "596a0ca83552c09209608646b110ca8fd313a9d8c0612769a91e3cb9510f5a26",
+            "run_ref": "controller:20261112T150514Z-2c4b12b4",
+            "reporter": "workflow-controller 1.27.13",
+            "identity": "8de442192f9d3537fa36a873e68f65077d9bd6e1d7e8f35e91ce99a2042dd02a",
+            "recorded_at": "2026-11-12T15:12:45Z"
+          },
+          "flow-2": {
+            "flow_id": "flow-2",
+            "status": "passed",
+            "head": "da803959d8a37ed8bee9b03b3dd337333661ea15",
+            "ran_at": "2026-11-12T15:12:45Z",
+            "summary": {
+              "checklist_blob": "308a9fb5f3bb2d0d8f404d01590d7659db15f596",
+              "text": "57 tests OK."
+            },
+            "log_digest": "a9c696e78d017a26170b15dfda94cca9eb321499f302fad435fc175b51fb1819",
+            "run_ref": "controller:20261112T150514Z-2c4b12b4",
+            "reporter": "workflow-controller 1.27.13",
+            "identity": "8de442192f9d3537fa36a873e68f65077d9bd6e1d7e8f35e91ce99a2042dd02a",
+            "recorded_at": "2026-11-12T15:12:45Z"
+          },
+          "flow-3": {
+            "flow_id": "flow-3",
+            "status": "passed",
+            "head": "da803959d8a37ed8bee9b03b3dd337333661ea15",
+            "ran_at": "2026-11-12T15:12:45Z",
+            "summary": {
+              "checklist_blob": "308a9fb5f3bb2d0d8f404d01590d7659db15f596",
+              "text": "55 tests OK."
+            },
+            "log_digest": "4e3194e37d38e48737e96430bc6e4f90b2ebd0a229a9386f816021c7a03f2ced",
+            "run_ref": "controller:20261112T150514Z-2c4b12b4",
+            "reporter": "workflow-controller 1.27.13",
+            "identity": "8de442192f9d3537fa36a873e68f65077d9bd6e1d7e8f35e91ce99a2042dd02a",
+            "recorded_at": "2026-11-12T15:12:45Z"
+          },
+          "flow-4": {
+            "flow_id": "flow-4",
+            "status": "passed",
+            "head": "da803959d8a37ed8bee9b03b3dd337333661ea15",
+            "ran_at": "2026-11-12T15:12:45Z",
+            "summary": {
+              "checklist_blob": "308a9fb5f3bb2d0d8f404d01590d7659db15f596",
+              "text": "106 tests OK."
+            },
+            "log_digest": "c3359f967147095b83e4c4595357715ee1e8f7ca3b68f68a65d3b670bab587d9",
+            "run_ref": "controller:20261112T150514Z-2c4b12b4",
+            "reporter": "workflow-controller 1.27.13",
+            "identity": "8de442192f9d3537fa36a873e68f65077d9bd6e1d7e8f35e91ce99a2042dd02a",
+            "recorded_at": "2026-11-12T15:12:46Z"
+          },
+          "flow-5": {
+            "flow_id": "flow-5",
+            "status": "failed",
+            "head": "da803959d8a37ed8bee9b03b3dd337333661ea15",
+            "ran_at": "2026-11-12T15:12:46Z",
+            "summary": {
+              "checklist_blob": "308a9fb5f3bb2d0d8f404d01590d7659db15f596",
+              "reason": "defect",
+              "text": "Both checkers returned rc=0 and the causes/remedies/manual regeneration are documented. But the pages do not state the known gap (a landed script edit with matching record digest is run by the first protocol query after the landing). docs/guide/harnesses.md says the landing check runs before any query. docs/items/workflow-controller-h4e3b.md line 15 says such an edit is refused before any query runs. Both contradict the expectedFailure test and docs/ACTIVE_MILESTONE.md."
+            },
+            "log_digest": "f9f74852a0e53f9040ae2ed802c4b94f24e28e8ce67ba7d7f0c0a27c67d0c5d4",
+            "run_ref": "controller:20261112T150514Z-2c4b12b4",
+            "reporter": "workflow-controller 1.27.13",
+            "identity": "8de442192f9d3537fa36a873e68f65077d9bd6e1d7e8f35e91ce99a2042dd02a",
+            "recorded_at": "2026-11-12T15:12:46Z"
+          }
+        },
+        "pr": null,
+        "pr_reported": null,
+        "pr_keys": {
+          "reopened_for": [],
+          "applied": [],
+          "ingest_seq": 0
         }
       }
     }

@@ -143,5 +143,25 @@ class ModuleShapeTest(unittest.TestCase):
             self.assertNotIn(forbidden, source)
 
 
+
+class WorkflowMetadataOptionTest(unittest.TestCase):
+    """``workflow-controller-h4f`` D4b: the ninth launch option is present only when true."""
+
+    def options(self, **kw) -> dict:
+        return cwj.launch_options(runtime_root=Path("/r"), job_id="j1", operator_home=Path("/h/.codex"),
+                                  cwd=Path("/r/worker/j1/worktree"), timeout=None, on_spawn=lambda pid, pgid: None,
+                                  route=ROUTE, **kw)
+
+    def test_the_default_set_stays_exactly_the_eight(self) -> None:
+        self.assertEqual(len(self.options()), 8)
+        self.assertEqual(set(self.options(workflow_metadata=False)), set(self.options()))
+
+    def test_the_flag_adds_the_ninth_key_and_nothing_else(self) -> None:
+        flagged = self.options(workflow_metadata=True)
+        self.assertEqual(set(flagged) - set(self.options()), {"workflow_metadata"})
+        self.assertIs(flagged["workflow_metadata"], True)
+        inspect.signature(codex_worker.launch_codex_worker).bind("/x", **flagged)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -643,7 +643,7 @@ def check_out(managed_repo: Any, layout: codex_worker_sandbox.WorkerLayout, carr
                 raise _refuse("carry_unexpected_commit", "the plan role's clone has a commit or a ref it did not have",
                               head=head.commit, expected_head=block["clone"]["head"], refs=refs)
         try:
-            codex_worker_sandbox.check_guard(prepared.guard, codex_worker_sandbox.guard_digest(clone))
+            codex_worker_sandbox.check_guard(prepared.guard, codex_worker_sandbox.guard_digest_like(clone, prepared.guard))
         except ControllerError as exc:
             raise _refuse("clone_git_changed", f"the clone's .git changed: {exc.message}", **exc.evidence) from exc
         ita = gitrepo.intent_to_add_paths(clone, runner=quiet, no_optional_locks=True)

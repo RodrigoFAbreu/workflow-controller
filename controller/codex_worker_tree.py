@@ -163,12 +163,14 @@ def managed_dirty(managed_repo: Any, layout: codex_worker_sandbox.WorkerLayout) 
 
 
 def prepare(managed_repo: Any, layout: codex_worker_sandbox.WorkerLayout, base: str, *,
-            read_only: bool = False, allow_dirty: Collection[str] | None = None) -> Prepared:
+            read_only: bool = False, allow_dirty: Collection[str] | None = None,
+            workflow_metadata: bool = False) -> Prepared:
     """D1 and D2: refuse unless the managed branch is clean and at ``base``, then make the private clone at
     ``layout.worktree`` and return it. A clone partly made is removed before the error is raised. With ``read_only``
     a dirty managed tree is not refused (the clone is made from the commit, a read-only job lands nothing) and its
     dirty paths are returned in :attr:`Prepared.dirty`; every other refusal stands. With ``allow_dirty`` (the carry's
-    set, ``workflow-controller-h4e3`` D5) a dirty tree is accepted only when every dirty path is in it."""
+    set, ``workflow-controller-h4e3`` D5) a dirty tree is accepted only when every dirty path is in it. With ``workflow_metadata`` (the implementer route,
+    ``workflow-controller-h4f`` D4b) the recorded guard leaves the Workflow's checkpoint bookkeeping root unrecorded."""
     root = Path(managed_repo.root)
     branch = check_managed(managed_repo, layout, base, read_only=read_only, allow_dirty=allow_dirty)
     dirty = managed_dirty(managed_repo, layout) if read_only else None
@@ -192,7 +194,7 @@ def prepare(managed_repo: Any, layout: codex_worker_sandbox.WorkerLayout, base: 
             _git(clone, ["config", "--local", key, value], runner, "config")
         gitrepo.checkout_branch_at(clone, branch, base, runner=runner)
         codex_worker_sandbox.check_worktree(clone)
-        guard = codex_worker_sandbox.guard_digest(clone)
+        guard = codex_worker_sandbox.guard_digest(clone, workflow_metadata=workflow_metadata)
     except (GitOperationError, ControllerError) as exc:
         _remove_partial(layout)
         raise _refuse("clone_failed", f"the clone could not be made: {exc.message}", **exc.evidence) from exc

@@ -975,6 +975,32 @@ def commit_touches_submodule(repo_root: Path, commit: str, parent: str, *, runne
     return False
 
 
+def diff_raw(repo_root: Path, base: str, tip: str, *, runner: Runner | None = None) -> list[tuple[str, str, str, str]]:
+    """``(old mode, new mode, status letter, path)`` for the net change ``git diff-tree -r -z --raw --no-renames
+    --no-textconv --no-ext-diff --ignore-submodules=none <base> <tip> --`` makes (``workflow-controller-h4f``, D3), in
+    Git's order, read with the commit graph off. The raw form carries the modes that ``--name-status`` does not; a
+    missing side is mode ``000000``. A rename is listed as a deletion and an addition. ``base`` and ``tip`` must be
+    full commit ids; an unreadable record raises :class:`GitOperationError`."""
+    for rev in (base, tip):
+        if not _FULL_ID.fullmatch(rev):
+            raise GitOperationError(f"refusing to diff {rev!r}: not a full commit id", evidence={"commit": rev})
+    out = _git(repo_root, [*NO_COMMIT_GRAPH, "diff-tree", "-r", "-z", "--raw", "--no-renames", "--no-textconv",
+                           "--no-ext-diff", "--ignore-submodules=none", base, tip, "--"], runner, quiet=True)
+    fields = out.split("\0")
+    if fields and fields[-1] == "":
+        fields.pop()
+    changes: list[tuple[str, str, str, str]] = []
+    i = 0
+    while i < len(fields):
+        meta = fields[i].removeprefix(":").split() if fields[i].startswith(":") else []
+        if len(meta) != 5 or i + 1 >= len(fields):
+            raise GitOperationError(f"git diff-tree returned an unexpected record: {fields[i]!r}",
+                                    evidence={"stdout": out})
+        changes.append((meta[0], meta[1], meta[4][:1], fields[i + 1]))
+        i += 2
+    return changes
+
+
 def push_branch(repo_root: Path, remote: str, branch: str, *, runner: Runner | None = None) -> str:
     """Push the local ``branch`` to the same name on ``remote`` as a
     fast-forward, returning the pushed commit. The remote ref is fetched

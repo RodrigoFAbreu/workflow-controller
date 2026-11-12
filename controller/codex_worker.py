@@ -138,11 +138,12 @@ def _check_placement(layout: codex_worker_sandbox.WorkerLayout, cwd: Path, runti
 
 
 def _breach(layout: codex_worker_sandbox.WorkerLayout, before: Mapping, runtime_root: Path, binary: Path,
-            admitted: str | None, target: str, system_path: str) -> list[str]:
+            admitted: str | None, target: str, system_path: str, workflow_metadata: bool = False) -> list[str]:
     """After the run (D4(j)): one entry per way the worktree or the build can no longer be trusted."""
     entries: list[str] = []
     try:
-        codex_worker_sandbox.check_guard(before, codex_worker_sandbox.guard_digest(layout.worktree))
+        codex_worker_sandbox.check_guard(
+            before, codex_worker_sandbox.guard_digest(layout.worktree, workflow_metadata=workflow_metadata))
     except ReviewLaunchRefusedError as exc:
         entries.append(f"guard: {exc}")
     except OSError as exc:
@@ -162,7 +163,8 @@ def launch_codex_worker(task: str, *, runtime_root: Path, job_id: str, operator_
                         model: str = review.DEFAULT_MODEL, effort: str = review.DEFAULT_EFFORT,
                         binary_name: str = "codex", system_dir: Path = review.SYSTEM_LAYER_DIR,
                         run: Callable[..., review.RunResult] | None = None, system_path: str = review.SYSTEM_PATH,
-                        real_home: Path | None = None, prompt: str | None = None) -> worker.WorkerResult:
+                        real_home: Path | None = None, prompt: str | None = None,
+                        workflow_metadata: bool = False) -> worker.WorkerResult:
     """Launch ``task`` (``/<name> [arguments]``) as a Codex worker in ``cwd`` and return the ``WorkerResult``. With
     ``prompt`` the task is still parsed (a malformed one is refused) but ``prompt`` is sent on stdin in place of the
     rendered command (``workflow-controller-h4e2`` D3); every other control is unchanged.
@@ -172,7 +174,9 @@ def launch_codex_worker(task: str, *, runtime_root: Path, job_id: str, operator_
     settling scope, the bounded ``exec``, the settling and the comparison. A refusal raises
     ``ReviewLaunchRefusedError`` (or the renderer's error) and no ``codex exec`` has started. ``run`` is the seam of the
     controls only; ``binary_name``, ``system_dir``, ``system_path`` and ``real_home`` are the seams of the binary, the
-    outside layers, the build digest and the readable roots."""
+    outside layers, the build digest and the readable roots. ``workflow_metadata`` (the implementer route,
+    ``workflow-controller-h4f`` D4b) takes both guard digests, the baseline and the post-run one, with the Workflow's
+    checkpoint bookkeeping root unrecorded."""
     name, arguments = _parse_task(task)
     stdin_prompt = prompt if prompt is not None else command_files.render_command(
         name, arguments, Path(commands_dir) if commands_dir is not None else Path(cwd) / ".claude" / "commands").prompt
@@ -184,7 +188,7 @@ def launch_codex_worker(task: str, *, runtime_root: Path, job_id: str, operator_
     target = os.path.realpath(binary)
     layout = codex_worker_sandbox.WorkerLayout(runtime_root, job_id)
     _check_placement(layout, Path(cwd), runtime_root)
-    before = codex_worker_sandbox.guard_digest(layout.worktree)
+    before = codex_worker_sandbox.guard_digest(layout.worktree, workflow_metadata=workflow_metadata)
 
     diagnosis: dict[str, Any] = {"harness": "codex", "readings": [], "subagents": [], "usage_rollouts": [],
                                  "credentials": None, "breach": [], "detail": ""}
@@ -214,7 +218,8 @@ def launch_codex_worker(task: str, *, runtime_root: Path, job_id: str, operator_
     assert ran is not None  # a raise above never reaches here
     message = _message(layout)
     outcome, subtype, detail = classify(ran, scan, message, timeout)
-    breach = _breach(layout, before, Path(runtime_root), binary, admitted.digest, target, system_path)
+    breach = _breach(layout, before, Path(runtime_root), binary, admitted.digest, target, system_path,
+                     workflow_metadata)
     diagnosis.update(subtype=subtype, detail=detail, breach=breach)
     if breach:
         outcome, subtype = worker.FAILURE, SUBTYPE_BREACH

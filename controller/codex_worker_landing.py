@@ -17,6 +17,8 @@ tree and returns a :class:`Recovery`; the applying half lives in ``controller/jo
 from __future__ import annotations
 
 import dataclasses
+import enum
+import json
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
@@ -33,17 +35,44 @@ MAX_LANDED_COMMITS = 200
 CAUSES = (
     "sandbox_breach", "clone_git_changed", "extra_refs", "managed_branch_moved", "managed_tree_not_clean",
     "runtime_inside_managed", "managed_hooks_configured", "not_a_descendant", "merge_commit", "too_many_commits",
-    "submodule", "fetch_failed", "tip_moved", "would_overwrite_ignored", "fast_forward_failed",
+    "submodule", "surface_touched", "state_touched", "fetch_failed", "tip_moved", "would_overwrite_ignored", "fast_forward_failed",
     "merge_left_tree_dirty", "landing_unverified", "landing_error",
     # Recovery only (D7):
     "landing_interrupted", "landing_unreadable",
 )
+#: The most bytes of the state file the landing reads at either end of a range (``workflow-controller-h4f``, D4).
+MAX_STATE_BYTES = 4 * 1024 * 1024
+
+#: Where the Workflow keeps its state file in a managed repository.
+STATE_PATH = "docs/ai-workflow/WORKFLOW_STATE.json"
+
+#: The directories whose content the Controller or its next worker loads and executes (D3): a landed change of any
+#: path under one, whatever the status, is refused for the implementer route.
+SURFACE_DIRECTORIES = ("scripts", ".workflow-manager", ".claude", ".codex")
+
+#: The fields of a work item's state entry a checkpoint invocation writes (D4): ``transition_checkpoint_in_progress``
+#: and ``complete_checkpoint`` through ``state_transaction``. Derived from the Workflow's own writers by
+#: ``tests.test_codex_worker_landing`` (the test's derived set is the authority, this constant equals it); the claim
+#: file, the amendment witness and ``clear_amendment_resolution`` never write the state file and are out.
+CHECKPOINT_WRITTEN_FIELDS = frozenset({
+    "checkpoints", "current_checkpoint_id", "last_completed_checkpoint_id", "phase", "state_revision",
+    "last_transition"})
+
 #: The cause recorded for an outcome ``nothing`` (a success: the clone's branch is the base, no write).
 NOTHING_TO_LAND = "nothing_to_land"
 
 #: Git's own wording when ``merge --ff-only --no-overwrite-ignore`` would replace an ignored file, or an ignored
 #: directory the range turns into a file (both exit 1).
 _OVERWRITE_TEXT = ("would be overwritten", "would lose untracked")
+
+
+class LandingSurface(enum.Enum):
+    """The content policy a landing applies to the range before the fast-forward (``workflow-controller-h4f``, D3 and
+    D4). ``land`` without one judges integrity only, as for the apply and review roles."""
+
+    #: The checkpoint role's: no path of the execution surface, no link or mode change, and a state file change only in
+    #: the fields a checkpoint writes.
+    IMPLEMENTER = "implementer"
 
 
 class CodexLandingError(ControllerError):
@@ -140,8 +169,88 @@ def verify_move(managed_repo: Any, tip: str, branch: str, *, runner: gitrepo.Run
 # ---------------------------------------------------------------------------
 
 
-def _check_range(clone: Path, base: str, tip: str, runner: gitrepo.Runner) -> list[str]:
-    """D3 (4) to (6), read in the clone with the commit graph off. Returns the commits, oldest first."""
+def _on_surface(path: str) -> bool:
+    return any(path == name or path.startswith(f"{name}/") for name in SURFACE_DIRECTORIES)
+
+
+def _check_surface(repo: Path, base: str, tip: str, work_item_id: str | None, runner: gitrepo.Runner) -> None:
+    """D3 and D4 for :attr:`LandingSurface.IMPLEMENTER`, on the net ``base..tip`` change: ``surface_touched`` for a path
+    of the execution surface, a link, a mode change where both sides exist, or a diff that cannot be read;
+    ``state_touched`` for a state file change outside :data:`CHECKPOINT_WRITTEN_FIELDS` of this item's entry. A newly
+    added executable file outside the surface is not refused (the implementation review judges it)."""
+    try:
+        changes = gitrepo.diff_raw(repo, base, tip, runner=runner)
+    except (GitOperationError, OSError, subprocess.TimeoutExpired) as exc:
+        raise _refuse("surface_touched", f"the range's changes cannot be read: {getattr(exc, 'message', exc)}",
+                      evidence=dict(getattr(exc, "evidence", {}) or {})) from exc
+    touched = []
+    for old_mode, new_mode, status, path in changes:
+        link = new_mode == "120000"
+        mode_changed = old_mode != new_mode and "000000" not in (old_mode, new_mode)
+        if _on_surface(path) or link or mode_changed:
+            touched.append(f"{status} {path}")
+    if touched:
+        raise _refuse("surface_touched", f"the range changes {len(touched)} path(s) outside what a checkpoint may "
+                      f"land: {touched[:20]}", evidence={"paths": touched[:50]})
+    if any(path == STATE_PATH for _, _, _, path in changes):
+        _check_state(repo, base, tip, work_item_id, runner)
+
+
+def _read_state(repo: Path, rev: str, runner: gitrepo.Runner, label: str) -> dict:
+    try:
+        data = gitrepo.show(repo, rev, STATE_PATH, runner=runner)
+    except (GitOperationError, OSError, subprocess.TimeoutExpired) as exc:
+        raise _refuse("state_touched", f"the state file at the {label} cannot be read: "
+                      f"{getattr(exc, 'message', exc)}") from exc
+    if data is None:
+        raise _refuse("state_touched", f"the state file is absent at the {label}")
+    if len(data) > MAX_STATE_BYTES:
+        raise _refuse("state_touched", f"the state file at the {label} is larger than {MAX_STATE_BYTES} bytes")
+    try:
+        state = json.loads(data.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError, RecursionError) as exc:
+        raise _refuse("state_touched", f"the state file at the {label} is not valid JSON: {exc}") from exc
+    if not isinstance(state, dict) or not isinstance(state.get("work_items"), dict):
+        raise _refuse("state_touched", f"the state file at the {label} has no work_items table")
+    return state
+
+
+def _check_state(repo: Path, base: str, tip: str, work_item_id: str | None, runner: gitrepo.Runner) -> None:
+    """D4: the two versions, read as data, differ only in this item's :data:`CHECKPOINT_WRITTEN_FIELDS`."""
+    if not work_item_id:
+        raise _refuse("state_touched", "the landing was not told which work item's entry a checkpoint may write")
+    before = _read_state(repo, base, runner, "base")
+    after = _read_state(repo, tip, runner, "tip")
+    changed: list[str] = []
+    for key in sorted((set(before) | set(after)) - {"work_items"}):
+        if before.get(key, _MISSING) != after.get(key, _MISSING):
+            changed.append(key)
+    items_before, items_after = before["work_items"], after["work_items"]
+    if work_item_id not in items_before or work_item_id not in items_after:
+        changed.append(f"work_items.{work_item_id}")
+    for item in sorted((set(items_before) | set(items_after)) - {work_item_id}):
+        if items_before.get(item, _MISSING) != items_after.get(item, _MISSING):
+            changed.append(f"work_items.{item}")
+    entry_before, entry_after = items_before.get(work_item_id), items_after.get(work_item_id)
+    if isinstance(entry_before, dict) and isinstance(entry_after, dict):
+        for field in sorted((set(entry_before) | set(entry_after)) - CHECKPOINT_WRITTEN_FIELDS):
+            if entry_before.get(field, _MISSING) != entry_after.get(field, _MISSING):
+                changed.append(f"work_items.{work_item_id}.{field}")
+    elif work_item_id in items_before and work_item_id in items_after:
+        changed.append(f"work_items.{work_item_id}")
+    if changed:
+        raise _refuse("state_touched", f"the range changes the state file outside the fields a checkpoint writes: "
+                      f"{changed[:20]}", evidence={"fields": changed[:50]})
+
+
+_MISSING = object()
+
+
+def _check_range(clone: Path, base: str, tip: str, runner: gitrepo.Runner, *, surface: LandingSurface | None = None,
+                 work_item_id: str | None = None) -> list[str]:
+    """D3 (4) to (6), read in the clone with the commit graph off. Returns the commits, oldest first. With ``surface``
+    the content checks of ``workflow-controller-h4f`` (D3, D4) follow the submodule check, in this pass and so in both
+    passes of :func:`land`."""
     if not gitrepo.strict_descendant(clone, base, tip, runner=runner):
         raise _refuse("not_a_descendant", f"the clone's branch tip {tip} is not a descendant of the base {base}",
                       evidence={"base": base, "tip": tip})
@@ -156,6 +265,8 @@ def _check_range(clone: Path, base: str, tip: str, runner: gitrepo.Runner) -> li
     for commit, parents in commits:
         if gitrepo.commit_touches_submodule(clone, commit, parents[0], runner=runner):
             raise _refuse("submodule", f"the commit {commit} adds or changes a submodule", evidence={"commit": commit})
+    if surface is LandingSurface.IMPLEMENTER:
+        _check_surface(clone, base, tip, work_item_id, runner)
     return [commit for commit, _ in commits]
 
 
@@ -163,7 +274,7 @@ def _check_clone(prepared: Any, runner: gitrepo.Runner) -> None:
     """D3 (1) and (2): the clone's ``.git`` is unchanged but for commits, and it holds no ref but its branch."""
     clone = Path(prepared.path)
     try:
-        codex_worker_sandbox.check_guard(prepared.guard, codex_worker_sandbox.guard_digest(clone))
+        codex_worker_sandbox.check_guard(prepared.guard, codex_worker_sandbox.guard_digest_like(clone, prepared.guard))
     except ControllerError as exc:
         raise _refuse("clone_git_changed", f"the clone's .git changed during the run: {exc.message}",
                       evidence=dict(exc.evidence)) from exc
@@ -236,10 +347,16 @@ def _classify_after_merge(managed_root: Path, prepared: Any, tip: str, runner: g
 
 
 def land(managed_repo: Any, prepared: Any, runtime_root: Path, job_id: str, *, worker_breach: bool,
-         on_intent: Callable[[str], None]) -> Landing:
+         on_intent: Callable[[str], None], surface: LandingSurface | None = None,
+         work_item_id: str | None = None) -> Landing:
     """D3 and D4: land the clone's commits, or refuse with a named cause. Never raises for a Git or OS failure: an
     unexpected one is ``landing_error`` (a refusal like the others). ``on_intent(checked_tip)`` is called once, after
-    every check and before the fetch, and not for a refusal at a check or for ``nothing``."""
+    every check and before the fetch, and not for a refusal at a check or for ``nothing``. ``surface`` (default
+    ``None``: nothing changes) adds the content checks of ``workflow-controller-h4f`` (D3, D4) to both range passes,
+    the managed-side one deciding; ``work_item_id`` names the state entry a checkpoint may write and is required with
+    it."""
+    if surface is not None and not work_item_id:
+        raise ValueError("a landing surface needs the work item id")
     managed_root = Path(managed_repo.root)
     runtime_root = Path(runtime_root)
     layout = codex_worker_sandbox.WorkerLayout(runtime_root, job_id)
@@ -262,7 +379,7 @@ def land(managed_repo: Any, prepared: Any, runtime_root: Path, job_id: str, *, w
             state["tip"] = tip
             if tip == base:
                 return Landing("nothing", NOTHING_TO_LAND, base, tip, branch)
-            state["commits"] = _check_range(clone, base, tip, read)
+            state["commits"] = _check_range(clone, base, tip, read, surface=surface, work_item_id=work_item_id)
             try:
                 on_intent(tip)
             except Exception as exc:  # noqa: BLE001 -- the callback is the caller's; nothing has been fetched
@@ -282,7 +399,7 @@ def land(managed_repo: Any, prepared: Any, runtime_root: Path, job_id: str, *, w
             # object's id, so the clone-side checks above can be steered (a base object overlaid under its own
             # name). The managed repository holds the authentic base and the fetch verified every object it took
             # (``fsckObjects``), so the range is judged again here, where its ids are what they say.
-            state["commits"] = _check_range(managed_root, base, tip, read)
+            state["commits"] = _check_range(managed_root, base, tip, read, surface=surface, work_item_id=work_item_id)
             state["merging"] = True
             try:
                 gitrepo.landing_merge(managed_root, tip, runner=read)

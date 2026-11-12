@@ -718,5 +718,54 @@ class RunnerTest(unittest.TestCase):
             gitrepo.ls_remote(Path("."), "origin", ["refs/heads/main"], runner=hangs)
 
 
+
+class DiffRawTest(unittest.TestCase):
+    """``workflow-controller-h4f`` D3: the raw range diff with modes."""
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.repo = Path(tmp.name).resolve()
+        git_init(self.repo)
+        (self.repo / "a.txt").write_text("a\n")
+        (self.repo / "run.sh").write_text("#!/bin/sh\n")
+        run(["git", "add", "-A"], cwd=self.repo)
+        run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "base"], cwd=self.repo)
+        self.base = current_head(self.repo)
+
+    def commit(self, message: str = "c") -> str:
+        run(["git", "add", "-A"], cwd=self.repo)
+        run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", message], cwd=self.repo)
+        return current_head(self.repo)
+
+    def test_added_modified_deleted_mode_and_link_records_carry_their_modes(self) -> None:
+        (self.repo / "a.txt").write_text("changed\n")
+        (self.repo / "run.sh").chmod(0o755)
+        (self.repo / "new.txt").write_text("n\n")
+        (self.repo / "lnk").symlink_to("a.txt")
+        tip = self.commit()
+        got = {path: (old, new, status) for old, new, status, path in gitrepo.diff_raw(self.repo, self.base, tip)}
+        self.assertEqual(got, {"a.txt": ("100644", "100644", "M"), "run.sh": ("100644", "100755", "M"),
+                               "new.txt": ("000000", "100644", "A"), "lnk": ("000000", "120000", "A")})
+        (self.repo / "a.txt").unlink()
+        gone = self.commit()
+        self.assertEqual(gitrepo.diff_raw(self.repo, tip, gone), [("100644", "000000", "D", "a.txt")])
+
+    def test_it_is_the_net_change_and_a_path_with_a_space_survives(self) -> None:
+        (self.repo / "tmp.txt").write_text("t\n")
+        (self.repo / "with space.txt").write_text("s\n")
+        self.commit()
+        (self.repo / "tmp.txt").unlink()
+        tip = self.commit()
+        self.assertEqual(gitrepo.diff_raw(self.repo, self.base, tip), [("000000", "100644", "A", "with space.txt")])
+
+    def test_a_short_id_is_refused_and_the_commit_graph_is_off(self) -> None:
+        with self.assertRaises(GitOperationError):
+            gitrepo.diff_raw(self.repo, "HEAD", self.base)
+        spy = _Spy()
+        gitrepo.diff_raw(self.repo, self.base, self.base, runner=spy)
+        self.assertIn("core.commitGraph=false", spy.calls[0])
+
+
 if __name__ == "__main__":
     unittest.main()

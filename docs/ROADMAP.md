@@ -84,7 +84,7 @@
 | 78 | [CI: split the giant test atoms and refresh the shard timings](items/workflow-controller-ci1b.md) `workflow-controller-ci1b` | Done | - | - |
 | 79 | [CI: measure parallel test workers inside a shard](items/workflow-controller-ci1c.md) `workflow-controller-ci1c` | Done | - | - |
 | 80 | [Codex worker, step 5c: route the two review roles, safety tests and live proof](items/workflow-controller-h4e2b.md) `workflow-controller-h4e2b` | Done | - | workflow-controller-h4e2 |
-| 81 | [Codex worker, step 5d: the carry and recovery for the two apply roles, without running the Workflow's generator](items/workflow-controller-h4e3.md) `workflow-controller-h4e3` | Next | - | workflow-controller-h4e2b |
+| 81 | [Codex worker, step 5d: the carry and recovery for the two apply roles, without running the Workflow's generator](items/workflow-controller-h4e3.md) `workflow-controller-h4e3` | Done | - | workflow-controller-h4e2b |
 | 82 | [Codex worker, step 5e: run the managed repository's generator safely after a landing](items/workflow-controller-h4e3b.md) `workflow-controller-h4e3b` | Next | - | workflow-controller-h4e3 |
 | 83 | [Codex worker, step 6](items/workflow-controller-h4f.md) `workflow-controller-h4f` | Next | - | workflow-controller-h4e3b |
 | 84 | [Codex worker, step 7](items/workflow-controller-h4g.md) `workflow-controller-h4g` | Next | - | workflow-controller-h4f |

@@ -2,7 +2,7 @@
 
 ## Status
 
-**In progress.** `workflow-controller-h4e3` (H4e3, issue [#334](https://github.com/RodrigoFAbreu/workflow-controller/issues/334)):
+**Complete.** `workflow-controller-h4e3` (H4e3, issue [#334](https://github.com/RodrigoFAbreu/workflow-controller/issues/334)):
 plan `docs/ai-workflow/CONTROLLER_H4E3_PLAN.md` (revision 12), five checkpoints. It routes `apply-plan-review` and
 `apply-implementation-review` to Codex through a bounded carry of the uncommitted working set, and stops after the landing
 (the Controller never runs the managed repository's generator; that is H4e3b). CP1 is complete: `harness.LOCAL_APPLIER` is the
@@ -70,6 +70,10 @@ never writing through it (as `tests/test_codex_apply_safety.py` proves), so `doc
 Verification: the full suite (`python3 tools/run_tests.py`, 6306 tests in 8 shards, coverage exact) fails only the three
 known environmental `tests.test_fake_codex_contract.FakeCodexContractTest` tests (the fake Codex reads the user's
 `~/.codex` config); `tests.test_job_codex_apply` (45 tests), `tools/check_docs.py` and `tools/harness_table.py --check` pass.
+
+The milestone is implemented, functionally reviewed and accepted by policy (PR #338, checks green at the approved head).
+
+Next action: `/milestone-plan` for `workflow-controller-h4e3b` (Codex worker, step 5e: run the managed repository's generator safely after a landing), the item `python3 scripts/workflow_backlog.py next` returns.
 
 ## Previous milestone (H4e2b)
 

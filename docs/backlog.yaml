@@ -476,7 +476,7 @@ items:
     detail: docs/items/workflow-controller-h4e3.md
   - id: workflow-controller-h4e3b
     title: "Codex worker, step 5e: run the managed repository's generator safely after a landing"
-    status: next
+    status: done
     order: 82
     depends_on: [workflow-controller-h4e3]
     detail: docs/items/workflow-controller-h4e3b.md

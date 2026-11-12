@@ -1,0 +1,106 @@
+{
+  "dispositions": {
+    "F-0143d68d0743": {
+      "disposition": "fixed",
+      "note": "Plan revision 4 D7 says resume runs the guard and the generator again for a record at checked, started or finished, so finished regenerates the bundle once more and the second reconcile and the next stage's preconditions are evaluated on that final generation; controller/job.py _REGENERATION_IN_FLIGHT = (checked, started, finished) and tests/test_job_codex_apply.py test_a_record_at_finished_is_run_again_by_resume pin it."
+    },
+    "F-0300f301a358": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/342"
+    },
+    "F-10097fe0d3d7": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6831312205"
+    },
+    "F-1aa431b72dd7": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6831312205"
+    },
+    "F-4395c6760125": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/341"
+    },
+    "F-5196aaa11eb0": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/341"
+    },
+    "F-554eabcb76f6": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6831312205"
+    },
+    "F-55709f97f589": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6831312205"
+    },
+    "F-71d26b4e99f0": {
+      "disposition": "dropped",
+      "reason": "Kept by design: a timeout or launch failure ends at the regeneration gate either way, so the bundle is never trusted; the run's process group is killed on timeout and the cause stays generator_timed_out. 19ac0f4 narrowed controller/generator_run.py run()'s docstring to say a run that timed out or could not start is reported as that, without the second check (same finding as F-aac5a81d9a3b, carried)."
+    },
+    "F-7c25658a0de2": {
+      "disposition": "dropped",
+      "reason": "Kept by design, as F-71d26b4e99f0 (the same finding carried to round 3): the ending is the regeneration gate either way, and 19ac0f4 narrowed controller/generator_run.py run()'s docstring to state that a timed-out or unstarted run is reported without the second check."
+    },
+    "F-7efda6de749a": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/342"
+    },
+    "F-818b74863787": {
+      "disposition": "fixed",
+      "note": "controller/generator_run.py _unsafe_reason accepts a path that _classify reports as other (a directory or gitlink, as the generator's [[ -f ]] skips it) with no fifth reason (docstring: 'A path that is absent, or not a regular file, is not copied by the generator and is accepted'); tests/test_generator_run.py test_a_missing_file_a_source_proposal_and_a_directory_are_accepted pins it. The plan's D5a wording was not changed."
+    },
+    "F-89462583f24b": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6831312205"
+    },
+    "F-8a8f3811550b": {
+      "disposition": "fixed",
+      "note": "Plan revision 4 D7 qualifies the claim: plan discards its interrupted staging and promotes atomically, post-fix keeps its generation in place (prepare-ai-review.sh lines 194-198); tests/test_job_codex_apply.py has test_a_staging_directory_left_by_a_cut_off_run_is_discarded and test_a_kill_in_the_middle_of_a_bundle_rewrite_is_run_again_by_resume (the implementation role's run torn mid-rewrite, then resumed to a bundle that verifies)."
+    },
+    "F-8ba68153f00c": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/341"
+    },
+    "F-8ca4ea898eed": {
+      "disposition": "fixed",
+      "note": "1f81c69: docs/common-problems.md's generator_failed/generator_timed_out bullet now says the detail holds a short excerpt (the exit status and at most the last 500 characters; a timeout names only the limit) and the bounded 4 KiB tails are in the job record's regeneration block, which matches controller/job.py _guarded_regeneration's refused(..., **evidence_extra)."
+    },
+    "F-a2949c8b8665": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/341"
+    },
+    "F-aac5a81d9a3b": {
+      "disposition": "fixed",
+      "note": "19ac0f4: controller/generator_run.py run()'s docstring no longer claims every failed run is checked again; it now says a failed run that changed the tree is reported as the change, and a run that timed out or could not start is reported as that, without the second check. The behaviour is kept (the ending is the gate either way)."
+    },
+    "F-ae3d9ef3fb27": {
+      "disposition": "fixed",
+      "note": "The reviewer's first remedy was taken in 19ac0f4: controller/generator_run.py run()'s docstring is narrowed to say a run that timed out or could not start is reported as that, without the second check; the bundle stays untrusted at the regeneration gate."
+    },
+    "F-c00ca2203163": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/341"
+    },
+    "F-c5d3e010e43c": {
+      "disposition": "fixed",
+      "note": "controller/generator_run.py _context_lists checks, for plan, both plan-inputs/CONTEXT_FILES.txt and the live current/CONTEXT_FILES.txt the generator seeds an absent one from (a superset of the generator's choice), and check_copy_sources skips a missing list (counts as empty); tests/test_generator_run.py test_the_plan_stage_reads_the_plan_inputs_list_and_the_live_one pins it."
+    },
+    "F-d1afd9cdd5f0": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/341"
+    },
+    "F-e9442dc2de05": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/342"
+    },
+    "F-e9571eb551d8": {
+      "disposition": "fixed",
+      "note": "As F-818b74863787: controller/generator_run.py _classify reports an untracked embedded repository (dir/, a gitlink after git add -N) as other and _unsafe_reason accepts it, as the generator's [[ -f ]] skips it, with no fifth reason; the directory case is pinned by tests/test_generator_run.py test_a_missing_file_a_source_proposal_and_a_directory_are_accepted. The earlier findings it restates have their own dispositions."
+    },
+    "F-f35c8d64e8a0": {
+      "disposition": "fixed",
+      "note": "Plan revision 4 D4 says the child's sys.executable is the private symlink's path, so the proofs compare os.path.realpath, and that a venv Controller loses it through the symlink harmlessly; tests/test_workflow_contract.py's probe records os.path.realpath(sys.executable) and asserts it equals os.path.realpath(sys.executable)."
+    }
+  },
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-h4e3b"
+}

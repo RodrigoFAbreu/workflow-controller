@@ -561,7 +561,7 @@ generator copies, and it never runs anything else of the managed tree (no other 
   own `scripts/:$PYTHONPATH` has no empty element, which Python would read as the working directory). Every other `PYTHON*`
   variable, `BASH_ENV` and `ENV` are removed, and a private `bin/` first on `PATH` holds one `python3` link to the Controller's
   own interpreter. Git runs with hooks, filters, fsmonitor and transports off. The run is bounded to 600 seconds and keeps the
-  last 4 KiB of each stream, withheld whole if it holds private-key armour.
+  last 4 KiB of each stream, withheld whole if the stream holds a private-key armour line or the kept part a closing one.
 - **After the run** the tree and the copy sources are checked again; one that no longer passes ends the run, because the
   generator is the one process that ran with the managed tree writable under it.
 - **The endings.** A run that exits `0` and passes the second check is followed by a second `reconcile`, and its answer is the
@@ -575,6 +575,13 @@ generator copies, and it never runs anything else of the managed tree (no other 
   second `reconcile`; `--abandon` and a drifted release run no generator.
 - **Still not done:** the Controller commits, amends and writes no generation record beyond what the generator itself writes
   under `.ai-review/`, and it does not run the next stage (`/review-plan`, `/review-implementation`, an approval).
+- **Known gap (implementation role).** The Controller's own Workflow queries (the `reconcile` after the landing among them)
+  run `scripts/` from a private copy of bytes checked against `.workflow-manager/installation.json`, and that record is a
+  committed file. A landing that edits a managed script *and* its digest in the record is therefore run by the first query
+  after the landing, before the landing check above is reached. The landing check still refuses the generator run, but the
+  edited script has already run once. Until this is closed, treat a Codex-routed implementation role as able to run code with
+  the Controller's authority by this route, and do not route it to Codex where that matters; an `expectedFailure` test in
+  `tests/test_codex_apply_regeneration.py` records it.
 
 The routed path is proved adversarially through the job in `tests/test_codex_review_safety.py`
 (credentials, symlinks and special files, submodules, hooks, crafted refs, forged headers; one test per cause of the deny set).

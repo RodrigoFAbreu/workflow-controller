@@ -1033,7 +1033,10 @@ else:
         record = self.only_record()
         self.assertEqual(record["regeneration"]["stage"], "finished")
         self.assertNotIn(record["status"], job.TERMINAL_STATUSES)
-        (resumed,) = self.resume()
+        real = generator_run.workflow_contract.run_in_place
+        with mock.patch.object(generator_run.workflow_contract, "run_in_place", side_effect=real) as spy:
+            (resumed,) = self.resume()
+        self.assertEqual(spy.call_count, 1, "resume did not run the generator again")
         self.assertEqual(resumed["status"], job.STATUS_FINISHED, resumed.get("reconciliation_evidence"))
         self.assert_next_stage_passes(self.ARGUMENT)
 
@@ -1103,6 +1106,47 @@ subprocess.run(["git", "-c", "user.name=W", "-c", "user.email=w@example.invalid"
         self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED, record.get("reconciliation_evidence"))
         self.assertEqual(self.evidence(record)["regeneration"]["cause"], "surface_landing_touched")
         self.assertIn("scripts/sitecustomize.py", self.evidence(record)["regeneration"]["detail"])
+
+    def test_a_kill_in_the_middle_of_a_bundle_rewrite_is_run_again_by_resume(self) -> None:
+        # D7: `post-fix` rewrites its generation in place, so a run cut off part-way leaves a torn bundle; `resume`
+        # runs the guard and the generator again and ends with a complete bundle that verifies.
+        self.worked()
+        real = generator_run.workflow_contract.run_in_place
+        calls: list[list[str]] = []
+
+        seen: list[object] = []
+
+        def torn(root: Path, argv: list[str], **kwargs):
+            calls.append(argv)
+            if len(calls) == 1:
+                try:
+                    completed = real(root, argv, **kwargs)
+                    seen.append(completed.returncode)
+                    bundle = Path(root) / ITEM / "current"
+                    (bundle / "MANIFEST.md").unlink()
+                    for path in sorted((bundle / "files").rglob("*")):
+                        if path.is_file():
+                            path.write_bytes(path.read_bytes()[: len(path.read_bytes()) // 2])
+                except Exception as exc:  # recorded for the assertion below, then re-raised
+                    seen.append(repr(exc))
+                    raise
+                raise KeyboardInterrupt
+            return real(root, argv, **kwargs)
+
+        with mock.patch.object(generator_run.workflow_contract, "run_in_place", side_effect=torn):
+            try:
+                ended = self.step()
+            except KeyboardInterrupt:
+                ended = None
+            record = self.only_record()
+            self.assertIsNone(ended, (len(calls), seen, record.get("status"), record.get("regeneration"),
+                                      record.get("reconciliation_evidence")))
+            self.assertEqual(record["regeneration"]["stage"], "started")
+            (resumed,) = self.resume()
+        self.assertEqual(len(calls), 2, "resume did not run the generator again")
+        self.assertEqual(resumed["status"], job.STATUS_FINISHED, resumed.get("reconciliation_evidence"))
+        self.assertEqual(resumed["regeneration"]["stage"], "finished")
+        self.assert_next_stage_passes(self.ARGUMENT)
 
 
 class RouteTest(unittest.TestCase):

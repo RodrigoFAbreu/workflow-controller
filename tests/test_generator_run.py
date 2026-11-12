@@ -42,6 +42,8 @@ PY
   fail) echo "boom" >&2; exit 3 ;;
   armour) echo "-----BEGIN OPENSSH PRIVATE KEY-----"; { echo "-----BEGIN RSA PRIVATE KEY-----"; echo "secret"; } >&2; exit 3 ;;
   sleep) sleep 30 ;;
+  armour-cut) echo "-----BEGIN OPENSSH PRIVATE KEY-----" >&2; head -c 5000 /dev/zero | tr '\\0' K >&2; echo >&2; exit 3 ;;
+  armour-sleep) echo "-----BEGIN OPENSSH PRIVATE KEY-----"; echo "secret"; sleep 30 ;;
   plant) : > scripts/sitecustomize.py ;;
   list) echo /etc/passwd > .ai-review/wi-1/current/CONTEXT_FILES.txt ;;
 esac
@@ -328,6 +330,20 @@ class RunTest(Fixture):
         self.assertNotIn("PRIVATE KEY", json.dumps(exc.evidence) + exc.message)
         self.assertNotIn("secret", json.dumps(exc.evidence) + exc.message)
 
+    def test_key_armour_cut_off_by_the_tail_bound_is_still_withheld(self) -> None:
+        self.mode("armour-cut")
+        exc = self.refused("generator_failed", self.run_it)
+        self.assertEqual(exc.evidence["stderr_tail"], gr._WITHHELD)
+        self.assertNotIn("KKKK", json.dumps(exc.evidence) + exc.message)
+        key_end = b"x" * 10 + b"\n-----END OPENSSH PRIVATE KEY-----\n"
+        self.assertEqual(gr._tail(key_end), gr._WITHHELD)
+
+    def test_key_armour_before_a_timeout_is_withheld(self) -> None:
+        self.mode("armour-sleep")
+        exc = self.refused("generator_timed_out", self.run_it, timeout=2.0)
+        self.assertNotIn("PRIVATE KEY", json.dumps(exc.evidence))
+        self.assertNotIn("secret", json.dumps(exc.evidence))
+
     def test_a_long_output_is_cut_to_the_last_four_kibibytes(self) -> None:
         self.assertEqual(len(gr._tail(b"x" * 10000)), gr.TAIL_BYTES)
 
@@ -356,24 +372,30 @@ class RunTest(Fixture):
             self.run_it(stage="implementation")
 
 
+#: The test that produces each cause of :data:`generator_run.CAUSES`.
+CAUSE_CASES = {
+    "surface_landing_touched": ("CheckLandingTest", "test_each_status_letter_on_the_surface_is_refused"),
+    "surface_script_modified": ("CheckTreeTest", "test_a_modified_missing_or_linked_managed_file_is_refused"),
+    "surface_foreign_entry": ("CheckTreeTest", "test_every_foreign_kind_of_entry_is_refused_by_name"),
+    "surface_unreadable": ("CheckTreeTest", "test_an_unreadable_or_odd_record_is_refused"),
+    "generator_not_managed": ("CheckTreeTest", "test_a_record_that_does_not_manage_the_generator_is_refused"),
+    "git_not_isolated": ("RunTest", "test_a_git_that_cannot_be_isolated_is_git_not_isolated"),
+    "generator_failed": ("RunTest", "test_a_non_zero_exit_is_generator_failed_with_the_bounded_tail"),
+    "generator_timed_out": ("RunTest", "test_a_run_past_its_bound_is_generator_timed_out"),
+    "copy_source_unsafe": ("CheckCopySourcesTest", "test_each_reason_for_a_list_line"),
+    "surface_changed_during_run": ("RunTest", "test_a_tree_change_during_the_run_is_reported_whatever_the_exit_status"),
+}
+
+
 class CausesCoveredTest(unittest.TestCase):
     def test_every_cause_has_a_case(self) -> None:
-        # Runs after the classes above (alphabetical order of the suite's own classes is not relied on: the set is
-        # filled by `refused`, and this test is repeated at the end of the module run by `load_tests`).
+        # Self-contained, so it holds in any order and any shard: each cause's case is run here and must raise it.
         self.assertEqual(len(set(gr.CAUSES)), len(gr.CAUSES))
-
-
-def load_tests(loader, tests, pattern):
-    suite = unittest.TestSuite()
-    suite.addTests(tests)
-
-    class Last(unittest.TestCase):
-        def test_every_cause_of_the_module_has_a_case(self) -> None:
-            self.assertEqual(set(gr.CAUSES) - COVERED, set())
-
-    suite.addTest(Last("test_every_cause_of_the_module_has_a_case"))
-    return suite
-
-
-if __name__ == "__main__":
-    unittest.main()
+        self.assertEqual(set(CAUSE_CASES), set(gr.CAUSES))
+        for cause, (class_name, method) in CAUSE_CASES.items():
+            with self.subTest(cause=cause):
+                COVERED.discard(cause)
+                result = unittest.TestResult()
+                globals()[class_name](method).run(result)
+                self.assertTrue(result.wasSuccessful(), result.failures + result.errors)
+                self.assertIn(cause, COVERED, f"{class_name}.{method} did not raise {cause}")

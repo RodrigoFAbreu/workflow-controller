@@ -29,7 +29,9 @@ import dataclasses
 import hashlib
 import json
 import os
+import re
 import stat
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -67,6 +69,8 @@ COPY_REASONS = ("absolute", "traversal", "link", "escapes", "unreadable")
 
 _EVIDENCE_LIST = 20
 _WITHHELD = "(output withheld: it contained private-key armour)"
+#: The closing armour line, so a tail whose ``BEGIN`` line was cut off is still withheld.
+_ARMOUR_END = re.compile(rb"-----END(?: [A-Z0-9]+)* PRIVATE KEY-----")
 
 
 class GeneratorRefused(ControllerError):
@@ -345,12 +349,25 @@ def _recheck(root: Path, stage: str, base_commit: str, work_item_id: str) -> Non
             "operator to remove", was=exc.cause, was_detail=exc.detail) from exc
 
 
-def _tail(data: bytes | None) -> str:
-    """The last :data:`TAIL_BYTES` of ``data``, or a note when they hold private-key armour."""
-    data = (data or b"")[-TAIL_BYTES:]
-    if codex_review_role.ARMOUR.search(data):
+def _tail(data: bytes | str | None) -> str:
+    """The last :data:`TAIL_BYTES` of ``data``, or a note when the whole stream holds a private-key armour line or the
+    tail holds a closing one (a key whose ``BEGIN`` line falls just before the cut is still withheld)."""
+    if isinstance(data, str):
+        data = data.encode("utf-8", errors="replace")
+    data = data or b""
+    tail = data[-TAIL_BYTES:]
+    if codex_review_role.ARMOUR.search(data) or _ARMOUR_END.search(tail):
         return _WITHHELD
-    return data.decode("utf-8", errors="replace")
+    return tail.decode("utf-8", errors="replace")
+
+
+def _streams(exc: WorkflowQueryError) -> tuple[bytes | str | None, bytes | str | None]:
+    """The fullest output a failed start left: a timeout's own streams when the error carries them, otherwise the
+    error's bounded tails."""
+    cause = exc.__cause__
+    if isinstance(cause, subprocess.TimeoutExpired):
+        return cause.output, cause.stderr
+    return exc.evidence.get("stdout_tail", ""), exc.evidence.get("stderr_tail", "")
 
 
 def run(root: Path, *, stage: str, base_commit: str, work_item_id: str, carry_base: str | None = None,
@@ -382,9 +399,9 @@ def run(root: Path, *, stage: str, base_commit: str, work_item_id: str, carry_ba
         reason = exc.evidence.get("reason")
         cause = {"query_git_not_isolated": "git_not_isolated", "query_timeout": "generator_timed_out"}.get(
             reason, "generator_failed")
-        raise GeneratorRefused(cause, exc.message, reason=reason, stdout_tail=_tail(
-            exc.evidence.get("stdout_tail", "").encode()), stderr_tail=_tail(
-            exc.evidence.get("stderr_tail", "").encode())) from exc
+        out, err = _streams(exc)
+        raise GeneratorRefused(cause, exc.message, reason=reason, stdout_tail=_tail(out),
+                               stderr_tail=_tail(err)) from exc
     _recheck(root, stage, base_commit, work_item_id)
     stdout, stderr = _tail(completed.stdout), _tail(completed.stderr)
     if completed.returncode != 0:

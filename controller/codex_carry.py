@@ -293,12 +293,27 @@ def _check_name(rel: str) -> None:
         raise _member_refused("name", rel, "named like a credential")
 
 
-def read_member(root: Path, rel: str, *, check_name: bool = True) -> tuple[bytes, int]:
+def _check_contained(root: Path, rel: str, runtime_root: Path | None = None) -> None:
+    """D5: the parent directory of ``<root>/<rel>``, with every link resolved, stays inside ``root`` (and outside the
+    Controller's runtime root when one is given); the last component is left to ``O_NOFOLLOW``/``lstat``."""
+    real_root = Path(root).resolve()
+    parent = (Path(root) / rel).parent.resolve()
+    if real_root not in (parent, *parent.parents):
+        raise _member_refused("escape", rel, "its parent directory resolves outside the repository")
+    if runtime_root is not None:
+        runtime_real = Path(runtime_root).resolve()
+        if runtime_real in (parent, *parent.parents):
+            raise _member_refused("escape", rel, "it resolves into the Controller's runtime root")
+
+
+def read_member(root: Path, rel: str, *, check_name: bool = True, runtime_root: Path | None = None
+                ) -> tuple[bytes, int]:
     """D5: the bytes and mode of the regular file ``<root>/<rel>``, read through one ``O_NOFOLLOW`` descriptor without
     following a link, after the checks of the carry: a name that escapes, a ``.git`` component, a credential-shaped name
     (``check_name``), a symlink or special file, a size over the per-file bound, and a private-key armour line."""
     if check_name:
         _check_name(rel)
+    _check_contained(root, rel, runtime_root)
     path = Path(root) / rel
     try:
         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK)
@@ -324,9 +339,11 @@ def read_member(root: Path, rel: str, *, check_name: bool = True) -> tuple[bytes
     return data, stat.S_IMODE(info.st_mode)
 
 
-def _walk_files(root: Path, rel: str, found: list[str]) -> None:
-    """The regular files at or under ``rel``; a symlink or special file is a ``kind`` refusal."""
+def _walk_files(root: Path, rel: str, found: list[str], runtime_root: Path | None = None) -> None:
+    """The regular files at or under ``rel``; a symlink or special file is a ``kind`` refusal, a parent that resolves
+    outside the repository an ``escape`` one."""
     _check_name(rel)
+    _check_contained(root, rel, runtime_root)
     try:
         mode = os.lstat(Path(root) / rel).st_mode
     except FileNotFoundError:
@@ -339,7 +356,7 @@ def _walk_files(root: Path, rel: str, found: list[str]) -> None:
         with os.scandir(Path(root) / rel) as scan:
             names = sorted(entry.name for entry in scan)
         for name in names:
-            _walk_files(root, f"{rel}/{name}", found)
+            _walk_files(root, f"{rel}/{name}", found, runtime_root)
     else:
         raise _member_refused("kind", rel, "neither a regular file nor a directory")
 
@@ -359,7 +376,8 @@ class CarriedIn:
     digests: Mapping[str, str]
 
 
-def collect_in(repo_root: Path, carry_set: CarrySet, runner: gitrepo.Runner | None = None) -> CarriedIn:
+def collect_in(repo_root: Path, carry_set: CarrySet, runner: gitrepo.Runner | None = None,
+               runtime_root: Path | None = None) -> CarriedIn:
     """D5: read, in the managed repository and before any clone is made, every member of the set that goes in: the named
     files and the regular files of ``feedback/``, ``plan-inputs/`` and ``current/`` of the item root. A refusal is
     ``carry_member_refused`` with the detail of the failed check; the total is bounded as the review role's inputs are."""
@@ -375,9 +393,9 @@ def collect_in(repo_root: Path, carry_set: CarrySet, runner: gitrepo.Runner | No
         raise _member_refused("gitlink", links[0], "a gitlink (a submodule)")
     paths: list[str] = []
     for rel in carry_set.named:
-        _walk_files(root, rel, paths)
+        _walk_files(root, rel, paths, runtime_root)
     for directory in IN_DIRS:
-        _walk_files(root, f"{carry_set.item_root}/{directory}", paths)
+        _walk_files(root, f"{carry_set.item_root}/{directory}", paths, runtime_root)
     if len(paths) > codex_review_role.MAX_INPUT_PATHS:
         raise _member_refused("bound", carry_set.item_root, f"{len(paths)} paths, over "
                               f"{codex_review_role.MAX_INPUT_PATHS}", count=len(paths))
@@ -385,7 +403,7 @@ def collect_in(repo_root: Path, carry_set: CarrySet, runner: gitrepo.Runner | No
     total = 0
     for rel in paths:
         try:
-            data, mode = read_member(root, rel)
+            data, mode = read_member(root, rel, runtime_root=runtime_root)
         except FileNotFoundError as exc:
             raise _member_refused("kind", rel, "it vanished while it was read") from exc
         total += len(data)
@@ -471,7 +489,7 @@ def carry_in(managed_repo: Any, layout: codex_worker_sandbox.WorkerLayout, carry
     persist the block at ``carried_in``. A refusal after the clone was made removes it."""
     root = Path(managed_repo.root)
     dirty = check_dirty(root, carry_set, runner)
-    carried = collect_in(root, carry_set, runner)
+    carried = collect_in(root, carry_set, runner, layout.runtime_root)
     _advance(block, persist, "preparing")
     base = block["base_commit"]
     prepared = codex_worker_tree.prepare(managed_repo, layout, base, allow_dirty=carry_set.named)
@@ -532,9 +550,26 @@ def _clone_gone(layout: codex_worker_sandbox.WorkerLayout, block: Mapping[str, A
                    clone=str(layout.worktree), not_written=not_written(block, root))
 
 
+def _entry_sha(entry: Any) -> str:
+    return _sha(json.dumps(entry, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+
+
+def managed_entry(repo_root: Path, work_item_id: str) -> Any:
+    """This item's entry of the managed state file, read through the bounded reader; ``None`` when it cannot be read."""
+    try:
+        document = json.loads(read_member(repo_root, STATE_PATH, check_name=False)[0].decode("utf-8"))
+        return document["work_items"][work_item_id]
+    except (FileNotFoundError, CarryError, OSError, ValueError, KeyError, TypeError):
+        return None
+
+
 def not_written(block: Mapping[str, Any], repo_root: Path) -> list[str]:
-    """The members of the block's planned writes the managed repository does not hold yet."""
+    """The members of the block's planned writes the managed repository does not hold yet, the state file among them
+    when the worker changed this item's entry and the managed entry is not that one."""
     pending = []
+    if block.get("state") and block.get("state_after_sha256") is not None and (
+            _entry_sha(managed_entry(repo_root, block["work_item_id"])) != block["state_after_sha256"]):
+        pending.append(STATE_PATH)
     for rel, write in (block.get("writes") or {}).items():
         try:
             digest = _sha(read_member(repo_root, rel, check_name=False)[0])
@@ -646,6 +681,9 @@ def check_out(managed_repo: Any, layout: codex_worker_sandbox.WorkerLayout, carr
         state = None
         if STATE_PATH in changed:
             state = _state_payload(layout, block, changed[STATE_PATH], carry_set.work_item_id)
+            if managed_entry(root, carry_set.work_item_id) not in (state["before"], state["after"]):
+                raise _refuse("carry_managed_changed", f"this item's entry of the managed state file changed while "
+                              f"the worker ran", paths=[STATE_PATH])
     except GitOperationError as exc:
         raise _refuse("clone_git_changed", f"the clone could not be read: {exc.message}", **exc.evidence) from exc
     return OutPlan(tuple(w for w in writes if w.rel != STATE_PATH), state)
@@ -693,7 +731,8 @@ def write_out(managed_repo: Any, layout: codex_worker_sandbox.WorkerLayout, carr
     root = Path(managed_repo.root)
     writes = {w.rel: {"sha256": w.sha256, "mode": w.mode} for w in plan.writes}
     if block["stage"] != "out":
-        _advance(block, persist, "out", writes=writes, state=plan.state is not None)
+        _advance(block, persist, "out", writes=writes, state=plan.state is not None,
+                 state_after_sha256=_entry_sha(plan.state["after"]) if plan.state is not None else None)
     clone = prepared_from_block(block).path
     written: list[str] = []
     for write in plan.writes:

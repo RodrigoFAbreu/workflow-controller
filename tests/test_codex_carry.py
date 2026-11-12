@@ -13,6 +13,7 @@ import copy
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -354,6 +355,37 @@ class CarryInTest(Case):
         doc["work_items"][WID]["registry_path"] = "../outside.json"
         write(self.root, STATE, json.dumps(doc))
         self.refused("carry_member_refused", carry.collect_in, self.root, self.set_for(), detail="escape")
+
+    def test_detail_escape_symlinked_item_root(self) -> None:
+        outside = self.tmp / "outside"
+        write(outside, "feedback/notes.txt", "private notes outside the repo\n")
+        shutil.rmtree(self.root / ITEM)
+        os.symlink(outside, self.root / ITEM)
+        self.refused("carry_member_refused", carry.collect_in, self.root, self.set_for(), detail="escape")
+
+    def test_detail_escape_symlinked_ai_review_dir(self) -> None:
+        outside = self.tmp / "outside2"
+        write(outside, "x/plan.md", "outside plan\n")
+        shutil.rmtree(self.root / ".ai-review")
+        os.symlink(outside, self.root / ".ai-review")
+        self.refused("carry_member_refused", carry.collect_in, self.root, self.set_for(), detail="escape")
+
+    def test_detail_escape_symlinked_parent_of_a_named_file(self) -> None:
+        carry_set = self.set_for()
+        registry = next(rel for rel in carry_set.named if rel not in (PLAN, STATE) and "/" in rel)
+        parent = registry.rsplit("/", 1)[0]
+        outside = self.tmp / "outside3"
+        write(outside, registry.rsplit("/", 1)[1], "outside\n")
+        if parent == PLAN.rsplit("/", 1)[0]:
+            self.skipTest("the named files share one directory")
+        shutil.rmtree(self.root / parent)
+        os.symlink(outside, self.root / parent)
+        self.refused("carry_member_refused", carry.collect_in, self.root, carry_set, detail="escape")
+
+    def test_a_member_in_the_runtime_root_is_refused(self) -> None:
+        with self.assertRaises(carry.CarryError) as raised:
+            carry.read_member(self.root, f"{ITEM}/feedback/note.md", runtime_root=self.root / ITEM)
+        self.assertEqual(raised.exception.evidence["detail"], "escape")
 
     def test_detail_bound_file(self) -> None:
         write(self.root, f"{ITEM}/current/big.bin", b"\0" * (8 * 1024 * 1024 + 1))

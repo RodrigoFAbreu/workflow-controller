@@ -896,6 +896,30 @@ def landing_delete_ref(repo_root: Path, job_id: str, *, runner: Runner | None = 
 NO_COMMIT_GRAPH = ("-c", "core.commitGraph=false")
 
 
+_FULL_ID = re.compile(r"[0-9a-f]{40,64}")
+
+
+def diff_name_status(repo_root: Path, base: str, tip: str | None = None, *,
+                     runner: Runner | None = None) -> list[tuple[str, str]]:
+    """``(status letter, path)`` for ``git diff --name-status -z --no-renames <base> [<tip>] --``, in Git's order
+    (``workflow-controller-h4e3b``, D2 and D5a). With ``tip`` the range is the two commits, read with the commit graph
+    off; without it the commit is compared with the working tree, which lists an intent-to-add path as added. A rename
+    is listed as a deletion and an addition, so both sides are seen. ``base`` and ``tip`` must be full commit ids."""
+    for rev in (base, tip):
+        if rev is not None and not _FULL_ID.fullmatch(rev):
+            raise GitOperationError(f"refusing to diff {rev!r}: not a full commit id", evidence={"commit": rev})
+    args = [*NO_COMMIT_GRAPH, "diff", "--name-status", "-z", "--no-renames", "--no-ext-diff", base]
+    if tip is not None:
+        args.append(tip)
+    out = _git(repo_root, [*args, "--"], runner, quiet=True)
+    fields = out.split("\0")
+    if fields and fields[-1] == "":
+        fields.pop()
+    if len(fields) % 2:
+        raise GitOperationError(f"git diff returned an unexpected record: {out!r}", evidence={"stdout": out})
+    return list(zip(fields[::2], fields[1::2]))
+
+
 def clone_refs(repo_root: Path, *, runner: Runner | None = None) -> list[str]:
     """Every ref of ``repo_root`` (``for-each-ref``), full names, sorted."""
     out = _git(repo_root, [*NO_COMMIT_GRAPH, "for-each-ref", "--format=%(refname)"], runner, quiet=True)

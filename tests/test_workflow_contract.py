@@ -1530,5 +1530,111 @@ class OutputValidationTest(_SeededTargets):
         self.assertIn("KeyError: 'demo-item'", caught.exception.message)
 
 
+class RunInPlaceTest(unittest.TestCase):
+    """``run_in_place`` (``workflow-controller-h4e3b``, D4): the interpreter configuration a run in the target is
+    given, proved by children that print what they see."""
+
+    PROBE = (
+        "import json, os, sys\n"
+        "print(json.dumps({'path': sys.path, 'safe_path': sys.flags.safe_path, 'no_user_site': sys.flags.no_user_site,\n"
+        " 'dont_write_bytecode': sys.flags.dont_write_bytecode, 'exe': os.path.realpath(sys.executable),\n"
+        " 'env': sorted(k for k in os.environ if k.startswith('PYTHON')), 'cwd': os.getcwd(),\n"
+        " 'marker': [m for m in ('sitecustomize', 'secrets', 'json_marker') if m in sys.modules]}))\n"
+    )
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory(prefix="run-in-place-")
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name).resolve()
+        _git(self.root, "init", "-q", "-b", "main")
+        (self.root / "scripts" / "__pycache__").mkdir(parents=True)
+        for rel in ("sitecustomize.py", "secrets.py", "scripts/sitecustomize.py", "scripts/secrets.py"):
+            (self.root / rel).write_text(f"open({str(self.root / 'marker')!r}, 'a').write({rel!r})\n")
+        (self.root / "scripts" / "__pycache__" / "forged.pyc").write_bytes(b"junk")
+        _git(self.root, "add", "-A")
+        _git(self.root, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "base")
+
+    def run_script(self, script: str, **env) -> subprocess.CompletedProcess:
+        context = {"query": "a test run", "release": "managed", "work_item_id": "x", "cwd": str(self.root),
+                   "argv": None, "returncode": None, "stdout_tail": "", "stderr_tail": ""}
+        with mock.patch.dict(os.environ, {"PYTHONSTARTUP": "/nonexistent", "PYTHONHOME": "/nonexistent",
+                                          "BASH_ENV": "/nonexistent", "ENV": "/nonexistent", **env}):
+            return workflow_contract.run_in_place(self.root, ["bash", "-c", script], timeout=60.0, context=context)
+
+    def probe(self, command: str) -> dict:
+        completed = self.run_script(command)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        return json.loads(completed.stdout.decode().splitlines()[-1])
+
+    def assert_isolated(self, seen: dict) -> None:
+        self.assertNotIn("", seen["path"])
+        self.assertNotIn(str(self.root), seen["path"])
+        self.assertEqual((seen["safe_path"], seen["no_user_site"], seen["dont_write_bytecode"]), (1, 1, 1))
+        self.assertEqual(seen["exe"], os.path.realpath(sys.executable))
+        self.assertEqual(seen["env"], ["PYTHONDONTWRITEBYTECODE", "PYTHONNOUSERSITE", "PYTHONPATH",
+                                       "PYTHONPYCACHEPREFIX", "PYTHONSAFEPATH"])
+        self.assertEqual(seen["marker"], [])
+        self.assertFalse((self.root / "marker").exists())
+
+    def test_a_plain_heredoc_start_has_only_the_pins(self) -> None:
+        seen = self.probe(f"python3 - <<'PY'\n{self.PROBE}PY\n")
+        self.assert_isolated(seen)
+        self.assertEqual(seen["cwd"], str(self.root))
+
+    def test_the_generators_prefixed_start_has_scripts_and_the_private_directory_and_no_empty_entry(self) -> None:
+        for planted in ("scripts/sitecustomize.py", "scripts/secrets.py"):  # D3 refuses these; the root's are not loaded
+            (self.root / planted).unlink()
+        seen = self.probe(f'PYTHONPATH="{self.root}/scripts:${{PYTHONPATH:-}}" python3 - <<\'PY\'\n{self.PROBE}PY\n')
+        self.assert_isolated(seen)
+        self.assertEqual(seen["path"][0], str(self.root / "scripts"))
+        self.assertTrue(seen["path"][1].endswith("pypath"))
+
+    def test_a_script_path_start_and_a_dash_c_start_see_neither_the_root_nor_scripts(self) -> None:
+        (self.root / "scripts" / "probe.py").write_text(self.PROBE)
+        seen = self.probe(f'python3 "{self.root}/scripts/probe.py"')
+        self.assert_isolated(seen)
+        self.assertNotIn(str(self.root / "scripts"), seen["path"])
+        (self.root / "probe.txt").write_text(self.PROBE)
+        seen = self.probe(f"python3 -c \"$(cat '{self.root}/probe.txt')\"")
+        self.assert_isolated(seen)
+
+    def test_the_run_is_in_the_target_and_nothing_is_written_to_its_bytecode_cache(self) -> None:
+        (self.root / "scripts" / "mod.py").write_text("X = 1\n")
+        self.probe(f'PYTHONPATH="{self.root}/scripts" python3 -c "import mod"; echo {{}}')
+        self.assertEqual([p.name for p in (self.root / "scripts" / "__pycache__").iterdir()], ["forged.pyc"])
+
+    def test_a_hostile_python3_first_on_the_operators_path_is_not_the_one_run(self) -> None:
+        bin_dir = self.root / "hostile"
+        bin_dir.mkdir()
+        (bin_dir / "python3").write_text("#!/bin/sh\necho hostile\n")
+        (bin_dir / "python3").chmod(0o755)
+        completed = self.run_script("python3 -c 'print(1)'", PATH=f"{bin_dir}:{os.environ['PATH']}")
+        self.assertEqual(completed.stdout.decode().strip(), "1")
+
+    def test_a_timeout_ends_the_whole_process_group(self) -> None:
+        context = {"query": "a test run", "release": "managed", "work_item_id": "x", "cwd": str(self.root),
+                   "argv": None, "returncode": None, "stdout_tail": "", "stderr_tail": ""}
+        with self.assertRaises(WorkflowQueryError) as caught:
+            workflow_contract.run_in_place(self.root, ["bash", "-c", "sleep 30 & sleep 30"], timeout=1.0,
+                                           context=context)
+        self.assertEqual(caught.exception.evidence["reason"], "query_timeout")
+
+    def test_the_environment_mapping_has_only_the_pins_and_the_private_path(self) -> None:
+        env = workflow_contract.interpreter_environment(
+            {"PYTHONPATH": "x", "PYTHONINSPECT": "1", "BASH_ENV": "b", "ENV": "e", "PATH": "/usr/bin", "HOME": "/h"},
+            Path("/priv"))
+        self.assertEqual(sorted(k for k in env if k.startswith("PYTHON")),
+                         ["PYTHONDONTWRITEBYTECODE", "PYTHONNOUSERSITE", "PYTHONPATH", "PYTHONPYCACHEPREFIX",
+                          "PYTHONSAFEPATH"])
+        self.assertEqual(env["PATH"], "/priv/bin:/usr/bin")
+        self.assertEqual((env["HOME"], "BASH_ENV" in env, "ENV" in env), ("/h", False, False))
+
+
+class OwnershipTagVariableTest(unittest.TestCase):
+    def test_the_variable_name_is_the_anchors(self) -> None:
+        from controller import anchor
+        self.assertEqual(workflow_contract._OWNERSHIP_VAR, anchor.OWNERSHIP_VAR)
+
+
 if __name__ == "__main__":
     unittest.main()

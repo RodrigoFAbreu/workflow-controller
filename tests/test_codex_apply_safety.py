@@ -23,7 +23,7 @@ from unittest import mock
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from controller import codex_carry, codex_review_role, job, review_recorder  # noqa: E402
+from controller import codex_carry, codex_review_role, generator_run, job, review_recorder  # noqa: E402
 from controller import runtime as runtime_module  # noqa: E402
 from controller.errors import WorkflowQueryError  # noqa: E402
 from tests import test_job_codex_apply as base  # noqa: E402
@@ -654,7 +654,10 @@ class ImplRefusalsTest(Safety, base.ImplCase):
 
 
 class ImplBoundaryTest(Safety, base.ImplCase):
-    """The boundary the item draws: the Controller runs nothing of the managed tree."""
+    """The boundary the item draws: the Controller runs nothing of the managed tree. The guard is the real one
+    (workflow-controller-h4e3b), so the plant ends at the regeneration gate with its cause."""
+
+    GUARD_CAUSE = None
 
     def test_a_landed_site_hook_a_root_module_and_a_bytecode_file_run_nothing(self) -> None:
         marker = self.tmp / "marker"
@@ -681,16 +684,19 @@ class ImplBoundaryTest(Safety, base.ImplCase):
         self.after = work
         record = self.step()
         self.assertFalse(marker.exists(), "the Controller ran something of the managed tree")
-        self.assertIn(record["status"], (job.STATUS_GATE_BLOCKED, job.STATUS_FAILED))
+        self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED, record.get("reconciliation_evidence"))
         found = self.evidence(record)
-        if record["status"] == job.STATUS_FAILED:
-            self.assertIn(found.get("code"), (job.CODEX_LANDING_REFUSED_CODE, job.CODEX_CARRY_REFUSED_CODE), found)
+        self.assertEqual(found["code"], job.CARRY_BUNDLE_GATE_CODE)
+        self.assertEqual(found["regeneration"]["cause"], "surface_landing_touched")
+        self.assertIn("scripts/sitecustomize.py", found["regeneration"]["detail"])
         self.no_armour(record)
         self.assertFalse(marker.exists())
 
     def test_after_the_carried_out_ending_the_operators_regeneration_passes_the_next_preconditions(self) -> None:
         self.worked()
-        record = self.step()
+        refusal = generator_run.GeneratorRefused("surface_foreign_entry", "planted by the test")
+        with mock.patch.object(generator_run, "run", side_effect=refusal):
+            record = self.step()
         self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED)
         self.assertEqual(self.evidence(record)["code"], job.CARRY_BUNDLE_GATE_CODE)
         self.regenerate_as_the_operator("post-fix")

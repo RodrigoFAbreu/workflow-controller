@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-h4e3b",
+  "requirements": {
+    "R1": {
+      "description": "The Controller refuses to run the generator when the landing touched scripts/ or .workflow-manager/, or when the present scripts/ is not exactly the installed release's files (#334)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The generator runs with an interpreter configuration that loads nothing from the repository root, the user site, cached bytecode or the environment, and the tree is checked again after the run (#334)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R6": {
+      "description": "The generator is not started when a changed-file link or a context-list entry would make it copy a file from outside the repository into the bundle, for either role, and the sources are checked again after the run (#334)",
+      "checkpoint_ids": [
+        "CP1",
+        "CP3"
+      ]
+    },
+    "R3": {
+      "description": "A guarded success is followed by the Workflow's own reconcile, and every refusal ends at the existing regeneration gate naming its cause, in the run and in resume; abandon and the drift ending run no generator (#334)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "Each plant of the two findings, and each cause, is proved through the job to run nothing of the managed tree, and a clean landing hands the next stage's preconditions to the lane (#334)",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R5": {
+      "description": "The pages say what the Controller runs after a landing, under which checks, and how each refusal is cleared (#334)",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    }
+  }
+}

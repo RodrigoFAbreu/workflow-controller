@@ -25,7 +25,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from controller import (  # noqa: E402
-    codex_carry, codex_worker as cw, codex_worker_sandbox, harness, job, managed_repo, review, review_recorder, routing,
+    codex_carry, codex_worker as cw, generator_run, codex_worker_sandbox, harness, job, managed_repo, review, review_recorder, routing,
 )
 from controller import runtime as runtime_module  # noqa: E402
 from tests import fixtures  # noqa: E402
@@ -130,6 +130,10 @@ class ApplyCase(RoleCase):
 
     ROLE = routing.APPLY_PLAN_REVIEW
 
+    #: The guarded generator run (workflow-controller-h4e3b) refuses with this cause, so the tests of the carry, the
+    #: landing and the regeneration gate see the gate H4e3 built; the tests of the run itself set it to ``None``.
+    GUARD_CAUSE: str | None = "surface_foreign_entry"
+
     @classmethod
     def prepare(cls) -> None:
         raise NotImplementedError
@@ -148,6 +152,10 @@ class ApplyCase(RoleCase):
         self.options = self.routing_for({self.ROLE: self.entry()})
         self.enterContext(mock.patch.object(job, "CODEX_HOME_RESOLVER", lambda: self.operator))
         self.enterContext(mock.patch.object(cw, "launch_codex_worker", self.fake_launch))
+        if self.GUARD_CAUSE is not None:
+            def refuse(*args, **kw):
+                raise generator_run.GeneratorRefused(self.GUARD_CAUSE, "planted by the test")
+            self.guard = self.enterContext(mock.patch.object(generator_run, "run", refuse))
         self.ids = 0
         self.enterContext(mock.patch.object(job, "_new_job_id", self.next_id))
         self.after = None
@@ -348,7 +356,7 @@ class PlanRoleTest(PlanCase):
         self.assertIn(f"(1) run `{GATE_STEPS_PLAN.format(base=base)}`", text)
         self.assertIn("(2) take the next step", text)
         self.assertNotIn("git log -p", text)
-        self.assertTrue(text.startswith(job.CARRY_BUNDLE_GATE_CODE))
+        self.assertIn("did not regenerate the bundle (surface_foreign_entry: planted by the test)", text)
 
     def test_a_gate_record_passes_validate_record_and_resume_never_reconciles_it(self) -> None:
         self.worked()
@@ -972,6 +980,253 @@ class ImplRecoveryTest(ImplCase):
         self.assertEqual(ended["reconciliation_evidence"]["reason"], job.WORKFLOW_RELEASE_CHANGED_REASON)
         self.assertEqual(_git(self.root, "rev-parse", "HEAD").strip(), head)
         self.assertTrue(self.clone().exists())
+
+
+class GuardedRunMixin:
+    """The tests of the guarded generator run itself (workflow-controller-h4e3b, D6 and D7): the guard is the real one,
+    over the fixture's installed Workflow."""
+
+    GUARD_CAUSE = None
+
+    def assert_next_stage_passes(self, stage: str) -> None:
+        kind = "plan" if stage == "plan" else "implementation"
+        fixtures.run_workflow_python(self.root, f"""
+entry = ws.json.loads((Path.cwd() / "docs/ai-workflow/WORKFLOW_STATE.json").read_text())["work_items"]["wi-1"]
+manifest = Path.cwd() / fingerprint.resolve_bundle_dir(Path.cwd(), "wi-1", stage={kind!r}) / "MANIFEST.md"
+fingerprint.assert_local_generation_matches(Path.cwd(), manifest)
+if {kind!r} == "plan":
+    ws.validate_local_plan_review_preconditions_bound(Path.cwd(), entry)
+else:
+    ws.validate_local_implementation_review_preconditions(entry)
+    ws.verify_implementation_review_bundle(Path.cwd(), "wi-1")
+""")
+
+    def test_a_clean_landing_is_regenerated_and_the_lane_continues(self) -> None:
+        self.worked()
+        record = self.step()
+        self.assertEqual(record["status"], job.STATUS_FINISHED, record.get("reconciliation_evidence"))
+        self.assertEqual(record["regeneration"]["stage"], "finished")
+        self.assertEqual(record["regeneration"]["argument"], self.ARGUMENT)
+        self.assertEqual(record["regeneration"]["returncode"], 0)
+        self.assertFalse(record.get("human_gate_pending"))
+        self.assert_carry_ended(record)
+        self.assert_next_stage_passes(self.ARGUMENT)
+        self.assertTrue(job.validate_record(record, managed_repo=self.target, identity=FAKE_IDENTITY).valid)
+
+    def test_a_kill_during_the_run_is_run_again_by_resume(self) -> None:
+        self.worked()
+        with mock.patch.object(generator_run.workflow_contract, "run_in_place", side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                self.step()
+        record = self.only_record()
+        self.assertEqual(record["regeneration"]["stage"], "started")
+        self.assertNotIn(record["status"], job.TERMINAL_STATUSES)
+        (resumed,) = self.resume()
+        self.assertEqual(resumed["status"], job.STATUS_FINISHED, resumed.get("reconciliation_evidence"))
+        self.assertEqual(resumed["regeneration"]["stage"], "finished")
+        self.assert_next_stage_passes(self.ARGUMENT)
+
+    def test_a_record_at_finished_is_run_again_by_resume(self) -> None:
+        self.worked()
+        with self.kill_at(job, "_protocol_resolution", after=1), self.assertRaises(KeyboardInterrupt):
+            self.step()
+        record = self.only_record()
+        self.assertEqual(record["regeneration"]["stage"], "finished")
+        self.assertNotIn(record["status"], job.TERMINAL_STATUSES)
+        real = generator_run.workflow_contract.run_in_place
+        with mock.patch.object(generator_run.workflow_contract, "run_in_place", side_effect=real) as spy:
+            (resumed,) = self.resume()
+        self.assertEqual(spy.call_count, 1, "resume did not run the generator again")
+        self.assertEqual(resumed["status"], job.STATUS_FINISHED, resumed.get("reconciliation_evidence"))
+        self.assert_next_stage_passes(self.ARGUMENT)
+
+    def test_abandon_runs_no_generator(self) -> None:
+        self.worked()
+        with self.kill_at(job, "_protocol_resolution", after=1), self.assertRaises(KeyboardInterrupt):
+            self.step()
+        with mock.patch.object(generator_run, "run", side_effect=AssertionError("the generator ran")):
+            ended = self.abandon()
+        self.assertEqual(ended["status"], job.STATUS_FAILED)
+
+
+    def interrupted_publication(self, state: str) -> None:
+        """I1 of the h4e3b review: the generator replaces ``current/`` before the archive, so a kill between the two
+        leaves a manifest that is missing (``manifest_missing``) or already at the carried revision with the previous
+        archive still in place (``stale_archive``). The persisted regeneration stage, not the first reconcile, decides
+        that ``resume`` runs the generator again."""
+        self.worked()
+        real = generator_run.workflow_contract.run_in_place
+        archive = self.root / ITEM / "review-bundle.tar.gz"
+        before = archive.read_bytes() if archive.exists() else None
+        calls: list[list[str]] = []
+
+        def torn(root: Path, argv: list[str], **kwargs):
+            calls.append(argv)
+            if len(calls) > 1:
+                return real(root, argv, **kwargs)
+            real(root, argv, **kwargs)
+            if state == "manifest_missing":
+                (Path(root) / ITEM / "current" / "MANIFEST.md").unlink()
+            elif before is None:
+                archive.unlink(missing_ok=True)
+            else:
+                archive.write_bytes(before)
+            raise KeyboardInterrupt
+
+        with mock.patch.object(generator_run.workflow_contract, "run_in_place", side_effect=torn):
+            with self.assertRaises(KeyboardInterrupt):
+                self.step()
+            self.assertEqual(self.only_record()["regeneration"]["stage"], "started")
+            (resumed,) = self.resume()
+        self.assertEqual(len(calls), 2, f"resume did not regenerate a bundle torn as {state}")
+        self.assertEqual(resumed["status"], job.STATUS_FINISHED, resumed.get("reconciliation_evidence"))
+        self.assertEqual(resumed["regeneration"]["stage"], "finished")
+        self.assert_next_stage_passes(self.ARGUMENT)
+
+    def test_a_kill_between_the_current_and_the_archive_replacement_leaves_a_missing_manifest_that_resume_regenerates(
+            self) -> None:
+        self.interrupted_publication("manifest_missing")
+
+    def test_a_kill_between_the_current_and_the_archive_replacement_leaves_a_stale_archive_that_resume_regenerates(
+            self) -> None:
+        self.interrupted_publication("stale_archive")
+
+    def test_a_generator_that_survives_a_kill_is_ended_before_resume_runs_it_again(self) -> None:
+        # I2 of the h4e3b review: the generator carries a tag of its own, recorded before it starts, from its first instruction, so a run that
+        # outlives the Controller is found and ended by `resume` before the next run touches the bundle.
+        self.worked()
+        real_execute = generator_run.workflow_contract._execute_in_place
+        survivors: list[subprocess.Popen] = []
+        order: list[str] = []
+
+        def spawn_then_die(argv, *, cwd, env, timeout):
+            if survivors:
+                order.append("second run: survivor " + ("gone" if survivors[0].poll() is not None else "ALIVE"))
+                return real_execute(argv, cwd=cwd, env=env, timeout=timeout)
+            survivors.append(subprocess.Popen(
+                ["sleep", "60"], cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL, start_new_session=True))
+            raise KeyboardInterrupt
+
+        try:
+            with mock.patch.object(generator_run.workflow_contract, "_execute_in_place", side_effect=spawn_then_die):
+                with self.assertRaises(KeyboardInterrupt):
+                    self.step()
+                environ = Path(f"/proc/{survivors[0].pid}/environ").read_bytes().split(b"\0")
+                tags = [item.split(b"=", 1)[1].split(b":") for item in environ
+                        if item.startswith(b"WORKFLOW_CONTROLLER_OWNERSHIP=")]
+                recorded = self.only_record()["regeneration"]["ownership_tag"].encode()
+                self.assertTrue(tags and recorded in tags[0], (tags, recorded))
+                self.assertIsNone(survivors[0].poll())
+                (resumed,) = self.resume()
+        finally:
+            for survivor in survivors:
+                with contextlib.suppress(OSError):
+                    survivor.kill()
+                survivor.wait()
+        self.assertEqual(order, ["second run: survivor gone"])
+        self.assertEqual(resumed["status"], job.STATUS_FINISHED, resumed.get("reconciliation_evidence"))
+        self.assert_next_stage_passes(self.ARGUMENT)
+
+
+class PlanGuardedRunTest(GuardedRunMixin, PlanCase):
+    ARGUMENT = "plan"
+
+    def test_a_refusal_ends_at_the_gate_with_its_cause_and_runs_no_generator(self) -> None:
+        self.worked()
+        previous = self.after
+
+        def plant(clone: Path) -> None:
+            previous(clone)
+            (self.root / "scripts" / "sitecustomize.py").write_text("raise SystemExit('loaded')\n")
+
+        self.after = plant
+        with mock.patch.object(generator_run.workflow_contract, "run_in_place",
+                               side_effect=AssertionError("the generator ran")):
+            record = self.step()
+        self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED, record.get("reconciliation_evidence"))
+        found = self.evidence(record)
+        self.assertEqual(found["code"], job.CARRY_BUNDLE_GATE_CODE)
+        self.assertEqual(found["regeneration"]["cause"], "surface_foreign_entry")
+        self.assertEqual(record["regeneration"]["stage"], "refused")
+        text = record["human_gate_pending"]["what_is_required"]
+        self.assertIn("did not regenerate the bundle (surface_foreign_entry", text)
+        self.assertIn(f"scripts/prepare-ai-review.sh", text)
+        self.assertTrue(job.validate_record(record, managed_repo=self.target, identity=FAKE_IDENTITY).valid)
+
+    def test_a_staging_directory_left_by_a_cut_off_run_is_discarded(self) -> None:
+        self.worked()
+        with mock.patch.object(generator_run.workflow_contract, "run_in_place", side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                self.step()
+        (self.root / ITEM / "current.staging-leftover").mkdir()
+        (resumed,) = self.resume()
+        self.assertEqual(resumed["status"], job.STATUS_FINISHED, resumed.get("reconciliation_evidence"))
+        self.assert_next_stage_passes("plan")
+
+
+class ImplGuardedRunTest(GuardedRunMixin, ImplCase):
+    ARGUMENT = "post-fix"
+
+    def test_a_landing_that_touched_scripts_ends_at_the_gate(self) -> None:
+        self.worked()
+        previous = self.after
+
+        def land_a_script(clone: Path) -> None:
+            previous(clone)
+            fixtures.run_workflow_python(clone, """
+import subprocess
+(Path.cwd() / "scripts" / "sitecustomize.py").write_text("raise SystemExit('loaded')\\n")
+subprocess.run(["git", "add", "-f", "scripts/sitecustomize.py"], check=True)
+subprocess.run(["git", "-c", "user.name=W", "-c", "user.email=w@example.invalid", "commit", "-m", "plant"], check=True)
+""")
+
+        self.after = land_a_script
+        record = self.step()
+        self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED, record.get("reconciliation_evidence"))
+        self.assertEqual(self.evidence(record)["regeneration"]["cause"], "surface_landing_touched")
+        self.assertIn("scripts/sitecustomize.py", self.evidence(record)["regeneration"]["detail"])
+
+    def test_a_kill_in_the_middle_of_a_bundle_rewrite_is_run_again_by_resume(self) -> None:
+        # D7: `post-fix` rewrites its generation in place, so a run cut off part-way leaves a torn bundle; `resume`
+        # runs the guard and the generator again and ends with a complete bundle that verifies.
+        self.worked()
+        real = generator_run.workflow_contract.run_in_place
+        calls: list[list[str]] = []
+
+        seen: list[object] = []
+
+        def torn(root: Path, argv: list[str], **kwargs):
+            calls.append(argv)
+            if len(calls) == 1:
+                try:
+                    completed = real(root, argv, **kwargs)
+                    seen.append(completed.returncode)
+                    bundle = Path(root) / ITEM / "current"
+                    (bundle / "MANIFEST.md").unlink()
+                    for path in sorted((bundle / "files").rglob("*")):
+                        if path.is_file():
+                            path.write_bytes(path.read_bytes()[: len(path.read_bytes()) // 2])
+                except Exception as exc:  # recorded for the assertion below, then re-raised
+                    seen.append(repr(exc))
+                    raise
+                raise KeyboardInterrupt
+            return real(root, argv, **kwargs)
+
+        with mock.patch.object(generator_run.workflow_contract, "run_in_place", side_effect=torn):
+            try:
+                ended = self.step()
+            except KeyboardInterrupt:
+                ended = None
+            record = self.only_record()
+            self.assertIsNone(ended, (len(calls), seen, record.get("status"), record.get("regeneration"),
+                                      record.get("reconciliation_evidence")))
+            self.assertEqual(record["regeneration"]["stage"], "started")
+            (resumed,) = self.resume()
+        self.assertEqual(len(calls), 2, "resume did not run the generator again")
+        self.assertEqual(resumed["status"], job.STATUS_FINISHED, resumed.get("reconciliation_evidence"))
+        self.assertEqual(resumed["regeneration"]["stage"], "finished")
+        self.assert_next_stage_passes(self.ARGUMENT)
 
 
 class RouteTest(unittest.TestCase):

@@ -524,35 +524,72 @@ so the job *carries* a closed set of files into the Codex clone and back (`contr
 - **The endings.** After the carry out (and, for the implementation role, after the existing landing of the worker's commits)
   the Controller asks the Workflow's `reconcile`. A `FINISHED` answer, and the plan role's one expected `invalid` answer (the
   bundle is stale because the revision moved), end `GATE_BLOCKED` at the Controller's own gate
-  `carry_bundle_regeneration_pending`, which names the steps the operator runs. Any other answer is the resolution's own
-  ending. The gate is the Controller's, not a refusal, and is not one of the carry causes.
+  `carry_bundle_regeneration_pending` unless the guarded generator run
+  ([below](#what-the-controller-runs-after-a-landing)) regenerated the bundle first; the gate then names the cause and the steps
+  the operator runs. Any other answer is the resolution's own ending. The gate is the Controller's, not a refusal, and is not
+  one of the carry causes.
 - **Recovery.** The record's `codex_carry` block holds the stage (`preparing`, `carried_in`, `worker_ran`, `out`, `done`).
   `resume`, `--abandon`, a drifted Workflow release and the post-spawn exception handler recover through the carry: a carry out
   that was killed at a member boundary is finished by `resume`; `--abandon` and a drifted release write nothing into the managed
   repository and keep the clone when the worker ran.
 
-##### What the Controller does not do after a landing
+##### What the Controller runs after a landing
 
-After the implementation role's commits land and after either role's members are carried out, the Controller:
+After the implementation role's commits land and after either role's members are carried out, the Controller runs **one**
+script of the managed repository: `scripts/prepare-ai-review.sh <base commit> <stage> <work item>`, from the repository root,
+with stage `plan` for the plan role and `post-fix` for the implementation role (the two invocations the gate used to print).
+It runs it only when it can show that nothing the worker could have written is on what the interpreter loads or what the
+generator copies, and it never runs anything else of the managed tree (no other script, module, hook or test).
 
-- does not run `scripts/prepare-ai-review.sh`, or any other script, module, generator, hook or test of the managed repository's
-  working tree;
-- does not regenerate, repair, withdraw or bind the review bundle under `.ai-review/<work item>/current/`: it writes no
-  generated file there, only the role's carried-out author-written inputs;
-- does not commit, amend or write a generation record in the managed repository, beyond landing the worker's own commits and
-  the commit of a pending feedback entry made before the clone;
-- does not run the next stage (`/review-plan`, `/review-implementation`, an approval).
-
-The only Workflow code it runs after a landing is what it already runs on every step: the Workflow's queries, `reconcile` and
-the recorder driver from a private copy of the installed release's verified bytes, never the managed tree's copies. Regenerating
-the bundle is left to you, or to a Claude session you start, through the steps the gate prints. After an implementation-role
-landing, read the landed range (`git log -p <carry base>..<landed head>`, which the gate names) before regenerating: the
-generator executes `scripts/` and any module the landing added to its import path. Running the generator safely is
-[H4e3b](../items/workflow-controller-h4e3b.md).
+- **The checks before the run** (`controller/generator_run.py`):
+  1. *The landing.* The implementation role's landed range (`carry base..landed head`, read as name-status records with renames
+     split) may touch nothing under `scripts/` or `.workflow-manager/`, whatever the status letter. A range that cannot be read,
+     or a head that is not a descendant of the base, is refused the same way. The plan role makes no commit, so the tree check
+     is its whole guard. For the implementation role this check runs *first*, before any Workflow query of the job (the
+     `reconcile` after the landing included): the queries check `scripts/` against the installation record, a committed file
+     the landing may have edited together with a script, so a refused landing ends at the gate with no query run.
+  2. *The tree.* Every file of `scripts/` that `.workflow-manager/installation.json` records must be a regular file whose
+     digest equals the record's, and `scripts/prepare-ai-review.sh` must be one of them; the directory may hold no other entry
+     than those, `__pycache__` and names starting with `.` (a `sitecustomize.py`, a module that shadows the standard library, a
+     sourceless `.pyc`, an extension module and a package directory are all refused). The landing check and the tree check are
+     both needed: the record is a committed file, so a landing that edits a script and its digest together passes the tree check
+     alone.
+  3. *The copy sources.* The generator copies the changed paths and every line of the context list into the bundle and its
+     archive. Each changed path (tracked, and untracked as the generator will see it) must be a regular file with no link among
+     its parent directories and must resolve inside the repository; each context-list line must be relative, contain no `..`
+     and resolve inside the repository. A link of any target is refused, because a review bundle never needs one.
+- **The environment.** The generator runs with `PYTHONSAFEPATH=1`, `PYTHONNOUSERSITE=1`, `PYTHONDONTWRITEBYTECODE=1`, a private
+  empty `PYTHONPYCACHEPREFIX` (no cached bytecode is read, forged or not) and a private empty `PYTHONPATH` (so the generator's
+  own `scripts/:$PYTHONPATH` has no empty element, which Python would read as the working directory). Every other `PYTHON*`
+  variable, `BASH_ENV` and `ENV` are removed, and a private `bin/` first on `PATH` holds one `python3` link to the Controller's
+  own interpreter. Git runs with hooks, filters, fsmonitor and transports off. The run is bounded to 600 seconds and keeps the
+  last 4 KiB of each stream, withheld whole if the stream holds a private-key armour line or the kept part a closing one.
+- **After the run** the tree and the copy sources are checked again; one that no longer passes ends the run, because the
+  generator is the one process that ran with the managed tree writable under it.
+- **The endings.** A run that exits `0` and passes the second check is followed by a second `reconcile`, and its answer is the
+  ending (`FINISHED` is `FINISHED`; the plan role's second `invalid` is `FAILED` `reconcile_invalid`, with no gate, because the
+  bundle was just regenerated). Any refusal or failure ends at the same gate as before,
+  `carry_bundle_regeneration_pending`, with `reconciliation_evidence.regeneration = {cause, detail}` and the cause leading the
+  gate text; the steps in the text are the ones you run by hand. The causes and their remedies are in
+  [common problems](../common-problems.md#a-routed-apply-stopped-at-carry_bundle_regeneration_pending).
+- **Recovery.** The record's `regeneration` block holds the stage (`checked`, `started`, `finished`). `resume` of a run cut off
+  at any of them runs the checks and the generator again from the start, so the bundle is regenerated once more before the
+  second `reconcile`; `--abandon` and a drifted release run no generator. The stage, not the first `reconcile`, decides
+  that: the generator replaces `current/` before its archive, so a kill between the two leaves a manifest that is missing
+  or already at the carried revision, the first `reconcile` calls it invalid, and `resume` still regenerates (a second
+  invalid `reconcile` after that run is the ending, as for a first run). The generator and everything it starts carry a tag of
+  their own, recorded in the `regeneration` block before the run starts, so one that outlives a killed Controller is found by `resume` and
+  ended, with the previous worker's group, before the generator runs again. A refusal is not a cut-off run: its job is
+  `GATE_BLOCKED`, which `resume` reports and does not retry, so after a refusal you run the generator by hand.
+- **Still not done:** the Controller runs no other script, module, hook or test of the managed tree, commits, amends and
+  writes no generation record beyond what the generator itself writes under `.ai-review/`, and it does not run the next
+  stage (`/review-plan`, `/review-implementation`, an approval).
 
 The routed path is proved adversarially through the job in `tests/test_codex_apply_safety.py` (one test per cause, links,
 hardlinks and special files, writes outside the set, a forged state file, hooks, crafted refs, and a planted
-`sitecustomize.py` or `secrets.py` that runs nothing) and its endings in `tests/test_job_codex_apply.py`.
+`sitecustomize.py` or `secrets.py` that runs nothing) and its endings in `tests/test_job_codex_apply.py`; the guarded generator
+run is proved in `tests/test_generator_run.py` (the checks) and `tests/test_codex_apply_regeneration.py` (every plant and every
+cause through the job, both roles).
 
 **The live proof** is opt-in and operator-run: `CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest tests.test_codex_apply_live -v`
 (one real Codex turn per role, skipped on `CI`; it asserts the gate, the clone gone, what the managed repository holds and the

@@ -59,6 +59,7 @@ import dataclasses
 import hashlib
 import json
 import os
+import signal
 import stat
 import subprocess
 import sys
@@ -108,6 +109,11 @@ _PRIVATE_DIR_PREFIX = "workflow-controller-query-"
 #: target's index.
 _PRIVATE_SCRIPTS_DIR = "scripts"
 _PRIVATE_INDEX = "index"
+#: ``run_in_place`` (H4e3b, D4): the empty ``PYTHONPYCACHEPREFIX`` directory, the empty ``PYTHONPATH`` directory and the
+#: directory that holds the one ``python3`` symlink, all under the run's private directory.
+_PRIVATE_PYCACHE = "pycache"
+_PRIVATE_PYPATH = "pypath"
+_PRIVATE_BIN = "bin"
 _OUTPUT_TAIL_CHARS = 4000
 
 #: Configuration every Git command of a query runs under, as command-scope
@@ -549,6 +555,115 @@ def run_in_private_copy(
     except OSError as exc:
         raise _private_copy_failed(context, "remove the private directory", exc) from exc
     return completed
+
+
+#: The environment variable carrying a process's ownership tags (``controller.anchor.OWNERSHIP_VAR``, which this module,
+#: earlier in the dependency order, cannot import; ``test_workflow_contract`` holds the two equal).
+_OWNERSHIP_VAR = "WORKFLOW_CONTROLLER_OWNERSHIP"
+
+
+def run_in_place(
+    root: Path, argv: list[str], *, timeout: float, context: dict, ownership_tag: str | None = None,
+) -> subprocess.CompletedProcess:
+    """Run ``argv`` from ``root``, in the target itself, with an interpreter configuration that loads nothing the
+    target could have written (``workflow-controller-h4e3b``, D4). The caller has already verified the files the
+    interpreter will load (``controller.generator_run``); this entry only gives it nothing more.
+
+    The environment is the one :func:`_git_isolation` builds with ``real_index=True`` (the target's own index, every
+    hook, filter and fsmonitor switched off), and then: every ``PYTHON*`` variable, ``BASH_ENV`` and ``ENV`` removed;
+    five pins set: ``PYTHONSAFEPATH=1`` (neither the working directory nor a script's directory is put on
+    ``sys.path``), ``PYTHONNOUSERSITE=1``, ``PYTHONDONTWRITEBYTECODE=1``, ``PYTHONPYCACHEPREFIX`` an empty private
+    directory (no cached bytecode, forged or not, is read) and ``PYTHONPATH`` a second, empty, non-empty-valued private
+    directory (with no ``PYTHONPATH`` a caller's ``"$ROOT/scripts:${PYTHONPATH:-}"`` ends in an empty entry, which
+    CPython reads as the working directory); and a private ``bin/`` first on ``PATH`` holding one symlink, ``python3``,
+    to ``sys.executable``. The run starts in its own session and a timeout ends the whole group. ``ownership_tag``,
+    when given, is appended to the run's ``WORKFLOW_CONTROLLER_OWNERSHIP`` from the first instruction, so a run that
+    outlives a killed Controller is found by the tag the job's record already carries and ended before a recovery
+    touches what it writes (I2 of the h4e3b review). ``context`` carries
+    ``query``, the operation's name in messages, and is updated as :func:`run_in_private_copy`'s is. Raises only
+    :class:`WorkflowQueryError`."""
+    try:
+        scratch = tempfile.TemporaryDirectory(prefix=_PRIVATE_DIR_PREFIX)
+    except OSError as exc:
+        raise _private_copy_failed(context, "create the private directory", exc) from exc
+    try:
+        completed = _prepare_and_execute_in_place(Path(scratch.name), argv, root=root, timeout=timeout,
+                                                  context=context, ownership_tag=ownership_tag)
+    except BaseException as exc:
+        try:
+            scratch.cleanup()
+        except OSError as removal:
+            if isinstance(exc, WorkflowQueryError):
+                exc.evidence["private_dir_removal_error"] = str(removal)
+        raise
+    try:
+        scratch.cleanup()
+    except OSError as exc:
+        raise _private_copy_failed(context, "remove the private directory", exc) from exc
+    return completed
+
+
+def _prepare_and_execute_in_place(
+    private_dir: Path, argv: list[str], *, root: Path, timeout: float, context: dict,
+    ownership_tag: str | None = None,
+) -> subprocess.CompletedProcess:
+    deadline = time.monotonic() + timeout
+    try:
+        for name in (_PRIVATE_PYCACHE, _PRIVATE_PYPATH, _PRIVATE_BIN):
+            os.mkdir(private_dir / name)
+        os.symlink(sys.executable, private_dir / _PRIVATE_BIN / "python3")
+    except OSError as exc:
+        raise _private_copy_failed(context, "prepare the private interpreter directories", exc) from exc
+    env = _git_isolation(root, private_dir, context=context, timeout=timeout, deadline=deadline, real_index=True)
+    env = interpreter_environment(env, private_dir)
+    if ownership_tag:
+        inherited = env.get(_OWNERSHIP_VAR)
+        env[_OWNERSHIP_VAR] = f"{inherited}:{ownership_tag}" if inherited else ownership_tag
+    context["argv"] = argv
+    try:
+        completed = _execute_in_place(argv, cwd=root, env=env, timeout=_remaining(deadline))
+    except subprocess.TimeoutExpired as exc:
+        raise _timed_out(context, timeout, exc) from exc
+    except (OSError, ValueError) as exc:
+        raise WorkflowQueryError(
+            f"{context['query']} could not be started: {exc}",
+            evidence={**context, "reason": "query_launch_failed", "error": str(exc)},
+        ) from exc
+    context.update(returncode=completed.returncode, stdout_tail=_tail(completed.stdout),
+                   stderr_tail=_tail(completed.stderr))
+    _refuse_filters_git_would_run(private_dir, context)
+    return completed
+
+
+def interpreter_environment(env: Mapping[str, str], private_dir: Path) -> dict[str, str]:
+    """``env`` with the interpreter configuration of :func:`run_in_place` (D4); public so a test can read the exact
+    mapping a run is given."""
+    clean = {key: value for key, value in env.items()
+             if not key.startswith("PYTHON") and key not in ("BASH_ENV", "ENV")}
+    clean.update(
+        PYTHONSAFEPATH="1", PYTHONNOUSERSITE="1", PYTHONDONTWRITEBYTECODE="1",
+        PYTHONPYCACHEPREFIX=str(private_dir / _PRIVATE_PYCACHE), PYTHONPATH=str(private_dir / _PRIVATE_PYPATH),
+    )
+    clean["PATH"] = os.pathsep.join(filter(None, [str(private_dir / _PRIVATE_BIN), clean.get("PATH", "")]))
+    return clean
+
+
+def _execute_in_place(argv: list[str], *, cwd: Path, env: dict[str, str], timeout: float,
+                      ) -> subprocess.CompletedProcess:
+    """Start ``argv`` in its own session; on a timeout end its whole group, then raise ``TimeoutExpired`` with what
+    it had written. The private runner hook of :func:`run_in_place`: a test replaces only this function."""
+    with subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE, start_new_session=True) as proc:
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except OSError:
+                proc.kill()
+            stdout, stderr = proc.communicate()
+            raise subprocess.TimeoutExpired(argv, timeout, output=stdout, stderr=stderr) from None
+        return subprocess.CompletedProcess(argv, proc.returncode, stdout, stderr)
 
 
 def _verified_sources(root: Path, contract: WorkflowContract, context: dict) -> dict[str, bytes]:

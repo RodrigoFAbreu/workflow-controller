@@ -66,13 +66,23 @@ A refusal after the worker ran keeps the clone; remove it with `rm -rf` of the e
 
 ## A routed apply stopped at `carry_bundle_regeneration_pending`
 
-The Codex apply succeeded and its files are in the managed repository, but the Controller regenerates no review bundle and runs no script of the managed repository, so the lane stops at its own gate (the job is `GATE_BLOCKED`). This is expected, not a failure. In the managed repository, in the order the gate prints:
+The Codex apply succeeded and its files are in the managed repository, but the Controller did not regenerate the review bundle, so the lane stops at its own gate (the job is `GATE_BLOCKED`). The Controller runs the managed `scripts/prepare-ai-review.sh` itself when its checks pass ([what it runs](guide/harnesses.md#what-the-controller-runs-after-a-landing)); this gate now means one of its checks refused, or the generator failed. The gate text and `reconciliation_evidence.regeneration` name the `cause` and the `detail`:
 
-1. After an **implementation-role** landing, read the landed range first (`git log -p <carry base>..<landed head>`, both in `reconciliation_evidence`): the generator you run next executes `scripts/` and any module the landing added to its import path.
-2. Run the generator the gate names: `scripts/prepare-ai-review.sh <base> plan <work item>` for the plan role, `scripts/prepare-ai-review.sh <base> post-fix <work item>` for the implementation role.
-3. Take the next step (the gate prints the command), for example `controller resume` or the next run.
+- `surface_landing_touched`: the implementation role's landed range touched `scripts/` or `.workflow-manager/` (the detail names each path and status letter). Read the range (`git log -p <carry base>..<landed head>`, both in `reconciliation_evidence`). If the change is wrong, revert it; if it is intended, it is the Workflow's to update (`workflow-manager`), not a worker's.
+- `surface_script_modified`: a managed file of `scripts/` is not the installed release's bytes. Restore it (`workflow-manager verify .` and the update path say how) and run again.
+- `surface_foreign_entry`: `scripts/` holds a file or directory the installed release did not put there (a `sitecustomize.py`, a module named like a standard-library one, a `.pyc`, a package). Look at it, then remove it.
+- `surface_unreadable`: the installation record or `scripts/` could not be read or digested. Repair the record or the directory, then run again.
+- `generator_not_managed`: the installation record is absent or has no managed map, or `scripts/prepare-ai-review.sh` is not among the installed release's files. Reinstall or update the Workflow.
+- `git_not_isolated`: the Controller could not give the generator an isolated Git (hooks, filters, fsmonitor and transports off), so it ran nothing. The detail carries the Controller's message; fix the Git or the repository configuration it names.
+- `generator_failed` and `generator_timed_out`: the generator exited non-zero or ran past 600 seconds. The detail holds the last 4 KiB of its output. The generator's own refusals (a missing input, a stale declaration) are yours to fix; then run the steps below.
+- `copy_source_unsafe`: a changed path or a context-list line is absolute, has a `..`, is a link, or resolves outside the repository (the detail names the list or diff, the path and the reason). Remove the line or the link; nothing was copied.
+- `surface_changed_during_run`: the tree or a copy source no longer passed after the generator ran. Do not trust the bundle: remove `.ai-review/<work item>/current/` and the archive, find what changed, then run again.
 
-Running the generator safely without a person is [H4e3b](items/workflow-controller-h4e3b.md); until then it is yours to run.
+After you have cleared the cause, in the managed repository:
+
+1. After an **implementation-role** landing, read the landed range first (`git log -p <carry base>..<landed head>`): the generator executes `scripts/`.
+2. Run the generator the gate names: `scripts/prepare-ai-review.sh <base> plan <work item>` for the plan role, `scripts/prepare-ai-review.sh <base> post-fix <work item>` for the implementation role. Or let the Controller do it: `workflow-controller resume <repo>` runs the checks and the generator again.
+3. Take the next step (the gate prints the command).
 
 ## The command exited 45 and nothing was launched
 

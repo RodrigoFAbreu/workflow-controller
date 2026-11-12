@@ -8,7 +8,7 @@ Run `apply-plan-review` and `apply-implementation-review` on Codex, with the car
 
 `apply-plan-review` edits plan files that are uncommitted (intent-to-add), and a clone sees only committed state, so how those edits reach a Codex clone and leave it again is the question this item settles. `apply-implementation-review` commits work, which the Controller lands fast-forward under the H4e rules. The Controller still writes the stage ledger, state and feedback itself, as in H4e2.
 
-The one mechanism is the carry in and out and the recovery of the two apply roles. The Controller stops after the landing. It never runs the managed repository's `scripts/prepare-ai-review.sh` or any other generator of that repository; regenerating the review bundle is left to the existing Claude path or the operator. Running the generator safely is [H4e3b](workflow-controller-h4e3b.md).
+The one mechanism is the carry in and out and the recovery of the two apply roles. The Controller stops after the landing. It never runs the managed repository's `scripts/prepare-ai-review.sh` or any other generator of that repository; regenerating the review bundle is left to the existing Claude path or the operator. Running the generator safely is [H4e3b](workflow-controller-h4e3b.md), which has since been built: the Controller now runs it under checks ([what it runs](../guide/harnesses.md#what-the-controller-runs-after-a-landing)), and stops at the gate only when a check refuses.
 
 ## Out of scope
 

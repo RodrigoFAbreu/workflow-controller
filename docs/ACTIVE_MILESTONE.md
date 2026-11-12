@@ -601,7 +601,7 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 ## Functional review checklist
 
 Item `workflow-controller-h4e3b` (H4e3b, issue [#334](https://github.com/RodrigoFAbreu/workflow-controller/issues/334)),
-implementation revision 4, plan `docs/ai-workflow/CONTROLLER_H4E3B_PLAN.md` (revision 4), base commit `ea271e1`. The item lets the
+implementation revision 7, plan `docs/ai-workflow/CONTROLLER_H4E3B_PLAN.md` (revision 4), base commit `ea271e1`. The item lets the
 Controller run the managed repository's review-bundle generator after a Codex apply role's landing, only when it shows that nothing
 the worker could have written is on what the interpreter loads or what the generator copies; otherwise the lane stops at
 `carry_bundle_regeneration_pending`, now naming the cause. Every flow runs offline: no network, no real `gh` (the stand-in refuses
@@ -624,8 +624,10 @@ Run `python3 -B -m unittest tests.test_job_codex_apply 2>&1 | tail -4`.
 Expected: `OK`. `PlanGuardedRunTest` and `ImplGuardedRunTest` cover a clean landing (regenerated, then a second reconcile), a
 refusal (gate `carry_bundle_regeneration_pending` with the cause leading the text and `reconciliation_evidence.regeneration =
 {cause, detail}`), a landed `scripts/` change, a kill at `started` and at `finished` (`resume` runs the guard and generator
-again), a kill in the middle of a `post-fix` bundle rewrite (`resume` ends with a bundle that verifies) and `abandon` (no
-generator).
+again), a kill in the middle of a `post-fix` bundle rewrite (`resume` ends with a bundle that verifies), a kill between the
+`current/` and the archive replacement (a missing manifest, or a stale archive: `resume` regenerates either way, review round 6),
+a generator that outlives a killed Controller (carries its own recorded ownership tag; `resume` ends it before running the
+generator again) and `abandon` (no generator).
 
 **Flow 3: Adversarial plants through `execute_step`.**
 Run `python3 -B -m unittest tests.test_codex_apply_regeneration tests.test_codex_apply_safety 2>&1 | tail -4`.
@@ -646,7 +648,9 @@ Run `python3 -B tools/harness_table.py --check; echo rc=$?` and `python3 -B tool
 `carry_bundle_regeneration_pending`" of `docs/common-problems.md` (each cause with its remedy), and
 `docs/items/workflow-controller-h4e3b.md`.
 Expected: `rc=0` each. The pages say what the Controller runs, each cause and its remedy, that a refusal needs a manual
-regeneration, and that the implementation role's landing check runs before any post-landing Workflow query (the `reconcile` and
+regeneration, that `resume` regenerates after a kill between the `current/` and archive replacements and ends a surviving
+generator (found by its own recorded tag) first, that a generator failure's gate detail is a short excerpt with the bounded tails in the
+record's `regeneration` block, and that the implementation role's landing check runs before any post-landing Workflow query (the `reconcile` and
 `resume` included), so a refused landing runs no query. The pages mention no known gap and no `expectedFailure` test.
 
 **Known limitations / out of scope.** There is no known gap in the landing check's order (closed in review round 1, `d3111b3`). The live Codex proof is not run (it spends
@@ -655,6 +659,8 @@ flow: three `tests.test_fake_codex_contract` tests fail in a sandbox that reads 
 `test_functional_sandbox` / the mid-rewrite kill test have known timing flakes under load (each passes alone and on replay).
 
 **Functional-review round 1 (automated tester, head da80395).** Flows 1 to 4 passed. Flow 5 was reported as a defect, but it was a checklist defect, not a product defect: the checklist and this narrative still described the CP3-era known gap (an `expectedFailure` test), which review round 1 closed in `d3111b3`, so the tester compared accurate pages with a stale expectation. `09c87cf` changed the pages to match the checklist; it is reverted, and the pages again say the landing check runs before any post-landing query. The checklist (flows 3 and 5, known limitations) and this narrative are corrected. No product code changed; no remediation child. Re-test: flow 5 (read the two pages against the corrected expectation; run both checkers).
+
+**Functional-review preparation, revision 7.** Review rounds 5 and 6 changed code after round 1: the landing-check order and checklist were restored (round 5), and round 6 made `resume` recover a bundle publication cut off between the `current/` and archive replacements and end a generator that survived a killed Controller (`job.py`, `generator_run.py`, `workflow_contract.py`). Flows 2 and 5 now name those cases; re-run all five flows against this head.
 
 ## Next action
 

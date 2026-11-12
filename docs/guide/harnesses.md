@@ -576,76 +576,8 @@ generator copies, and it never runs anything else of the managed tree (no other 
   at any of them runs the checks and the generator again from the start, so the bundle is regenerated once more before the
   second `reconcile`; `--abandon` and a drifted release run no generator.
 - **Still not done:** the Controller runs no other script, module, hook or test of the managed tree, commits, amends and
-  writes no generation record beyond what the generator itself writes under `.ai-review/`, and it does not run the next stage (`/review-plan`, `/review-implementation`, an approval).
-
-The routed path is proved adversarially through the job in `tests/test_codex_review_safety.py`
-(credentials, symlinks and special files, submodules, hooks, crafted refs, forged headers; one test per cause of the deny set).
-
-**The live proof** is opt-in and operator-run: `CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest tests.test_codex_review_live -v`
-(one real Codex turn per stage, skipped on `CI`). Its measured result belongs in `tests/harness_contract/codex/review_role.txt`.
-**It has not been run yet** (it spends the operator's Codex usage), so that file does not exist and no figure below is measured.
-
-#### What a Codex review round costs
-
-One local review round per stage. A figure is filled in only from the live proof's measurement, never estimated; until the
-operator runs the proof every measured cell reads `not measured` (reason: the live proof was not run, so no token count
-exists). Costs are API list-price equivalents at `controller/prices.json` (read 2026-11-03), not what a subscription charges.
-
-| stage | input tokens | cached-input tokens | output tokens | cost at `gpt-6.1-sol` rates | same tokens at the Claude reviewer's rates | worst case of a loop (6 local rounds) | percent of the Codex weekly reading for one job |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| plan | not measured | not measured | not measured | not measured | not measured | not measured | not measured |
-| implementation | not measured | not measured | not measured | not measured | not measured | not measured | not measured |
-
-The formulas, which need only the measured tokens: round cost = `input x input rate + cached-input x cache_read rate +
-output x output rate`, with the rates of `gpt-6.1-sol` (2.0, 0.1 and 10.0 USD per million tokens) or of the Claude model
-the review is routed to (`claude-opus-5-5`: 4.0, 0.2 and 20.0). The worst case of a loop is the round cost times the local
-round cap (6 by default; the `review.local_round_cap` setting or `--review-local-round-cap` sets it). The weekly hold applies to the Codex provider's own
-reading (`usage.PROVIDER_CODEX`, held by `usage.codex_weekly_pause_at_percent`, 95 by default): a loop pauses when that
-reading reaches the cap, so the number of rounds before the hold is `(cap - reading now) / (percent of one job)`. The
-percent of one job comes from the usage reading before and after the live run, and reads `not measured` where the proof had
-no reading.
-
-#### Routing the two apply roles to Codex
-
-H4e3 ([#334](https://github.com/RodrigoFAbreu/workflow-controller/issues/334)) lets routing select Codex for
-`apply-plan-review` and `apply-implementation-review`. They run as the adapter role `local-applier`, which both adapters
-declare, so `--role-harness apply-plan-review=codex` (or a routing config or a fallback chain naming `codex`) is accepted with
-a model and an effort the adapter lists. `codex` is still refused for every other worker role. **The default is unchanged**:
-with no routing config, setting or `--role-harness`, both roles run on `claude-code` and every Claude job record is as before.
-
-A review applier edits files that a clone made from committed state does not hold (the plan role's plan edits are uncommitted),
-so the job *carries* a closed set of files into the Codex clone and back (`controller/codex_carry.py`):
-
-- **The set.** The plan role's set is derived from the managed state: the plan, the registry, the mapping and the artifacts
-  files of the work item, and the state file. The implementation role has none: the Controller first commits a pending feedback
-  entry through the Workflow's own writer, so the clone starts from a clean, committed state. Both roles also get the item's
-  `feedback/`, `plan-inputs/` and `current/` directories as read-only inputs. What is carried back is the role's
-  author-written inputs only: for the plan role `plan-inputs/REVIEW_REQUEST.md`, `TEST_RESULTS.md` and `CONTEXT_FILES.txt`; for
-  the implementation role `current/REVIEW_REQUEST.md`, `IMPLEMENTATION_SUMMARY.md`, `TEST_RESULTS.md`, `CONTEXT_FILES.txt` and
-  `PLAN.md`. Generated files (the manifest, the bundle, `.pin/`, staging leftovers) are discarded, never carried back.
-- **The guards.** Before the launch a dirty path outside the set refuses the job. Every member is read without following a link
-  and refused if it is a symbolic link, a special file, a submodule, outside the repository (a path whose parent directory is a link out is outside), over the size bound or holds a
-  private-key armour line; a hardlink is read as bytes, and a member is always written by a rename, never through a link. After the run, before anything is written, the clone is checked: no commit, branch or tag made by the plan role, no
-  change to the clone's `.git`, the same intent-to-add set, nothing changed outside the set, and the managed repository's members
-  and this work item's own entry of the state file not changed by someone else meanwhile (another item's concurrent entry is
-  deliberately kept). Only the changed members are written, atomically, with the state file
-  last and only this work item's entry replaced, under the Workflow's own state lock (another item's concurrent entry is kept).
-- **The refusals.** One cause each, listed with their remedies in
-  [common problems](../common-problems.md#a-codex-apply-was-refused-carry_): `carry_foreign_dirt`,
-  `carry_commit_pending_failed`, `carry_member_refused`, `carry_unexpected_commit`, `clone_git_changed`,
-  `carry_index_changed`, `carry_out_of_set`, `carry_managed_changed`, `carry_state_foreign` and `carry_clone_gone`. A refusal
-  after the worker ran is `FAILED` with the clone kept and named.
-- **The endings.** After the carry out (and, for the implementation role, after the existing landing of the worker's commits)
-  the Controller asks the Workflow's `reconcile`. A `FINISHED` answer, and the plan role's one expected `invalid` answer (the
-  bundle is stale because the revision moved), end `GATE_BLOCKED` at the Controller's own gate
-  `carry_bundle_regeneration_pending` unless the guarded generator run
-  ([below](#what-the-controller-runs-after-a-landing)) regenerated the bundle first; the gate then names the cause and the steps
-  the operator runs. Any other answer is the resolution's own ending. The gate is the Controller's, not a refusal, and is not
-  one of the carry causes.
-- **Recovery.** The record's `codex_carry` block holds the stage (`preparing`, `carried_in`, `worker_ran`, `out`, `done`).
-  `resume`, `--abandon`, a drifted Workflow release and the post-spawn exception handler recover through the carry: a carry out
-  that was killed at a member boundary is finished by `resume`; `--abandon` and a drifted release write nothing into the managed
-  repository and keep the clone when the worker ran.
+  writes no generation record beyond what the generator itself writes under `.ai-review/`, and it does not run the next
+  stage (`/review-plan`, `/review-implementation`, an approval).
 
 The routed path is proved adversarially through the job in `tests/test_codex_apply_safety.py` (one test per cause, links,
 hardlinks and special files, writes outside the set, a forged state file, hooks, crafted refs, and a planted

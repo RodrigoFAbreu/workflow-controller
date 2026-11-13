@@ -326,7 +326,7 @@ def _check_lagging_worktrees(root: Path, work_item_id: str, witness: dict | None
                                   f"the repository's worktrees cannot be listed ({exc.message})",
                                   evidence=dict(exc.evidence)) from exc
     here = os.path.realpath(root)
-    views: list[tuple[str, str, str, list[dict], Any, bool]] = []  # path, version, where, history, base, lagging
+    present: list[tuple[str, str, bool]] = []  # path, version, lagging
     for path in paths:
         if not os.path.isdir(path):
             continue
@@ -339,11 +339,21 @@ def _check_lagging_worktrees(root: Path, work_item_id: str, witness: dict | None
             with contextlib.suppress(UnicodeDecodeError, ValueError):
                 installed = json.loads(record)
                 version = installed.get("workflow_version") if isinstance(installed, dict) else None
-        lagging = os.path.realpath(path) != here and _release_lags(version)
+        present.append((path, str(version), os.path.realpath(path) != here and _release_lags(version)))
+    if not any(lagging for *_, lagging in present):
+        return  # nothing lags: no other worktree's state is read, as the Workflow reads none
+    # path, version, where, history, base, lagging: a lagging worktree's states always; a non-lagging one's only to
+    # build ``derivable`` while the witness is absent.
+    views: list[tuple[str, str, str, list[dict], Any, bool]] = []
+    for path, version, lagging in present:
+        if not lagging and witness is not None:
+            continue
         for where in ("working tree", "HEAD"):
             try:
                 if where == "HEAD":
                     raw = gitrepo.show(Path(path), "HEAD", STATE_PATH, runner=runner)
+                    if raw is not None and len(raw) > MAX_BYTES:
+                        raise OSError(errno.EFBIG, "too large")
                 else:
                     raw = _read(Path(path) / STATE_PATH)
                     raw = None if raw is _ABSENT else raw
@@ -353,9 +363,7 @@ def _check_lagging_worktrees(root: Path, work_item_id: str, witness: dict | None
                                           f"({getattr(exc, 'message', None) or exc})",
                                           evidence={"path": path}) from exc
             history, base = _history_of(raw, work_item_id, f"of worktree {path} ({where})")  # type: ignore[arg-type]
-            views.append((path, str(version), where, history, base, lagging))
-    if not any(lagging for *_, lagging in views):
-        return
+            views.append((path, version, where, history, base, lagging))
     status = witness.get("status") if witness else None
     seq = witness.get("amendment_seq", 0) if witness else 0
     derivable: set[tuple[int, str, Any]] = set()
@@ -381,3 +389,15 @@ def _check_lagging_worktrees(root: Path, work_item_id: str, witness: dict | None
                     f"worktree {path} (installed Workflow {version}) holds an unresolved amendment {index} of "
                     f"{work_item_id} in its {where} that the repository's amendment witness does not record",
                     evidence={"worktree": path, "installed_version": version, "seq": index})
+        if where == "HEAD" and status == "RESOLVED" and 1 <= seq <= len(history):
+            shown = history[seq - 1]
+            if shown.get("resolved_at_plan_revision") is not None:
+                actual = resolution_projection_sha256(shown)
+                expected = witness.get("resolution_projection_sha256")  # type: ignore[union-attr]
+                if actual != expected:
+                    raise ManagedStateRefused(
+                        "managed_amendment_conflict",
+                        f"worktree {path} (installed Workflow {version}) carries a different resolution of amendment "
+                        f"{seq} of {work_item_id} in its HEAD than the repository records",
+                        evidence={"worktree": path, "installed_version": version, "amendment_seq": seq,
+                                  "recorded": expected, "divergent": actual})

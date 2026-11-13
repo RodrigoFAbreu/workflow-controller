@@ -620,7 +620,9 @@ nothing is routed to Codex unless an operator selects it.
   `managed_amendment_conflict`, `managed_amendment_lagging` or `managed_amendment_unreadable`. `managed_amendment_lagging` is the
   Workflow's mixed-release refusal kept for the clone, which cannot see the repository's other worktrees: a linked worktree whose
   committed installation record is below Workflow 2.6.0 holds an unresolved amendment of the item that the witness does not
-  record. A dirty tree (an earlier invocation's uncommitted work) is
+  record. `managed_amendment_conflict` also covers that mixed-release case: a lagging worktree's `HEAD` carries a different
+  resolution of the witness's amendment than the one recorded. A repository where no worktree lags is never refused because of
+  another worktree's state file. A dirty tree (an earlier invocation's uncommitted work) is
   refused, not carried: carrying it is the apply roles' mechanism applied to an open-ended file set, which this item does not do.
 - **Before the landing** (`codex_worker_landing.land(surface=LandingSurface.IMPLEMENTER)`) both passes of the range check read the
   net `base..tip` change and refuse two more causes. `surface_touched`: a path under `scripts/`, `.workflow-manager/`,

@@ -294,39 +294,81 @@ class LaggingWorktreeTest(ClaimsFixture):
 
 
 class LaggingAgreementTest(ClaimsFixture):
-    """The check agrees with the admitted release's own ``_lagging_checks`` on the same repository."""
+    """The check agrees with the admitted release's own ``_lagging_checks`` on the same repository: for the absent,
+    ``NONE`` and ``RESOLVED`` witnesses, both refusal classes and the repository where nothing lags."""
 
-    def workflow_refuses(self, release: str) -> bool:
+    def workflow_decision(self, release: str, witness: dict | None) -> str:
         code = ("import sys, json\nimport workflow_state as w\nfrom pathlib import Path\n"
-                f"root = Path({json.dumps(str(self.root))})\n"
-                "try:\n    w._lagging_checks(root, " + json.dumps(ITEM) + ", None, w._probe_worktrees(root))\n"
-                "except w.LaggingWorktreeAmendmentError:\n    print('refused')\nelse:\n    print('ok')\n")
+                f"root = Path({json.dumps(str(self.root))})\nwitness = json.loads({json.dumps(json.dumps(witness))})\n"
+                "try:\n    probe = w._probe_worktrees(root)\n"
+                "    here = w._find_probed_worktree(probe, w._git_identity(root)[2], w._worktree_git_dir(root))\n"
+                "    derivable = w._bootstrap_derivable_entries(probe, here, " + json.dumps(ITEM) + ") if witness is None "
+                "and probe['lagging'] else frozenset()\n"
+                "    w._lagging_checks(root, " + json.dumps(ITEM) + ", witness, probe, derivable=derivable)\n"
+                "except w.LaggingWorktreeAmendmentError:\n    print('managed_amendment_lagging')\n"
+                "except w.AmendmentResolutionConflictError:\n    print('managed_amendment_conflict')\n"
+                "else:\n    print('ok')\n")
         result = subprocess.run([sys.executable, "-B", "-E", "-s", "-c", code],
                                 cwd=fixtures.workflow_release_tree(release) / "scripts", capture_output=True,
                                 text=True, check=True, timeout=120)
-        return result.stdout.strip() == "refused"
+        return result.stdout.strip()
+
+    def controller_decision(self) -> str:
+        try:
+            cc.check(self.managed, ITEM, gitrepo.subprocess_runner())
+        except cc.ManagedStateRefused as exc:
+            return exc.cause
+        return "ok"
+
+    def linked(self, name: str, version: str, history: list[dict], *, raw: str | None = None) -> Path:
+        path = self.tmp / name
+        git(self.root, "worktree", "add", "-q", "-b", name, str(path))
+        (path / ".workflow-manager").mkdir(exist_ok=True)
+        (path / ".workflow-manager" / "installation.json").write_text(json.dumps({"workflow_version": version}))
+        (path / STATE).write_text(raw if raw is not None else json.dumps({"work_items": {ITEM: {
+            "amendment_history": history}}}))
+        git(path, "add", "-A")
+        git(path, "commit", "-q", "-m", "x")
+        return path
 
     def test_the_decision_matches_the_release(self) -> None:
+        resolved_witness = {"schema_version": 1, "work_item_id": ITEM, "status": "RESOLVED", "amendment_seq": 1,
+                            "request_projection_sha256": "r" * 8,
+                            "resolution_projection_sha256": cc.resolution_projection_sha256(entry())}
+        none_witness = {"schema_version": 1, "work_item_id": ITEM, "status": "NONE", "amendment_seq": 0}
+        scenarios = [
+            # name, witness, lagging version, linked history, linked raw state, expected
+            ("absent-pending", None, "2.5.1", [entry(resolved_at_plan_revision=None)], None, "managed_amendment_lagging"),
+            ("absent-resolved", None, "2.5.1", [entry()], None, "ok"),
+            ("none-pending", none_witness, "2.5.1", [entry(resolved_at_plan_revision=None)], None,
+             "managed_amendment_lagging"),
+            ("none-resolved", none_witness, "2.5.1", [entry()], None, "ok"),
+            ("resolved-same", resolved_witness, "2.5.1", [entry()], None, "ok"),
+            ("resolved-conflicting", resolved_witness, "2.5.1", [entry(reason="other")], None,
+             "managed_amendment_conflict"),
+            ("resolved-pending-above", resolved_witness, "2.5.1", [entry(), entry(resolved_at_plan_revision=None)], None,
+             "managed_amendment_lagging"),
+            # nothing lags: another worktree's unparseable state is not read
+            ("all-current-absent", None, "2.6.0", [], "<<<<<<< conflict", "ok"),
+            ("all-current-none", none_witness, "2.6.0", [], "<<<<<<< conflict", "ok"),
+            ("all-current-resolved", resolved_witness, "2.6.0", [], "<<<<<<< conflict", "ok"),
+        ]
+        (self.root / ".workflow-manager").mkdir(exist_ok=True)
+        (self.root / ".workflow-manager" / "installation.json").write_text('{"workflow_version": "2.6.0"}')
+        git(self.root, "add", "-A")
+        git(self.root, "commit", "-q", "-m", "installation")
         for release in ("2.6.0",):
-            for pending in (True, False):
-                with self.subTest(release=release, pending=pending):
-                    linked = self.tmp / f"linked-{pending}"
-                    git(self.root, "worktree", "add", "-q", "-b", f"b{pending}", str(linked))
-                    (linked / ".workflow-manager").mkdir(exist_ok=True)
-                    (linked / ".workflow-manager" / "installation.json").write_text('{"workflow_version": "2.5.1"}')
-                    (linked / STATE).write_text(json.dumps({"work_items": {ITEM: {"amendment_history": [
-                        entry(resolved_at_plan_revision=None if pending else 2)]}}}))
-                    git(linked, "add", "-A")
-                    git(linked, "commit", "-q", "-m", "x")
-                    try:
-                        cc.check(self.managed, ITEM, gitrepo.subprocess_runner())
-                        controller_refuses = False
-                    except cc.ManagedStateRefused as exc:
-                        self.assertEqual(exc.cause, "managed_amendment_lagging")
-                        controller_refuses = True
-                    self.assertEqual(controller_refuses, self.workflow_refuses(release))
-                    self.assertEqual(controller_refuses, pending)
+            for name, witness, version, history, raw, expected in scenarios:
+                with self.subTest(release=release, scenario=name):
+                    if witness is not None:
+                        self.write_witness(**{k: v for k, v in witness.items()
+                                              if k not in ("schema_version", "work_item_id")})
+                    linked = self.linked(name, version, history, raw=raw)
+                    decided = self.controller_decision()
+                    self.assertEqual(decided, self.workflow_decision(release, witness))
+                    self.assertEqual(decided, expected)
                     git(self.root, "worktree", "remove", "--force", str(linked))
+                    cc.witness_path(self.common, ITEM).unlink(missing_ok=True)
 
 
 class PinTest(unittest.TestCase):

@@ -448,6 +448,12 @@ class WorkerFamiliesTest(unittest.TestCase):
         self.assertEqual(review_mode.worker_families(routing.NO_OVERRIDES), frozenset({"anthropic"}))
         self.assertEqual(review_mode.worker_families(), frozenset({harness.worker_adapter().family}))
 
+    def test_the_wrap_up_role_routed_to_codex_counts_its_family(self) -> None:
+        # h4g, D1: the wrap-up role runs as the implementer, which the derived set already counts.
+        patch, options = codex_workers(["milestone-implement-self-review"])
+        self.addCleanup(patch.stop)
+        self.assertIn(review_mode.HARNESS_FAMILY["codex"], review_mode.worker_families(options))
+
     def test_a_derived_set_changes_no_outcome_with_the_registry_as_it_is(self) -> None:
         derived = review_mode.worker_families(routing.RoutingOptions(
             cli_role_harnesses={role: "claude-code" for role in WORKER_ROLES}))

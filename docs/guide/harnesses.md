@@ -74,7 +74,7 @@ that declares it.
 | Routing role | Runs as | `claude-code` | `codex` |
 | --- | --- | --- | --- |
 | `milestone-implement` | `implementer` | yes | yes |
-| `milestone-implement-self-review` | `worker` | yes | no |
+| `milestone-implement-self-review` | `implementer` | yes | yes |
 | `apply-plan-review` | `local-applier` | yes | yes |
 | `apply-implementation-review` | `local-applier` | yes | yes |
 | `review-plan` | `local-reviewer` | yes | yes |

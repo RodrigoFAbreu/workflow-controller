@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-fx1",
+  "requirements": {
+    "R1": {
+      "description": "`OrphanWatchdogTest` reads a pid file and a process's argv only once they are ready, with a bounded wait (#246)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The Ctrl-C test and its companion fail under load for a cause shown by evidence and fixed where it is, or both are made self-explaining when it cannot be reproduced (#342)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    }
+  }
+}

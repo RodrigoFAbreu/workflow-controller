@@ -494,7 +494,7 @@ items:
     detail: docs/items/workflow-controller-h4g.md
   - id: workflow-controller-fx1
     title: "Fix the timing flakes: OrphanWatchdogTest readiness waits (#246) and the Ctrl-C test under load (#342); owner priority"
-    status: next
+    status: done
     order: 85
     depends_on: []
     detail: docs/items/workflow-controller-fx1.md

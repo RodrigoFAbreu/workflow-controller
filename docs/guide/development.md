@@ -280,6 +280,20 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   does the same: the detached-descendant test in `RunnerTest` adds the pid to
   its own. Check a new test of
   this kind with `taskset -c 0,1` and two or three copies started together.
+- **The Ctrl-C test under load (#342).** Neither of two repros caught
+  `test_a_kill_in_the_middle_of_a_bundle_rewrite_is_run_again_by_resume` or
+  its companion `test_a_kill_during_the_run_is_run_again_by_resume` failing:
+  `ImplGuardedRunTest` in six copies pinned with `taskset -c 0,1` ten times
+  (60 runs), and a full `tools/run_tests.py` run pinned to two CPUs with four
+  busy loops. Both tests now fail with one message (`interrupted_or_explained`)
+  that names which end happened: the patched `run_in_place` calls, the
+  generator result, and the refusal's `regeneration` cause and detail. Read it
+  before guessing at a cause. The functional review's first run then found a
+  neighbour in the same file: `test_a_generator_that_survives_a_kill_is_ended_before_resume_runs_it_again`
+  read the survivor's `/proc/<pid>/environ` once, right after `Popen` returned,
+  and saw it empty (the kernel publishes the new environment a moment after
+  the exec is committed). It now polls, bounded at 10 s, until the ownership
+  tag shows.
 
 ## Running signal tests safely
 

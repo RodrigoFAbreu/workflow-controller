@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-fx1",
+  "plan_revision": 2,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "OrphanWatchdogTest reads a pid only when it is ready",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "The Ctrl-C test under load, from evidence",
+      "depends_on": [],
+      "complexity": 3,
+      "session_target": 1
+    }
+  ]
+}

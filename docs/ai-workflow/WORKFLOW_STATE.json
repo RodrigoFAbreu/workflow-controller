@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-fx1",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -72099,6 +72099,261 @@
         },
         "evaluated_at": "2026-11-13T12:33:08Z",
         "workflow_release": "2.27.0"
+      }
+    },
+    "workflow-controller-fx1": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-fx1",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_FX1_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-fx1-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-fx1-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 2,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "a2e1cc1bec60a0d70763f522ac6515d7e931d06c",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "c92e47f601ac3446b3405f48d74eabdb8e42b2626c0aa694efa0e6a537d72fec",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "c92e47f601ac3446b3405f48d74eabdb8e42b2626c0aa694efa0e6a537d72fec",
+        "approved_review_content_id": "07fe9ca2055ba35579b11ab4824d9a395f8f9336fd3a67f2551e87680f03fa41",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_FX1_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ec8026fc70276e5a135e8d5373b566bf2878b288"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-fx1-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "988eb49e4a4f5ca6ed7e856c2a0be71067e6a1a2"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-fx1-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "80776e258bab12f1c00847150eea9b1bd1399363"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-13T14:48:51Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "07fe9ca2055ba35579b11ab4824d9a395f8f9336fd3a67f2551e87680f03fa41",
+            "ledger": {
+              "local": {
+                "bundle_id": "c92e47f601ac3446b3405f48d74eabdb8e42b2626c0aa694efa0e6a537d72fec",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "e3d365811c88f7ef120b1dcb822f7530923fff4a651e8fec90862ef229de0055",
+                "ledger_entry_sha256": "7e01a6e0fdbdbfe53ed093159402153f6d5a46d123d8872a829827b449e0ba14",
+                "run_ref": "session:local .ai-review/workflow-controller-fx1/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "c92e47f601ac3446b3405f48d74eabdb8e42b2626c0aa694efa0e6a537d72fec",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "f8a0bc3ee5e213d45f96e42561e76e94eafbb48de70690cd93dbfb33acdfb389",
+                "ledger_entry_sha256": "000f93134b3668e7782a6651171e5d54adce1bf385c3ba85f649109c6e54fb71",
+                "run_ref": "codex:20261113T144341Z-be2e9c85",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-13T14:48:51Z",
+          "workflow_release": "2.27.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "07fe9ca2055ba35579b11ab4824d9a395f8f9336fd3a67f2551e87680f03fa41",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "c92e47f601ac3446b3405f48d74eabdb8e42b2626c0aa694efa0e6a537d72fec",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-13T14:43:30Z",
+          "verdict_sha256": "e3d365811c88f7ef120b1dcb822f7530923fff4a651e8fec90862ef229de0055",
+          "run_ref": "session:local .ai-review/workflow-controller-fx1/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "c92e47f601ac3446b3405f48d74eabdb8e42b2626c0aa694efa0e6a537d72fec",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-13T14:45:41Z",
+          "verdict_sha256": "f8a0bc3ee5e213d45f96e42561e76e94eafbb48de70690cd93dbfb33acdfb389",
+          "run_ref": "codex:20261113T144341Z-be2e9c85",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 2,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 9,
+      "last_transition": "2026-11-13T14:48:51Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-13T15:05:00Z",
+        "consumed": {
+          "review_content_id": "1b30abb339793abdad1fefd6b660f27069821b0c2247216fe71199cfa3e48a34",
+          "plan_revision": 1,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "07fe9ca2055ba35579b11ab4824d9a395f8f9336fd3a67f2551e87680f03fa41",
+          "plan_revision": 2
+        },
+        "bound": {
+          "review_content_id": "07fe9ca2055ba35579b11ab4824d9a395f8f9336fd3a67f2551e87680f03fa41",
+          "bundle_id": "c92e47f601ac3446b3405f48d74eabdb8e42b2626c0aa694efa0e6a537d72fec",
+          "plan_revision": 2
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "1b30abb339793abdad1fefd6b660f27069821b0c2247216fe71199cfa3e48a34"
+      ],
+      "optional_findings": {
+        "F-9698af0d1768": {
+          "digest": "9698af0d176859b7a289530938e9819027501ed0701fef03b1f821ab032ddb92",
+          "text": "**O1.** \"What exists\" says the `/proc/<pid>/cmdline` race is on \"the fake's `sleep` child the moment the pid file shows\". The hang-child pid file is already written atomically (`tests/fake_claude.py:1461-1466`), and `subprocess.Popen` returns only after exec, so that read already sees `sleep`. The read that can see the pre-exec `python3` (the #246 comment, PR #343) is the monitor's sleeper found through `_children(found[\"fake\"])` (lines 1526-1529): `/proc/<pid>/task/<pid>/children` lists a forked child before it execs. D2 covers that read as written. Correct the description so the implementer puts the wait where the race is.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "1b30abb339793abdad1fefd6b660f27069821b0c2247216fe71199cfa3e48a34",
+              "verdict": "REVISE",
+              "at": "2026-11-13T14:37:54Z"
+            }
+          ]
+        },
+        "F-fe7820fd5859": {
+          "digest": "fe7820fd5859f34f91d97a975d36c2da3b7e9b3f2da31a8c9c1d740eafc11096",
+          "text": "**O2.** The existing assertion message already records `record.get(\"status\")` and `reconciliation_evidence`, which hold a refusal's cause. State what the \"self-explaining\" change adds beyond that (for example, the `regeneration.cause` and `detail` printed explicitly), so the change is visible when no failure is caught.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "1b30abb339793abdad1fefd6b660f27069821b0c2247216fe71199cfa3e48a34",
+              "verdict": "REVISE",
+              "at": "2026-11-13T14:37:54Z"
+            }
+          ]
+        },
+        "F-5b100df6b3b0": {
+          "digest": "5b100df6b3b0a8013a055f7045912253b26670ce6cfcef75860d20aface6b271",
+          "text": "**O1.** CP1's check \"A grep for `read_text()` of a pid path in the class finds none left outside the helper\" conflicts with \"What exists\", which says the atomically written files need nothing. The `ready` and `child` files (written by `os.replace` in `tests/fake_claude.py:1420-1425` and `1461-1466`) are still read with `read_text()` at `tests/test_fake_claude_contract.py:1283`, `1288`, `1305`, `1357` and `1519`. Either route those reads through the helper too (harmless, and the simplest way to meet the grep), or limit the grep to the non-atomic files, so the implementer does not have to choose.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "07fe9ca2055ba35579b11ab4824d9a395f8f9336fd3a67f2551e87680f03fa41",
+              "verdict": "APPROVE",
+              "at": "2026-11-13T14:43:30Z"
+            }
+          ]
+        },
+        "F-d2d86f569b97": {
+          "digest": "d2d86f569b97e5cd4b38f1173f66b8f76dc4c59d332cdc9fa7f2e6b570548ec9",
+          "text": "**O2.** `test_a_kill_during_the_run_is_run_again_by_resume` is defined on `GuardedRunMixin`, so it also runs for `PlanGuardedRunTest` (`tests/test_job_codex_apply.py:1133`), not only for `ImplGuardedRunTest`. A diagnostic added in the mixin covers both classes, which is fine; say so, and say which class each #342 sighting named, so the repro reads the right lines.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "07fe9ca2055ba35579b11ab4824d9a395f8f9336fd3a67f2551e87680f03fa41",
+              "verdict": "APPROVE",
+              "at": "2026-11-13T14:43:30Z"
+            }
+          ]
+        },
+        "F-0a945b278000": {
+          "digest": "0a945b27800028265cec0b9585c50beb0098d3ce57fe9fbbbe89337114f62af0",
+          "text": "**O3.** \"`tools/run_tests.py` replaying shard 5\" needs a recorded `plan.json` for `--replay PLAN --shard 5`, and shard numbers depend on that plan. Name its source (the sighting run's plan artifact, or a local plan from `--plan-only` that places both tests in the same shard), so the replay holds the same neighbours as the sighting.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "07fe9ca2055ba35579b11ab4824d9a395f8f9336fd3a67f2551e87680f03fa41",
+              "verdict": "APPROVE",
+              "at": "2026-11-13T14:43:30Z"
+            }
+          ]
+        },
+        "F-4693634f9987": {
+          "digest": "4693634f9987b49af3a98cec11d304a5627945f363f0073d7eb2e2706e5d1cb3",
+          "text": "CP1’s requirement that no pid-path `read_text()` remain outside the helper is broader than D1’s coverage of non-atomic files. Existing reads of the atomically written `ready` and `child` files are safe. Limit that check to non-atomic files, or explicitly route the atomic reads through the helper too.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "07fe9ca2055ba35579b11ab4824d9a395f8f9336fd3a67f2551e87680f03fa41",
+              "verdict": "APPROVE",
+              "at": "2026-11-13T14:45:41Z"
+            }
+          ]
+        }
       }
     }
   }

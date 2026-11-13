@@ -17,6 +17,7 @@ import subprocess
 import shutil
 import sys
 import tempfile
+import time
 import types
 import unittest
 from pathlib import Path
@@ -1138,9 +1139,16 @@ else:
             with mock.patch.object(generator_run.workflow_contract, "_execute_in_place", side_effect=spawn_then_die):
                 with self.assertRaises(KeyboardInterrupt):
                     self.step()
-                environ = Path(f"/proc/{survivors[0].pid}/environ").read_bytes().split(b"\0")
-                tags = [item.split(b"=", 1)[1].split(b":") for item in environ
-                        if item.startswith(b"WORKFLOW_CONTROLLER_OWNERSHIP=")]
+                # `Popen` returns once the exec is committed, but the kernel publishes the new environment a moment later, so a
+                # single read can see it empty (#342 family): poll, bounded, until the tag shows.
+                tags: list[list[bytes]] = []
+                deadline = time.monotonic() + 10
+                while not tags and time.monotonic() < deadline:
+                    environ = Path(f"/proc/{survivors[0].pid}/environ").read_bytes().split(b"\0")
+                    tags = [item.split(b"=", 1)[1].split(b":") for item in environ
+                            if item.startswith(b"WORKFLOW_CONTROLLER_OWNERSHIP=")]
+                    if not tags:
+                        time.sleep(0.02)
                 recorded = self.only_record()["regeneration"]["ownership_tag"].encode()
                 self.assertTrue(tags and recorded in tags[0], (tags, recorded))
                 self.assertIsNone(survivors[0].poll())

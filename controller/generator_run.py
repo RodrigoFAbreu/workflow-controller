@@ -46,8 +46,10 @@ CAUSES = (
     "surface_changed_during_run",
 )
 
-#: The stage the generator is run at for each of the two roles' stages (the two invocations the gate names).
-STAGES = ("plan", "post-fix")
+#: The stage the generator is run at for each role's stage (the invocations the gate names): ``plan`` for the plan
+#: role, ``post-fix`` for the implementation apply role and ``implementation`` for the wrap-up role (H4g, D5), whose
+#: context lists are the live ``current/CONTEXT_FILES.txt`` as ``post-fix``'s are.
+STAGES = ("plan", "post-fix", "implementation")
 
 GENERATOR = "scripts/prepare-ai-review.sh"
 ITEM_ROOT = ".ai-review"
@@ -379,7 +381,7 @@ def run(root: Path, *, stage: str, base_commit: str, work_item_id: str, carry_ba
     status last (a failed run that also changed the tree is reported as the change; a run that timed out or could not
     start is reported as that, without the second check). Raises :class:`GeneratorRefused`
     with one cause of :data:`CAUSES`; a run that returns exited ``0`` and passed every check. ``stage`` is ``plan`` for
-    the plan role and ``post-fix`` for the implementation role. ``ownership_tag`` is the job's tag: the generator and
+    the plan role, ``post-fix`` for the implementation apply role and ``implementation`` for the wrap-up role. ``ownership_tag`` is the job's tag: the generator and
     everything it starts carry it in their environment from the start, so a run that survives a killed Controller is
     found by ``resume`` and ended before the generator is run again (I2 of the h4e3b review)."""
     if stage not in STAGES:

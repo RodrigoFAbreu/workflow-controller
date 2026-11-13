@@ -16,6 +16,7 @@ import os
 import subprocess
 import shutil
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -1227,6 +1228,400 @@ subprocess.run(["git", "-c", "user.name=W", "-c", "user.email=w@example.invalid"
         self.assertEqual(resumed["status"], job.STATUS_FINISHED, resumed.get("reconciliation_evidence"))
         self.assertEqual(resumed["regeneration"]["stage"], "finished")
         self.assert_next_stage_passes(self.ARGUMENT)
+
+
+#: ``/milestone-implement`` step 2's own writers for the wrap-up role, run in the clone (``workflow-controller-h4g``):
+#: the phase commit when the item is still at ``IMPLEMENTING`` (``enter_self_reviewing_implementation``, one commit of the
+#: state file alone, one ``Workflow-Work-Item`` trailer), and the generation record (``record_bundle_generation`` with
+#: ``stage="implementation"``, its own commit with the two trailers), then the author-written bundle inputs.
+SELF_REVIEW_PHASE = r'''
+import datetime
+import subprocess
+root = Path.cwd()
+wid = "wi-1"
+def now():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+def git(*args):
+    return subprocess.run(["git", "-c", "user.name=Worker", "-c", "user.email=worker@example.invalid", *args],
+                          cwd=root, check=True, capture_output=True, text=True).stdout.strip()
+registry = ws.json.loads((root / f"docs/ai-workflow/registry/{wid}-registry.json").read_text())
+ws.state_transaction(root, lambda s: ws.enter_self_reviewing_implementation(s, wid, registry, now=now()))
+git("add", "docs/ai-workflow/WORKFLOW_STATE.json")
+git("commit", "-m", f"enter self-review\n\nWorkflow-Work-Item: {wid}")
+'''
+
+SELF_REVIEW_RECORD = r'''
+import datetime
+import subprocess
+root = Path.cwd()
+wid = "wi-1"
+def now():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+def git(*args):
+    return subprocess.run(["git", "-c", "user.name=Worker", "-c", "user.email=worker@example.invalid", *args],
+                          cwd=root, check=True, capture_output=True, text=True).stdout.strip()
+head = git("rev-parse", "HEAD")
+entry = ws.json.loads((root / "docs/ai-workflow/WORKFLOW_STATE.json").read_text())["work_items"][wid]
+outcome = ws.resolve_bundle_generation_outcome(root, entry, base_commit=entry["base_commit"], head=head)
+ws.state_transaction(root, lambda s: ws.record_bundle_generation(
+    s, wid, stage="implementation", head=head, now=now(), outcome=outcome[0]))
+entry = ws.json.loads((root / "docs/ai-workflow/WORKFLOW_STATE.json").read_text())["work_items"][wid]
+revision = entry["implementation_revision"]
+current = root / ".ai-review" / wid / "current"
+current.mkdir(parents=True, exist_ok=True)
+(current / "IMPLEMENTATION_SUMMARY.md").write_text(f"# Summary\n\nimplementation_revision: {revision}\n")
+(current / "TEST_RESULTS.md").write_text("# Test results\n\nall green\n")
+(current / "CONTEXT_FILES.txt").write_text("README.md\n")
+git("add", "docs/ai-workflow/WORKFLOW_STATE.json")
+git("commit", "-m", f"generation record\n\nWorkflow-Bundle-Generation-Record: {wid}/{revision}\nWorkflow-Work-Item: {wid}")
+content_id = ws.approval_review_content_id(
+    root, stage="implementation", base_commit=entry["base_commit"], work_item_type="product", work_item_id=wid,
+    head="HEAD", artifacts_path=fingerprint.artifacts_path_for_work_item(wid))
+(current / "REVIEW_REQUEST.md").write_text(f"# Review request\n\nstage: implementation\nreview_content_id: {content_id}\n")
+'''
+
+#: Writes a landing the self-review profile must refuse, run in the clone after the worker's own writers.
+PLANT_SCRIPT = r'''
+import subprocess
+(Path.cwd() / "scripts" / "sitecustomize.py").write_text("raise SystemExit('loaded')\n")
+subprocess.run(["git", "add", "-f", "scripts/sitecustomize.py"], check=True)
+subprocess.run(["git", "-c", "user.name=W", "-c", "user.email=w@example.invalid", "commit", "-m", "plant"], check=True)
+'''
+
+PLANT_APPROVAL = r'''
+import subprocess
+path = Path.cwd() / "docs/ai-workflow/WORKFLOW_STATE.json"
+document = ws.json.loads(path.read_text())
+document["work_items"]["wi-1"]["plan_approval"]["status"] = "STALE"
+path.write_text(ws.json.dumps(document, indent=2) + "\n")
+subprocess.run(["git", "add", "docs/ai-workflow/WORKFLOW_STATE.json"], check=True)
+subprocess.run(["git", "-c", "user.name=W", "-c", "user.email=w@example.invalid", "commit", "-m", "approval"], check=True)
+'''
+
+#: A state-file-only commit with the given message and phase, made in the managed repository by the predicate tests.
+STATE_COMMIT = r'''
+import subprocess, sys
+path = Path.cwd() / "docs/ai-workflow/WORKFLOW_STATE.json"
+document = ws.json.loads(path.read_text())
+document["work_items"]["wi-1"]["phase"] = sys.argv[1]
+path.write_text(ws.json.dumps(document, indent=2) + "\n")
+subprocess.run(["git", "add", "docs/ai-workflow/WORKFLOW_STATE.json"], check=True)
+subprocess.run(["git", "-c", "user.name=W", "-c", "user.email=w@example.invalid", "commit", "-m", sys.argv[2]], check=True)
+'''
+
+
+#: Moves the seeded item to ``phase`` with every checkpoint ``COMPLETE`` and a current plan approval, then commits it
+#: with the trailers the Workflow discovers the approval by (``tests/test_protocol_outcome._Env._approve_plan``).
+_APPROVE_AND_COMPLETE = """
+import subprocess, sys
+root = Path.cwd()
+path = root / "docs/ai-workflow/WORKFLOW_STATE.json"
+state = ws.json.loads(path.read_text())
+item = state["work_items"]["wi-1"]
+rcid = item["plan_review_binding"]["published"]["review_content_id"]
+item.update(phase=sys.argv[1], current_bundle_id=None, checkpoints={"CP1": {"status": "COMPLETE",
+            "start_commit": item["base_commit"]}}, plan_approval={
+    "status": "CURRENT", "basis": "EXTERNAL_APPROVE", "reviewed_bundle_id": "a" * 64,
+    "approved_review_content_id": rcid, "review_content_manifest": [], "user_confirmation": "approved",
+    "reviewed_content_commit": None, "waived_guarantees": []})
+del item["plan_review_binding"]
+path.write_text(ws.json.dumps(state, indent=2) + "\\n")
+subprocess.run(["git", "add", "-A"], check=True)
+subprocess.run(["git", "-c", "user.name=W", "-c", "user.email=w@example.invalid", "commit", "-q", "-m",
+                f"approve plan\\n\\nWorkflow-Plan-Approval: {rcid}\\nWorkflow-Work-Item: wi-1\\n"], check=True)
+"""
+
+
+def build_self_review_target(root: Path, phase: str) -> None:
+    """The recorder fixture's repository with ``wi-1`` at ``phase`` (``SELF_REVIEWING_IMPLEMENTATION`` or
+    ``IMPLEMENTING``), every checkpoint ``COMPLETE`` and a current, reachable plan approval: the checkpoint commit
+    carries the Workflow's trailer pair and there is no generation record."""
+    from tests import test_review_recorder as recorder  # noqa: PLC0415
+    recorder.build_target(root, "plan")
+    fixtures.commit_all(root, "seed state")
+    fixtures.run_workflow_python(root, _APPROVE_AND_COMPLETE, phase)
+    with (root / "README.md").open("a") as readme:
+        readme.write("CP1 implemented\n")
+    fixtures.commit_all(root, "implemented\n\nWorkflow-Checkpoint: CP1\nWorkflow-Work-Item: wi-1")
+
+
+class SelfReviewCase(ApplyCase):
+    """The wrap-up role (``milestone-implement-self-review``) routed to ``codex`` over a fixture whose checkpoints are
+    all ``COMPLETE``; ``PHASE`` is the phase the item is at when the worker starts."""
+
+    ROLE = routing.MILESTONE_IMPLEMENT_SELF_REVIEW
+    PHASE = "SELF_REVIEWING_IMPLEMENTATION"
+    GUARD_CAUSE = None
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._area = Path(tempfile.mkdtemp(prefix="selfreview-"))
+        cls._built = cls._area / "target"
+        build_self_review_target(cls._built, cls.PHASE)
+        cls._kept = cls._area / "kept"
+        shutil.copytree(cls._built, cls._kept, symlinks=True)
+
+    def self_review_work(self, clone: Path) -> None:
+        if self.PHASE == "IMPLEMENTING":
+            fixtures.run_workflow_python(clone, SELF_REVIEW_PHASE)
+        fixtures.run_workflow_python(clone, SELF_REVIEW_RECORD)
+
+    def worked(self) -> None:
+        self.script(message="self-reviewed")
+        self.after = self.self_review_work
+
+    def assert_next_stage_passes(self) -> None:
+        fixtures.run_workflow_python(self.root, """
+entry = ws.json.loads((Path.cwd() / "docs/ai-workflow/WORKFLOW_STATE.json").read_text())["work_items"]["wi-1"]
+manifest = Path.cwd() / fingerprint.resolve_bundle_dir(Path.cwd(), "wi-1", stage="implementation") / "MANIFEST.md"
+fingerprint.assert_local_generation_matches(Path.cwd(), manifest)
+ws.validate_local_implementation_review_preconditions(entry)
+ws.verify_implementation_review_bundle(Path.cwd(), "wi-1")
+""")
+
+
+class SelfReviewRoleTest(SelfReviewCase):
+    def test_a_clean_self_review_is_handed_to_the_guarded_implementation_run_and_ends_finished(self) -> None:
+        self.worked()
+        record = self.step()
+        self.assertEqual(record["status"], job.STATUS_FINISHED, record.get("reconciliation_evidence"))
+        self.assertEqual(record["codex_carry"]["role"], routing.MILESTONE_IMPLEMENT_SELF_REVIEW)
+        self.assertEqual(record["regeneration"]["stage"], "finished")
+        self.assertEqual(record["regeneration"]["argument"], "implementation")
+        self.assertEqual(_entry(self.root)["phase"], "AWAITING_LOCAL_IMPLEMENTATION_REVIEW")
+        self.assertEqual(record["codex_worker"]["landing"]["outcome"], "landed")
+        self.assertTrue(record["codex_worker"]["implementer"])
+        self.assert_carry_ended(record)
+        self.assert_next_stage_passes()
+
+    def test_the_landing_is_judged_by_the_self_review_profile_and_the_implementer_surface(self) -> None:
+        seen: list[dict] = []
+        real = job.CODEX_LANDER
+
+        def spy(*args, **kw):
+            seen.append(kw)
+            return real(*args, **kw)
+
+        self.worked()
+        with mock.patch.object(job, "CODEX_LANDER", spy):
+            self.step()
+        (kw,) = seen
+        self.assertIs(kw["state_profile"], job.codex_worker_landing.SELF_REVIEW)
+        self.assertIs(kw["surface"], job.codex_worker_landing.LandingSurface.IMPLEMENTER)
+        self.assertEqual(kw["work_item_id"], WID)
+
+    def test_a_scripts_commit_is_surface_refused_and_an_approval_field_is_state_touched_with_the_profile_name(self) -> None:
+        for plant, cause in ((PLANT_SCRIPT, "surface"), (PLANT_APPROVAL, "state_touched")):
+            with self.subTest(cause=cause):
+                self.setUp()
+                self.script(message="self-reviewed")
+
+                def work(clone: Path, plant: str = plant) -> None:
+                    self.self_review_work(clone)
+                    fixtures.run_workflow_python(clone, plant)
+
+                self.after = work
+                before = _git(self.root, "rev-parse", "HEAD").strip()
+                record = self.step()
+                self.assertEqual(record["status"], job.STATUS_FAILED, record.get("reconciliation_evidence"))
+                block = json.dumps(record["codex_worker"]["landing"])
+                self.assertIn(cause, block)
+                if cause == "state_touched":
+                    self.assertIn("self-review", block)
+                self.assertEqual(_git(self.root, "rev-parse", "HEAD").strip(), before)  # nothing landed
+
+    def test_a_dirty_managed_tree_is_managed_tree_not_clean_and_never_carry_foreign_dirt(self) -> None:
+        self.worked()
+        (self.root / "README.md").write_text("changed by someone else\n")
+        record = self.step()
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertEqual(self.evidence(record)["code"], job.WORKER_NOT_STARTED_CODE)
+        text = json.dumps(self.evidence(record))
+        self.assertIn("managed_tree_not_clean", text)
+        self.assertNotIn("carry_foreign_dirt", text)
+        self.assertEqual(self.launched, [])
+        self.assertFalse(self.clone().exists())
+
+    def test_commit_pending_is_not_called_for_the_role(self) -> None:
+        self.worked()
+        with mock.patch.object(codex_carry, "commit_pending", side_effect=AssertionError("commit_pending")):
+            record = self.step()
+        self.assertEqual(record["status"], job.STATUS_FINISHED, record.get("reconciliation_evidence"))
+        self.assertEqual(record["codex_carry"]["base_commit"], record["codex_carry"]["pre_step_head"])
+
+    def test_a_checkpoint_claim_in_the_common_directory_is_refused_before_the_clone(self) -> None:
+        self.worked()
+        common = Path(_git(self.root, "rev-parse", "--git-common-dir").strip())
+        claim = job.checkpoint_claims.claim_path(common if common.is_absolute() else self.root / common, WID)
+        claim.parent.mkdir(parents=True, exist_ok=True)
+        claim.write_text("{}")
+        record = self.step()
+        self.assertEqual(record["status"], job.STATUS_FAILED)
+        self.assertIn("managed_claim_present", json.dumps(self.evidence(record)))
+        self.assertEqual(self.launched, [])
+
+    def test_the_workers_own_bundle_is_discarded_and_the_managed_bundle_is_the_controllers(self) -> None:
+        self.worked()
+        worked = self.after
+
+        def with_forged_bundle(clone: Path) -> None:
+            worked(clone)
+            current = clone / ITEM / "current"
+            current.mkdir(parents=True, exist_ok=True)
+            (current / "MANIFEST.md").write_text("forged\n")
+            (current / "DIFF.patch").write_text("forged\n")
+
+        self.after = with_forged_bundle
+        record = self.step()
+        self.assertEqual(record["status"], job.STATUS_FINISHED, record.get("reconciliation_evidence"))
+        self.assertNotIn("forged", (self.root / ITEM / "current" / "MANIFEST.md").read_text())
+        self.assert_next_stage_passes()
+
+
+class SelfReviewFromImplementingTest(SelfReviewCase):
+    """The case an ``IMPLEMENTING`` item with every checkpoint ``COMPLETE`` is in: the phase commit, then the record."""
+
+    PHASE = "IMPLEMENTING"
+
+    def test_the_phase_commit_and_the_generation_record_land_and_the_item_ends_at_the_review_phase(self) -> None:
+        self.worked()
+        base = _git(self.root, "rev-parse", "HEAD").strip()
+        record = self.step()
+        self.assertEqual(record["status"], job.STATUS_FINISHED, record.get("reconciliation_evidence"))
+        self.assertEqual(_git(self.root, "rev-list", "--count", f"{base}..HEAD").strip(), "2")
+        self.assertEqual(record["regeneration"]["argument"], "implementation")
+        self.assertEqual(_entry(self.root)["phase"], "AWAITING_LOCAL_IMPLEMENTATION_REVIEW")
+        self.assert_next_stage_passes()
+
+    def test_a_partial_self_review_is_the_resolutions_own_ending_and_the_generator_is_never_started(self) -> None:
+        self.script(message="half done")
+        self.after = lambda clone: fixtures.run_workflow_python(clone, SELF_REVIEW_PHASE)
+        with mock.patch.object(generator_run, "run", side_effect=AssertionError("generator started")):
+            record = self.step()
+        self.assertNotIn("regeneration", record)
+        self.assertEqual(_entry(self.root)["phase"], "SELF_REVIEWING_IMPLEMENTATION")
+        self.assertEqual(record["codex_carry"]["stage"], "done")
+        self.assertNotEqual((record.get("reconciliation_evidence") or {}).get("code"), job.CARRY_BUNDLE_GATE_CODE)
+        self.assertNotIn("regenerat", json.dumps(record.get("human_gate_pending") or {}))
+
+
+class SelfReviewHandoverTest(SelfReviewCase):
+    """The hand-over predicate (D5) at its own level, over commits made in the managed repository."""
+
+    def commit_work(self, *scripts: str) -> str:
+        """Run ``scripts`` in the managed repository (the worker's own writers); return the head before them."""
+        base = _git(self.root, "rev-parse", "HEAD").strip()
+        for code in scripts:
+            fixtures.run_workflow_python(self.root, code)
+        return base
+
+    def carry(self, base: str) -> dict:
+        return {"work_item_id": WID, "codex_carry": {"role": self.ROLE, "base_commit": base, "stage": "done"}}
+
+    @staticmethod
+    def fields(phase: str) -> dict:
+        return {"observed_phase_after": phase, "protocol": {"progress": "progress"}}
+
+    def test_the_ordinary_record_with_an_advanced_revision_meets_it(self) -> None:
+        base = self.commit_work(SELF_REVIEW_RECORD)
+        self.assertTrue(job._self_review_handover(
+            self.fields("AWAITING_LOCAL_IMPLEMENTATION_REVIEW"), self.carry(base), self.root))
+
+    def test_the_wrong_phase_or_no_record_does_not(self) -> None:
+        base = self.commit_work(SELF_REVIEW_RECORD)
+        self.assertFalse(job._self_review_handover(
+            self.fields("SELF_REVIEWING_IMPLEMENTATION"), self.carry(base), self.root))
+        head = _git(self.root, "rev-parse", "HEAD").strip()
+        self.assertFalse(job._self_review_handover(
+            self.fields("AWAITING_LOCAL_IMPLEMENTATION_REVIEW"), self.carry(head), self.root))
+
+    def test_the_recovered_record_leaves_the_revision_unchanged_and_names_the_record_at_the_base(self) -> None:
+        self.commit_work(SELF_REVIEW_RECORD)  # the item already has a generation record at revision 1 ...
+        first = _git(self.root, "rev-parse", "HEAD").strip()
+        fixtures.run_workflow_python(  # ... then a plan-only re-approval puts it back at the self-review phase
+            self.root, STATE_COMMIT, "SELF_REVIEWING_IMPLEMENTATION", "re-approved\n\nWorkflow-Work-Item: wi-1")
+        base = _git(self.root, "rev-parse", "HEAD").strip()
+        fixtures.run_workflow_python(
+            self.root, STATE_COMMIT, "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+            "recovered record\n\nWorkflow-Bundle-Generation-Record: wi-1/1\nWorkflow-Work-Item: wi-1\n"
+            f"Workflow-Supersedes: {first}")
+        fields = self.fields("AWAITING_LOCAL_IMPLEMENTATION_REVIEW")
+        self.assertTrue(job._self_review_handover(fields, self.carry(base), self.root))
+        # a record that supersedes a commit that is not the item's current record at the base is not the recovered role
+        subprocess.run(["git", "-c", "user.name=W", "-c", "user.email=w@example.invalid", "commit", "-q", "--amend", "-m",
+                        f"recovered record\n\nWorkflow-Bundle-Generation-Record: {WID}/1\nWorkflow-Work-Item: {WID}\n"
+                        f"Workflow-Supersedes: {base}"], cwd=self.root, check=True)
+        self.assertFalse(job._self_review_handover(fields, self.carry(base), self.root))
+
+    def test_a_commit_that_touches_more_than_the_state_file_is_not_the_record(self) -> None:
+        base = self.commit_work(SELF_REVIEW_RECORD)
+        subprocess.run(["git", "reset", "-q", "--soft", "HEAD~1"], cwd=self.root, check=True)
+        (self.root / "extra.txt").write_text("also\n")
+        subprocess.run(["git", "add", "extra.txt"], cwd=self.root, check=True)
+        subprocess.run(["git", "-c", "user.name=W", "-c", "user.email=w@example.invalid", "commit", "-q", "-m",
+                        f"generation record\n\nWorkflow-Bundle-Generation-Record: {WID}/1\nWorkflow-Work-Item: {WID}"],
+                       cwd=self.root, check=True)
+        self.assertFalse(job._self_review_handover(
+            self.fields("AWAITING_LOCAL_IMPLEMENTATION_REVIEW"), self.carry(base), self.root))
+
+
+class SelfReviewSitesTest(unittest.TestCase):
+    """The sites D6 moves to one predicate."""
+
+    ROLE = routing.MILESTONE_IMPLEMENT_SELF_REVIEW
+
+    def test_one_predicate_names_the_roles_that_land_commits(self) -> None:
+        self.assertTrue(job._carries_landed_commits(self.ROLE))
+        self.assertTrue(job._carries_landed_commits(routing.APPLY_IMPLEMENTATION_REVIEW))
+        self.assertFalse(job._carries_landed_commits(routing.APPLY_PLAN_REVIEW))
+        self.assertEqual(job._REGENERATION_STAGE[self.ROLE], "implementation")
+
+    def test_the_gate_text_names_the_implementation_stage_and_the_landed_range(self) -> None:
+        text = job._carry_gate_text(self.ROLE, "wi-1", "b" * 40, "workflow-controller resume", carry_base="a" * 40,
+                                    landed_head="c" * 40)
+        self.assertIn(f"git log -p {'a' * 40}..{'c' * 40}", text)
+        self.assertIn(f"scripts/prepare-ai-review.sh {'b' * 40} implementation wi-1", text)
+        self.assertNotIn("post-fix", text)
+
+    def test_the_landing_profile_is_the_roles_and_the_checkpoint_roles_otherwise(self) -> None:
+        self.assertIs(job._landing_state_profile({"codex_carry": {"role": self.ROLE}}),
+                      job.codex_worker_landing.SELF_REVIEW)
+        self.assertIs(job._landing_state_profile({"codex_worker": {"implementer": True}}),
+                      job.codex_worker_landing.CHECKPOINT)
+
+    def test_the_route_enters_the_carry_branch_while_the_adapter_role_is_still_the_implementer(self) -> None:
+        route = mock.Mock(role=self.ROLE, harness="codex")
+        self.assertTrue(job._is_codex_apply_route(route))
+        self.assertTrue(job._is_codex_implement_route(route))
+        self.assertFalse(job._is_codex_apply_route(mock.Mock(role=self.ROLE, harness="claude-code")))
+        self.assertFalse(job._is_codex_apply_route(mock.Mock(role=routing.MILESTONE_IMPLEMENT, harness="codex")))
+        self.assertEqual(routing.ADAPTER_ROLE[self.ROLE], harness.IMPLEMENTER)
+        self.assertNotIn(self.ROLE, routing.LOCAL_APPLY_ROLES)
+
+    def test_a_landing_that_changed_the_surface_ends_at_the_gate_naming_the_implementation_stage(self) -> None:
+        record = {"codex_carry": {"stage": "done", "role": self.ROLE, "base_commit": "a" * 40},
+                  "work_item_id": "wi-1", "pre_state": {"phase": "SELF_REVIEWING_IMPLEMENTATION"}}
+        refused = generator_run.GeneratorRefused("surface_landing_touched", "scripts/x.py changed")
+        with mock.patch.object(generator_run, "check_landing", side_effect=refused), \
+                mock.patch.object(job, "_current_head", return_value="c" * 40), \
+                mock.patch.object(job, "_carry_gate_fields",
+                                  side_effect=lambda base, *a, **kw: {**base, "regeneration": kw["regeneration"]}):
+            ended = job._landing_gate_before_queries(record, managed_repo=mock.Mock(root="/nowhere"), decision=None)
+        self.assertEqual(ended["regeneration"]["cause"], "surface_landing_touched")
+        self.assertEqual(ended["regeneration"]["argument"], "implementation")
+
+    def test_abandon_of_a_record_with_a_begun_landing_runs_the_landings_recover_and_deletes_its_ref(self) -> None:
+        record = {"job_id": "job1", "codex_carry": {"stage": "worker_ran", "role": self.ROLE},
+                  "codex_worker": {"landing": {"outcome": "started"}}}
+        recovery = mock.Mock(delete_ref=True, landing={"outcome": "refused"})
+        with mock.patch.object(job.codex_worker_landing, "recover", return_value=recovery) as recover, \
+                mock.patch.object(job, "_delete_landing_ref") as delete, \
+                mock.patch.object(job, "_settle_codex_worker_dir"):
+            ended, found = job._end_carry_without_carry_out(record, managed_repo=mock.Mock(), runtime_root=Path("/rt"))
+        recover.assert_called_once()
+        delete.assert_called_once()
+        self.assertIs(found, recovery)
+        self.assertEqual(ended["codex_worker"]["landing"], {"outcome": "refused"})
 
 
 class RouteTest(unittest.TestCase):

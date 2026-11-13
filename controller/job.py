@@ -9084,7 +9084,8 @@ def _land_codex_worker(managed_repo: Any, *, runtime_root: Path, job_id: str, re
         # The implementer route's landing also judges the content of the range (workflow-controller-h4f, D3, D6): the
         # surface and the state fields a checkpoint may change. No other route passes either argument.
         policy = ({"surface": codex_worker_landing.LandingSurface.IMPLEMENTER,
-                   "work_item_id": str(record["work_item_id"])} if _is_implementer_record(record) else {})
+                   "work_item_id": str(record["work_item_id"]),
+                   "state_profile": _landing_state_profile(record)} if _is_implementer_record(record) else {})
         landing = CODEX_LANDER(managed_repo, prepared, runtime_root, job_id, worker_breach=breach,
                                on_intent=on_intent, **policy)
     except Exception as exc:  # noqa: BLE001 -- the seam is the caller's; a refusal like the lander's own
@@ -9092,6 +9093,16 @@ def _land_codex_worker(managed_repo: Any, *, runtime_root: Path, job_id: str, re
             "refused", "landing_error", prepared.base, None, prepared.branch,
             message=f"the landing failed unexpectedly: {type(exc).__name__}: {exc}")
     return current["record"], landing
+
+
+def _landing_state_profile(record: Mapping) -> codex_worker_landing.StateProfile:
+    """The state profile of an implementer record's landing (``workflow-controller-h4g``, D2, D6): the wrap-up role's
+    carry record is judged by the self-review profile, every other implementer record by the checkpoint profile. One
+    fact decides it: the carry block's role, which the wrap-up role alone has among the implementer routes."""
+    block = record.get("codex_carry")
+    if isinstance(block, Mapping) and block.get("role") == routing.MILESTONE_IMPLEMENT_SELF_REVIEW:
+        return codex_worker_landing.SELF_REVIEW
+    return codex_worker_landing.CHECKPOINT
 
 
 def _is_implementer_record(record: Mapping) -> bool:
@@ -9242,7 +9253,11 @@ def _run_codex_worker(
 
     try:
         operator_home = CODEX_HOME_RESOLVER()
-        implementer = carry is None and _is_codex_implement_route(route)
+        # H4g, D6: the marker is written for every record of an implementer route, carried or not (the landing's
+        # surface, item id and state profile and the clone retention are keyed on it); only an uncarried clone is made
+        # by the implementer preparer and judged with the checkpoint bookkeeping root unrecorded.
+        implementer = _is_codex_implement_route(route)
+        uncarried = implementer and carry is None
         record = _persist(runtime_root, job_id, {
             **record, "codex_worker": {
                 "operator_home": str(operator_home),
@@ -9261,7 +9276,7 @@ def _run_codex_worker(
                     "no worktree is prepared for a Codex worker: how the tree is made and how its commits return to "
                     "the managed repository is not decided yet",
                     evidence={"job_id": job_id, "harness": route.harness})
-            if implementer:
+            if uncarried:
                 prepared = _prepare_implementer_tree(preparer, managed_repo, layout, base, record, runtime_root)
             else:
                 prepared = preparer(managed_repo, layout, base)
@@ -9271,7 +9286,7 @@ def _run_codex_worker(
         cwd = Path(prepared.path)
         options = codex_worker_job.launch_options(
             runtime_root=runtime_root, job_id=job_id, operator_home=operator_home, cwd=cwd, timeout=timeout,
-            on_spawn=on_spawn, route=route, workflow_metadata=implementer)
+            on_spawn=on_spawn, route=route, workflow_metadata=uncarried)
         result = launcher.launch(worker_task(decision.action), **options)
         stdout_text, stderr_text = codex_worker_job.stream_texts(result)
         runtime.fill_log_file(runtime_root, f"jobs/{job_id}/worker.stdout", stdout_text.encode("utf-8"))
@@ -9331,10 +9346,12 @@ class _CarryLandingRefused(Exception):
 
 
 def _is_codex_apply_route(route: routing.ResolvedRoute) -> bool:
-    """Whether ``route`` is one of the two apply roles routed to Codex (workflow-controller-h4e3, D8): keyed on the
-    route's role and harness. Such a route takes the apply branch (:func:`_run_codex_apply`), before the Codex
-    worker's."""
-    return (route.role in routing.LOCAL_APPLY_ROLES
+    """Whether ``route`` is a carried role routed to Codex (workflow-controller-h4e3, D8; the wrap-up role added by
+    ``workflow-controller-h4g``, D6): the two apply roles and every other role with a row in
+    :data:`codex_carry.ROLES`, keyed on the route's role and harness. ``routing.LOCAL_APPLY_ROLES`` is unchanged: adding
+    the wrap-up role to it would make ``routing.ADAPTER_ROLE`` answer ``local-applier`` for it. Such a route takes the
+    apply branch (:func:`_run_codex_apply`), before the Codex worker's."""
+    return ((route.role in routing.LOCAL_APPLY_ROLES or route.role in codex_carry.ROLES)
             and adapters.get(route.harness).name == adapters.CODEX.name)
 
 
@@ -9428,9 +9445,10 @@ def _carry_gate_text(role: str, work_item_id: str, base_commit: str | None, resu
         steps = [f"run `scripts/prepare-ai-review.sh {base} plan {work_item_id}`", f"take the next step: `{resume}`"]
         lead = "the carried-out plan, registry and review inputs are in the managed repository"
     else:
+        stage = _REGENERATION_STAGE[role]
         steps = [f"read the landed range first: `git log -p {carry_base}..{landed_head}`, because the generator "
                  "executes `scripts/` and any module the landing added to its import path",
-                 f"run `scripts/prepare-ai-review.sh {base} post-fix {work_item_id}`", f"take the next step: `{resume}`"]
+                 f"run `scripts/prepare-ai-review.sh {base} {stage} {work_item_id}`", f"take the next step: `{resume}`"]
         lead = "the worker's commits landed and its review inputs are carried out"
     if regeneration is not None:
         lead += (f", but the Controller did not regenerate the bundle ({regeneration.get('cause')}: "
@@ -9472,7 +9490,7 @@ def _carry_gate_fields(fields: Mapping, record: Mapping, *, managed_repo: Any, d
     try:
         snapshot = target_state.read(managed_repo)
         work_item = target_state.select_work_item(snapshot, work_item_id=work_item_id)
-        landed = (_current_head(root) if block["role"] == routing.APPLY_IMPLEMENTATION_REVIEW else None)
+        landed = _current_head(root) if _carries_landed_commits(block["role"]) else None
         text = _carry_gate_text(block["role"], work_item_id, work_item.base_commit,
                                 explain_gate_command(root, work_item_id),
                                 carry_base=block.get("base_commit"), landed_head=landed,
@@ -9496,7 +9514,14 @@ def _carry_gate_fields(fields: Mapping, record: Mapping, *, managed_repo: Any, d
 
 #: The stage argument the generator is run with for each routed apply role (D4): the two invocations the gate names.
 _REGENERATION_STAGE: Mapping[str, str] = {routing.APPLY_PLAN_REVIEW: "plan",
-                                          routing.APPLY_IMPLEMENTATION_REVIEW: "post-fix"}
+                                          routing.APPLY_IMPLEMENTATION_REVIEW: "post-fix",
+                                          routing.MILESTONE_IMPLEMENT_SELF_REVIEW: "implementation"}
+
+
+def _carries_landed_commits(role: str) -> bool:
+    """Whether a carried role's worker lands commits (H4g, D6): the one fact every landing-keyed site reads, the carry
+    block's stage, so a third role adds a row to :data:`codex_carry.ROLES` and not a name at each site."""
+    return codex_carry.ROLES.get(role) == "implementation"
 
 
 def _guarded_regeneration(fields: Mapping, record: Mapping, *, managed_repo: Any, runtime_root: Path,
@@ -9510,7 +9535,7 @@ def _guarded_regeneration(fields: Mapping, record: Mapping, *, managed_repo: Any
     root, block = Path(managed_repo.root), record["codex_carry"]
     job_id, work_item_id = str(record["job_id"]), str(record["work_item_id"])
     stage = _REGENERATION_STAGE[block["role"]]
-    implementation = block["role"] == routing.APPLY_IMPLEMENTATION_REVIEW
+    implementation = _carries_landed_commits(block["role"])
     held: dict = dict(record)
 
     def refused(cause: str, detail: str, **extra: Any) -> dict:
@@ -9566,7 +9591,7 @@ def _landing_gate_before_queries(record: Mapping, *, managed_repo: Any, decision
     may have edited together with a script, so the first post-landing query would otherwise run the landed code. Only a
     carry at ``done`` has landed; ``None`` when the landing is clean, the role is the plan role or nothing landed."""
     block = record.get("codex_carry") or {}
-    if block.get("stage") != "done" or block.get("role") != routing.APPLY_IMPLEMENTATION_REVIEW:
+    if block.get("stage") != "done" or not _carries_landed_commits(str(block.get("role"))):
         return None
     root = Path(managed_repo.root)
     try:
@@ -9583,7 +9608,8 @@ def _landing_gate_before_queries(record: Mapping, *, managed_repo: Any, decision
             return {**base, "reconciliation_evidence": _protocol_failure_evidence(
                 exc.cause, observed_phase=base["observed_phase_after"], worker_outcome=None,
                 detail=exc.detail)}
-        return {**ended, "regeneration": {"stage": "refused", "argument": "post-fix", **regeneration},
+        return {**ended, "regeneration": {"stage": "refused", "argument": _REGENERATION_STAGE[str(block["role"])],
+                                 **regeneration},
                 "event_seq": record.get("event_seq")}
     return None
 
@@ -9602,6 +9628,78 @@ def _interrupted_publication(fields: Mapping, record: Mapping) -> bool:
     found = fields.get("reconciliation_evidence")
     return (isinstance(block, Mapping) and block.get("stage") in _REGENERATION_IN_FLIGHT
             and isinstance(found, Mapping) and found.get("reason") == RECONCILE_INVALID_REASON)
+
+
+#: The phase a wrap-up role's generation record writes, by governing version: the Workflow's
+#: ``bundle_generation_target_phase("implementation", version)``, which the Controller never imports (it reads only).
+_SELF_REVIEW_TARGET_PHASE: Mapping[str, str] = {"2.2": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW"}
+_SELF_REVIEW_DEFAULT_TARGET_PHASE = "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW"
+
+
+def _first_parent_commits(root: Path, spec: str, *extra: str) -> list[str] | None:
+    """The first-parent commits of ``spec``, newest first; ``None`` when Git cannot say."""
+    result = evidence._run_git(root, ["log", "--first-parent", "--format=%H", *extra, spec])
+    return result.stdout.split() if result.returncode == 0 else None
+
+
+def _generation_record_at(root: Path, work_item_id: str, rev: str) -> str | None:
+    """The newest first-parent commit at or before ``rev`` that carries ``work_item_id``'s generation-record trailer
+    (the item's current record, as the supersession chain's tip is the newest), read with plain Git."""
+    commits = _first_parent_commits(root, rev, "--grep", f"Workflow-Bundle-Generation-Record: {work_item_id}/")
+    for commit in commits or []:
+        if evidence.bundle_generation_record_role(evidence.commit_trailers(root, commit), work_item_id) is not None:
+            return commit
+    return None
+
+
+def _self_review_handover(fields: Mapping, record: Mapping, root: Path) -> bool:
+    """H4g, D5: whether a wrap-up role's first ``reconcile`` answer (``FINISHED`` with progress) may be handed to the
+    guarded generator: the observed phase is the version's target phase and the landed range holds the item's
+    generation record, one of the Workflow's two legal trailer sets (``evidence.bundle_generation_record_role``, the
+    mirror of ``workflow_state._bundle_generation_record_role``) on a commit that touches only the state file and moves
+    the item to that target phase. The *ordinary* role must advance ``implementation_revision`` over the carry base;
+    the *recovered* role (a plan-only re-approval, ``same_content``) must leave it unchanged and name, in
+    ``Workflow-Supersedes``, the item's current record at the carry base. The record is never compared with the landed
+    head. Any other answer is the resolution's own ending: a partial self-review is not a regeneration."""
+    block = record.get("codex_carry") or {}
+    base, work_item_id = block.get("base_commit"), str(record["work_item_id"])
+    head = _current_head(root)
+    if not base or head is None:
+        return False
+    after_tip = evidence.committed_work_item(root, work_item_id, head)
+    if after_tip is None:
+        return False
+    target = _SELF_REVIEW_TARGET_PHASE.get(str(after_tip.get("governing_workflow_version")),
+                                           _SELF_REVIEW_DEFAULT_TARGET_PHASE)
+    if fields.get("observed_phase_after") != target:
+        return False
+    landed = _first_parent_commits(root, f"{base}..{head}")
+    if not landed:
+        return False
+    at_base = _generation_record_at(root, work_item_id, str(base))
+    for commit in landed:
+        trailers = evidence.commit_trailers(root, commit)
+        role = evidence.bundle_generation_record_role(trailers, work_item_id)
+        if role is None:
+            continue
+        touched = evidence._run_git(root, ["show", "--no-renames", "--name-only", "--format=", commit])
+        if touched.returncode != 0 or touched.stdout.split() != [evidence._STATE_REL_PATH]:
+            continue
+        before = evidence.committed_work_item(root, work_item_id, f"{commit}^")
+        after = evidence.committed_work_item(root, work_item_id, commit)
+        if before is None or after is None or after.get("phase") != target:
+            continue
+        revision_before, revision_after = before.get("implementation_revision"), after.get("implementation_revision")
+        if role == "ordinary":
+            if type(revision_after) is int and revision_after > (revision_before if type(revision_before) is int else 0):
+                return True
+            continue
+        named = (trailers or {}).get("Workflow-Supersedes", "")
+        resolved = evidence._run_git(root, ["rev-parse", "--verify", "--quiet", f"{named}^{{commit}}"])
+        if (at_base is not None and revision_after == revision_before and resolved.returncode == 0
+                and resolved.stdout.strip() == at_base):
+            return True
+    return False
 
 
 def _carry_resolution(record: Mapping, *, managed_repo: Any, runtime_root: Path, worker_outcome: str | None,
@@ -9626,6 +9724,9 @@ def _carry_resolution(record: Mapping, *, managed_repo: Any, runtime_root: Path,
                     "reconciliation_evidence": violation}
         if fields.get("protocol", {}).get("progress") == "none":
             return fields  # a worker that changed nothing is the existing `no_progress` judgement
+        if ((record.get("codex_carry") or {}).get("role") == routing.MILESTONE_IMPLEMENT_SELF_REVIEW
+                and not _self_review_handover(fields, record, Path(managed_repo.root))):
+            return fields  # a partial self-review (D5, D6) is the resolution's own ending, not a regeneration
         return _guarded_regeneration(fields, record, managed_repo=managed_repo, runtime_root=runtime_root,
                                      worker_outcome=worker_outcome, decision=decision)
     if fields["status"] == STATUS_FAILED and (
@@ -9706,6 +9807,25 @@ def _carry_set_of(managed_repo: Any, record: Mapping) -> codex_carry.CarrySet:
                                sources=codex_carry.verified_sources(root))
 
 
+def _check_self_review_tree(managed_repo: Any, runtime_root: Path, job_id: str, base: str, work_item_id: str) -> None:
+    """The wrap-up role's two reads before its clone (``workflow-controller-h4g``, D4, D6), the implementer's
+    (:func:`_prepare_implementer_tree`) without the clone: the managed common directory for a claim or an amendment a
+    clone could not show (:func:`checkpoint_claims.check`), then the clean-tree check. A dirty managed tree is refused
+    as ``managed_tree_not_clean`` with its remedy, so the job ends ``WorkerNotStarted``; any other refusal of the
+    managed branch is the tree preparer's own and is raised as it is."""
+    layout = codex_worker_sandbox.WorkerLayout(runtime_root, job_id)
+    checkpoint_claims.check(managed_repo, work_item_id, codex_worker_tree.scrubbed_runner(layout.base,
+                                                                                         no_optional_locks=True))
+    try:
+        codex_worker_tree.check_managed(managed_repo, layout, base)
+    except codex_worker_tree.CodexTreeError as exc:
+        if exc.cause != "managed_tree_not_clean":
+            raise
+        raise checkpoint_claims.ManagedStateRefused(
+            "managed_tree_not_clean", "the managed repository has uncommitted changes, which a clone cannot receive "
+            "and a landing could not return", evidence=dict(exc.evidence)) from exc
+
+
 def _run_codex_apply(
     managed_repo: Any, *, runtime_root: Path, run_id: str | None, job_id: str, record: JobRecord, decision: Decision,
     route: routing.ResolvedRoute, timeout: float | None, launcher: Any, worker_not_started: Callable[..., None],
@@ -9741,8 +9861,15 @@ def _run_codex_apply(
     try:
         carry_set = codex_carry.compute(root, work_item_id, route.role, sources=codex_carry.verified_sources(root))
         pre_head = str(pre_state["target_head"])
-        base = (codex_carry.commit_pending(root, work_item_id, pre_head, digests=digests)
-                if carry_set.stage == "implementation" else pre_head)
+        if route.role == routing.MILESTONE_IMPLEMENT_SELF_REVIEW:
+            # H4g, D4, D6: the wrap-up role has no uncommitted working set to commit (every file it needs is
+            # committed), so `commit_pending` is not called; the claim and amendment reads and the clean-tree check
+            # run here, before `carry_in`, so a dirty tree is `managed_tree_not_clean` and never `carry_foreign_dirt`.
+            _check_self_review_tree(managed_repo, runtime_root, job_id, pre_head, work_item_id)
+            base = pre_head
+        else:
+            base = (codex_carry.commit_pending(root, work_item_id, pre_head, digests=digests)
+                    if carry_set.stage == "implementation" else pre_head)
     except ControllerError as exc:
         return refuse(exc)
     # D4a: the carry base, the pre-step head and the re-captured "moved nothing" baseline are on record before the
@@ -9897,8 +10024,7 @@ def _end_carry_without_carry_out(record: JobRecord, *, managed_repo: Any, runtim
     ran = _carry_worker_ran(record)
     recovery = None
     block = (record.get("codex_worker") or {}).get("landing")
-    if (ran and record["codex_carry"].get("role") == routing.APPLY_IMPLEMENTATION_REVIEW
-            and isinstance(block, Mapping)):
+    if ran and _carries_landed_commits(str(record["codex_carry"].get("role"))) and isinstance(block, Mapping):
         recovery = codex_worker_landing.recover(managed_repo, record)
         if recovery.delete_ref:
             _delete_landing_ref(managed_repo, runtime_root, str(record["job_id"]))

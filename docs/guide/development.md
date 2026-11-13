@@ -280,6 +280,15 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   does the same: the detached-descendant test in `RunnerTest` adds the pid to
   its own. Check a new test of
   this kind with `taskset -c 0,1` and two or three copies started together.
+- **The Ctrl-C test under load (#342).** Neither of two repros caught
+  `test_a_kill_in_the_middle_of_a_bundle_rewrite_is_run_again_by_resume` or
+  its companion `test_a_kill_during_the_run_is_run_again_by_resume` failing:
+  `ImplGuardedRunTest` in six copies pinned with `taskset -c 0,1` ten times
+  (60 runs), and a full `tools/run_tests.py` run pinned to two CPUs with four
+  busy loops. Both tests now fail with one message (`interrupted_or_explained`)
+  that names which end happened: the patched `run_in_place` calls, the
+  generator result, and the refusal's `regeneration` cause and detail. Read it
+  before guessing at a cause.
 
 ## Running signal tests safely
 

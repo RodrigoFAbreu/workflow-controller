@@ -1014,11 +1014,36 @@ else:
         self.assert_next_stage_passes(self.ARGUMENT)
         self.assertTrue(job.validate_record(record, managed_repo=self.target, identity=FAKE_IDENTITY).valid)
 
+    def interrupted_or_explained(self, calls: list[object], seen: object = None) -> None:
+        """Run one step with the patched ``run_in_place`` already installed and require the ``KeyboardInterrupt``.
+
+        When it is not raised (``self.step()`` ended normally, #342) the failure says which end happened: whether the
+        patched call was reached at all (``calls``, empty means ``generator_run.run`` ended first, with the refusal's
+        ``regeneration`` ``cause``, ``detail`` and ``reconciliation_evidence`` printed on their own), or the generator
+        failed inside the patch (``seen``)."""
+        try:
+            self.step()
+        except KeyboardInterrupt:
+            return
+        record = self.only_record()
+        regeneration = record.get("regeneration") or {}
+        self.fail(
+            "KeyboardInterrupt not raised: the step ended normally "
+            f"(run_in_place calls={len(calls)}, generator result in the patch={seen!r}, "
+            f"status={record.get('status')!r}, regeneration cause={regeneration.get('cause')!r}, "
+            f"detail={regeneration.get('detail')!r}, stage={regeneration.get('stage')!r}, "
+            f"reconciliation_evidence={record.get('reconciliation_evidence')!r})")
+
     def test_a_kill_during_the_run_is_run_again_by_resume(self) -> None:
         self.worked()
-        with mock.patch.object(generator_run.workflow_contract, "run_in_place", side_effect=KeyboardInterrupt):
-            with self.assertRaises(KeyboardInterrupt):
-                self.step()
+        calls: list[object] = []
+
+        def interrupt(*args: object, **kwargs: object) -> None:
+            calls.append(args)
+            raise KeyboardInterrupt
+
+        with mock.patch.object(generator_run.workflow_contract, "run_in_place", side_effect=interrupt):
+            self.interrupted_or_explained(calls)
         record = self.only_record()
         self.assertEqual(record["regeneration"]["stage"], "started")
         self.assertNotIn(record["status"], job.TERMINAL_STATUSES)
@@ -1215,13 +1240,8 @@ subprocess.run(["git", "-c", "user.name=W", "-c", "user.email=w@example.invalid"
             return real(root, argv, **kwargs)
 
         with mock.patch.object(generator_run.workflow_contract, "run_in_place", side_effect=torn):
-            try:
-                ended = self.step()
-            except KeyboardInterrupt:
-                ended = None
+            self.interrupted_or_explained(calls, seen)
             record = self.only_record()
-            self.assertIsNone(ended, (len(calls), seen, record.get("status"), record.get("regeneration"),
-                                      record.get("reconciliation_evidence")))
             self.assertEqual(record["regeneration"]["stage"], "started")
             (resumed,) = self.resume()
         self.assertEqual(len(calls), 2, "resume did not run the generator again")

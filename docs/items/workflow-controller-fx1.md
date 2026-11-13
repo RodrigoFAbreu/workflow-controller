@@ -18,3 +18,8 @@ Other flakes, test sharding and CI time (see CI2), and any change to the Control
 ## Not yet planned
 
 Not yet planned. The rules that apply (the sizing rule: at most one new mechanism, releasable alone) are on [Planning rules](../planning-rules.md#next-in-order-and-the-sizing-rules).
+
+## What was found (CP2, #342)
+
+Not reproduced. `ImplGuardedRunTest` in six copies pinned with `taskset -c 0,1`, ten rounds (60 runs), and one full `tools/run_tests.py` run (6605 tests, 8 shards) pinned to two CPUs with four busy loops beside it: both Ctrl-C tests passed every time. That run's four failures are unrelated: three `FakeCodexContractTest` tests that read the operator's `~/.codex` configuration, and one catalogue-determinism scenario killed at its 600 s limit by the starvation the burners caused. So both tests keep their behaviour and now share one failure message (`GuardedRunMixin.interrupted_or_explained`) that records the `run_in_place` call count, the generator's result, the record's `status` and the `regeneration` `cause`, `detail` and `stage`. The issue stays open until the next sighting names the end.
+

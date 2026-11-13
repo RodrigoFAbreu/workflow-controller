@@ -602,9 +602,9 @@ cause through the job, both roles).
 H4f ([#312](https://github.com/RodrigoFAbreu/workflow-controller/issues/312)) lets routing select Codex for
 `milestone-implement`, the role that implements one checkpoint of an approved plan. It runs as the adapter role `implementer`,
 which both adapters declare, so `--role-harness milestone-implement=codex` (or a routing config or a fallback chain naming
-`codex`) is accepted with a model and an effort the adapter lists. **`milestone-implement-self-review` stays on the `worker`
-adapter role and on Claude Code only**: it writes the implementation bundle's author-written, ignored files and runs the
-generator, which needs a carry of ignored files that this item does not build (H4g, below). **The default is unchanged**:
+`codex`) is accepted with a model and an effort the adapter lists. **`milestone-implement-self-review` is the wrap-up role and
+follows in [its own section](#the-wrap-up-role-on-codex)**: it needs a carry of ignored files and a guarded generator run, which
+H4g builds from the apply roles' mechanisms. **The default is unchanged**:
 nothing is routed to Codex unless an operator selects it.
 
 - **What runs.** One checkpoint per invocation, as the command says: the worker claims the checkpoint, implements it, runs the
@@ -650,6 +650,51 @@ Codex turn, skipped on `CI`; it asserts the commit landed, the state showing the
 sandbox profile). Its output belongs in `tests/harness_contract/codex/implement_role.txt`. **It has not been run yet** (it
 spends the operator's Codex usage), so that file does not exist, the toolchain question is unanswered and no cost is measured. A
 repository whose tests cannot run in the sandbox keeps `claude-code` for this role.
+
+#### The wrap-up role on Codex
+
+H4g ([#312](https://github.com/RodrigoFAbreu/workflow-controller/issues/312)) lets routing select Codex for
+`milestone-implement-self-review`, the invocation of `/milestone-implement` that runs after the last checkpoint: it enters
+`SELF_REVIEWING_IMPLEMENTATION`, reviews the whole diff, writes the implementation bundle's author-written files and publishes the
+bundle's generation record. It runs as the same adapter role as the checkpoint role (`implementer`), so
+`--role-harness milestone-implement-self-review=codex` is accepted, and `codex` is still refused for every other worker role.
+**The default is unchanged**: with no routing the role runs on Claude Code and every Claude job record is byte-identical to today's.
+Which roles can and cannot be routed is in [the tables above](#the-tables).
+
+- **What the worker does** in its private clone: from `IMPLEMENTING` with every checkpoint `COMPLETE`, the one phase commit
+  (`enter_self_reviewing_implementation`, the state file alone); from `SELF_REVIEWING_IMPLEMENTATION` no phase commit (the call is a
+  no-op); then the generation record (`record_bundle_generation` with `stage="implementation"`, its own commit with the
+  `Workflow-Bundle-Generation-Record` and `Workflow-Work-Item` trailers, or, after a plan-only re-approval whose protected content
+  is unchanged, the recovered-role record that names the one it supersedes in `Workflow-Supersedes`), and the author-written
+  files of the bundle.
+- **What is checked before it lands.** The checkpoint role's two checks (`surface_touched`, the paths of `scripts/`,
+  `.workflow-manager/`, `.claude/`, `.codex/` and `.mcp.json`; `state_touched`) apply with one difference: the state file may
+  change only the fields of the **self-review profile** (`codex_worker_landing.SELF_REVIEW`: `phase`, `state_revision`,
+  `last_transition`, `implementation_revision`, `reviewed_implementation_head`), which a test derives by running the Workflow's two
+  writers through `state_transaction` and which fails when a release changes the set. The checkpoint profile still refuses a
+  generation record, and the self-review profile refuses a checkpoint, approval or review-stage field. Before the clone is made
+  the role runs the checkpoint role's claim and amendment reads and requires a clean managed tree (`managed_tree_not_clean`,
+  never `carry_foreign_dirt`).
+- **What is carried.** The carry of the `implementation` stage: the five out members under `.ai-review/<item>/current/`
+  (`REVIEW_REQUEST.md`, `IMPLEMENTATION_SUMMARY.md`, `TEST_RESULTS.md`, `CONTEXT_FILES.txt`, `PLAN.md`) come back from the clone
+  after the landing, a link or special file at one is `carry_member_refused` **before** the landing writes anything, and the
+  state file is never carried (the landing returns its writes). A bundle the worker generated in its clone (`MANIFEST.md`,
+  `DIFF.patch`, `files/`, `review-bundle.tar.gz`, `.pin`) is never written out.
+- **What the Controller regenerates.** After the landing, and only when the first `reconcile` answers `FINISHED` with progress,
+  the observed phase is the version's target phase and the landed range holds the item's generation record, the Controller runs
+  the guarded `implementation` generator ([above](#what-the-controller-runs-after-a-landing)); the live `current/CONTEXT_FILES.txt`
+  is its only context list. A **partial** self-review (the phase commit landed, no generation record) ends with the resolution's
+  own answer and **no** generator run, and its gate does not say "regenerate the bundle". A context list naming a path outside
+  the repository is the only plant that refuses after the landing: the item ends at `carry_bundle_regeneration_pending` with
+  `copy_source_unsafe`, the landed commits and the carried files are kept, no generator process is started and no external byte
+  is copied.
+- **Every refusal before the landing keeps the managed repository as it was**, and the clone is kept.
+  [Common problems](../common-problems.md#a-codex-wrap-up-was-refused-or-stopped-early) has each ending.
+
+The opt-in live proof is `CONTROLLER_LIVE_CODEX_TESTS=1 python3 -B -m unittest tests.test_codex_selfreview_live -v` (one real
+Codex turn, skipped on `CI`). Its output belongs in `tests/harness_contract/codex/selfreview_role.txt`. **It has not been run yet**
+(it spends the operator's Codex usage), so that file does not exist and no cost is measured. The roles that stay on Claude Code,
+and the follow-up items that track them, are on [the H4g item page](../items/workflow-controller-h4g.md).
 
 ## The shared command renderer
 

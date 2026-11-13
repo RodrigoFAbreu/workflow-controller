@@ -128,7 +128,7 @@ class RenderTest(unittest.TestCase):
         only_reviewer = {"codex": dataclasses.replace(harness.CODEX, roles=(harness.REVIEWER,))}
         with mock.patch.object(harness, "ADAPTERS", only_reviewer):
             legend = [line.split("`")[1] for line in ht.render().splitlines() if line.startswith("- ")]
-        self.assertEqual(legend, ["reviewer", "implementer", "worker", "local-applier", "local-reviewer", "functional-tester"])
+        self.assertEqual(legend, ["reviewer", "implementer", "local-applier", "local-reviewer", "worker", "functional-tester"])
 
     def test_an_unknown_role_or_usage_raises_naming_it(self) -> None:
         with with_codex_roles("novel-role"):

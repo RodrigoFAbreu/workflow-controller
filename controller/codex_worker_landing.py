@@ -63,6 +63,31 @@ CHECKPOINT_WRITTEN_FIELDS = frozenset({
     "checkpoints", "current_checkpoint_id", "last_completed_checkpoint_id", "phase", "state_revision",
     "last_transition"})
 
+#: The fields of a work item's state entry the wrap-up role writes (``workflow-controller-h4g``, D3): the union of what
+#: ``enter_self_reviewing_implementation`` (the phase) and ``record_bundle_generation`` with ``stage="implementation"``
+#: (``implementation_revision``, ``reviewed_implementation_head`` and the target phase; the record's own trailer commit
+#: is not a field) change through ``state_transaction``. Derived from those writers, for both outcomes and both
+#: governing versions, by ``tests.test_codex_worker_landing`` (the test's derived set is the authority).
+SELF_REVIEW_WRITTEN_FIELDS = frozenset({
+    "phase", "state_revision", "last_transition", "implementation_revision", "reviewed_implementation_head"})
+
+
+@dataclasses.dataclass(frozen=True)
+class StateProfile:
+    """A named set of the fields of this item's state entry a landed commit may change (``workflow-controller-h4g``,
+    D2). The name is recorded in the evidence of a ``state_touched`` refusal."""
+
+    name: str
+    fields: frozenset[str]
+
+
+#: The checkpoint role's profile, and the default of every landing: no generation record, no phase beyond what a
+#: checkpoint completion writes.
+CHECKPOINT = StateProfile("checkpoint", CHECKPOINT_WRITTEN_FIELDS)
+
+#: The wrap-up role's profile (D3): the phase and the generation record, and no checkpoint field.
+SELF_REVIEW = StateProfile("self-review", SELF_REVIEW_WRITTEN_FIELDS)
+
 #: The cause recorded for an outcome ``nothing`` (a success: the clone's branch is the base, no write).
 NOTHING_TO_LAND = "nothing_to_land"
 
@@ -178,10 +203,11 @@ def _on_surface(path: str) -> bool:
     return path in SURFACE_FILES or any(path.startswith(f"{name}/") or path == name for name in SURFACE_DIRECTORIES)
 
 
-def _check_surface(repo: Path, base: str, tip: str, work_item_id: str | None, runner: gitrepo.Runner) -> None:
+def _check_surface(repo: Path, base: str, tip: str, work_item_id: str | None, runner: gitrepo.Runner,
+                   profile: StateProfile = CHECKPOINT) -> None:
     """D3 and D4 for :attr:`LandingSurface.IMPLEMENTER`, on the net ``base..tip`` change: ``surface_touched`` for a path
     of the execution surface, a link, a mode change where both sides exist, or a diff that cannot be read;
-    ``state_touched`` for a state file change outside :data:`CHECKPOINT_WRITTEN_FIELDS` of this item's entry. A newly
+    ``state_touched`` for a state file change outside ``profile``'s fields of this item's entry. A newly
     added executable file outside the surface is not refused (the implementation review judges it)."""
     try:
         changes = gitrepo.diff_raw(repo, base, tip, runner=runner)
@@ -198,7 +224,7 @@ def _check_surface(repo: Path, base: str, tip: str, work_item_id: str | None, ru
         raise _refuse("surface_touched", f"the range changes {len(touched)} path(s) outside what a checkpoint may "
                       f"land: {touched[:20]}", evidence={"paths": touched[:50]})
     if any(path == STATE_PATH for _, _, _, path in changes):
-        _check_state(repo, base, tip, work_item_id, runner)
+        _check_state(repo, base, tip, work_item_id, runner, profile)
 
 
 def _read_state(repo: Path, rev: str, runner: gitrepo.Runner, label: str) -> dict:
@@ -220,8 +246,10 @@ def _read_state(repo: Path, rev: str, runner: gitrepo.Runner, label: str) -> dic
     return state
 
 
-def _check_state(repo: Path, base: str, tip: str, work_item_id: str | None, runner: gitrepo.Runner) -> None:
-    """D4: the two versions, read as data, differ only in this item's :data:`CHECKPOINT_WRITTEN_FIELDS`."""
+def _check_state(repo: Path, base: str, tip: str, work_item_id: str | None, runner: gitrepo.Runner,
+                 profile: StateProfile = CHECKPOINT) -> None:
+    """D4 and ``workflow-controller-h4g`` D2: the two versions, read as data, differ only in this item's fields of
+    ``profile``."""
     if not work_item_id:
         raise _refuse("state_touched", "the landing was not told which work item's entry a checkpoint may write")
     before = _read_state(repo, base, runner, "base")
@@ -238,21 +266,21 @@ def _check_state(repo: Path, base: str, tip: str, work_item_id: str | None, runn
             changed.append(f"work_items.{item}")
     entry_before, entry_after = items_before.get(work_item_id), items_after.get(work_item_id)
     if isinstance(entry_before, dict) and isinstance(entry_after, dict):
-        for field in sorted((set(entry_before) | set(entry_after)) - CHECKPOINT_WRITTEN_FIELDS):
+        for field in sorted((set(entry_before) | set(entry_after)) - profile.fields):
             if entry_before.get(field, _MISSING) != entry_after.get(field, _MISSING):
                 changed.append(f"work_items.{work_item_id}.{field}")
     elif work_item_id in items_before and work_item_id in items_after:
         changed.append(f"work_items.{work_item_id}")
     if changed:
-        raise _refuse("state_touched", f"the range changes the state file outside the fields a checkpoint writes: "
-                      f"{changed[:20]}", evidence={"fields": changed[:50]})
+        raise _refuse("state_touched", f"the range changes the state file outside the fields the {profile.name} "
+                      f"profile may write: {changed[:20]}", evidence={"fields": changed[:50], "profile": profile.name})
 
 
 _MISSING = object()
 
 
 def _check_range(clone: Path, base: str, tip: str, runner: gitrepo.Runner, *, surface: LandingSurface | None = None,
-                 work_item_id: str | None = None) -> list[str]:
+                 work_item_id: str | None = None, profile: StateProfile = CHECKPOINT) -> list[str]:
     """D3 (4) to (6), read in the clone with the commit graph off. Returns the commits, oldest first. With ``surface``
     the content checks of ``workflow-controller-h4f`` (D3, D4) follow the submodule check, in this pass and so in both
     passes of :func:`land`."""
@@ -271,7 +299,7 @@ def _check_range(clone: Path, base: str, tip: str, runner: gitrepo.Runner, *, su
         if gitrepo.commit_touches_submodule(clone, commit, parents[0], runner=runner):
             raise _refuse("submodule", f"the commit {commit} adds or changes a submodule", evidence={"commit": commit})
     if surface is LandingSurface.IMPLEMENTER:
-        _check_surface(clone, base, tip, work_item_id, runner)
+        _check_surface(clone, base, tip, work_item_id, runner, profile)
     return [commit for commit, _ in commits]
 
 
@@ -353,13 +381,14 @@ def _classify_after_merge(managed_root: Path, prepared: Any, tip: str, runner: g
 
 def land(managed_repo: Any, prepared: Any, runtime_root: Path, job_id: str, *, worker_breach: bool,
          on_intent: Callable[[str], None], surface: LandingSurface | None = None,
-         work_item_id: str | None = None) -> Landing:
+         work_item_id: str | None = None, state_profile: StateProfile = CHECKPOINT) -> Landing:
     """D3 and D4: land the clone's commits, or refuse with a named cause. Never raises for a Git or OS failure: an
     unexpected one is ``landing_error`` (a refusal like the others). ``on_intent(checked_tip)`` is called once, after
     every check and before the fetch, and not for a refusal at a check or for ``nothing``. ``surface`` (default
     ``None``: nothing changes) adds the content checks of ``workflow-controller-h4f`` (D3, D4) to both range passes,
-    the managed-side one deciding; ``work_item_id`` names the state entry a checkpoint may write and is required with
-    it."""
+    the managed-side one deciding; ``work_item_id`` names the state entry a landing may write and is required with
+    it, and ``state_profile`` (default :data:`CHECKPOINT`) names the fields of that entry it may change
+    (``workflow-controller-h4g``, D2)."""
     if surface is not None and not work_item_id:
         raise ValueError("a landing surface needs the work item id")
     managed_root = Path(managed_repo.root)
@@ -384,7 +413,8 @@ def land(managed_repo: Any, prepared: Any, runtime_root: Path, job_id: str, *, w
             state["tip"] = tip
             if tip == base:
                 return Landing("nothing", NOTHING_TO_LAND, base, tip, branch)
-            state["commits"] = _check_range(clone, base, tip, read, surface=surface, work_item_id=work_item_id)
+            state["commits"] = _check_range(clone, base, tip, read, surface=surface, work_item_id=work_item_id,
+                                            profile=state_profile)
             try:
                 on_intent(tip)
             except Exception as exc:  # noqa: BLE001 -- the callback is the caller's; nothing has been fetched
@@ -404,7 +434,8 @@ def land(managed_repo: Any, prepared: Any, runtime_root: Path, job_id: str, *, w
             # object's id, so the clone-side checks above can be steered (a base object overlaid under its own
             # name). The managed repository holds the authentic base and the fetch verified every object it took
             # (``fsckObjects``), so the range is judged again here, where its ids are what they say.
-            state["commits"] = _check_range(managed_root, base, tip, read, surface=surface, work_item_id=work_item_id)
+            state["commits"] = _check_range(managed_root, base, tip, read, surface=surface, work_item_id=work_item_id,
+                                            profile=state_profile)
             state["merging"] = True
             try:
                 gitrepo.landing_merge(managed_root, tip, runner=read)

@@ -33,8 +33,11 @@ from . import (
 )
 from .errors import ControllerError, GitOperationError
 
-#: The two roles, and the stage each one's Workflow command works at.
-ROLES = {"apply-plan-review": "plan", "apply-implementation-review": "implementation"}
+#: The three roles, and the stage each one's Workflow command works at. The wrap-up role (H4g, D4) shares the
+#: implementation stage's set with the apply role: no named repository path, the same out members, and the state file is
+#: never carried (its two writes return through the landing).
+ROLES = {"apply-plan-review": "plan", "apply-implementation-review": "implementation",
+         "milestone-implement-self-review": "implementation"}
 
 #: One cause per refusal (D3 to D7); a test fails when one has no case.
 CAUSES = (

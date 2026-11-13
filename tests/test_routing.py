@@ -341,9 +341,18 @@ class HarnessFieldTest(unittest.TestCase):
             {"harness": "codex"})
 
     def test_the_other_roles_still_refuse_codex(self) -> None:
-        for role in ("milestone-plan", "milestone-implement-self-review"):
+        for role in ("milestone-plan", "satisfy-gate"):
             with self.subTest(role=role), self.assertRaises(ValueError):
                 routing.parse_role_harness(f"{role}=codex")
+
+    def test_the_wrap_up_role_accepts_codex_and_the_default_is_unchanged(self) -> None:
+        # h4g, D1: the wrap-up role runs as the implementer, so codex is accepted for it at every entry point.
+        role = "milestone-implement-self-review"
+        self.assertEqual(routing.check_role_harness(role, "codex"), "codex")
+        self.assertEqual(routing.parse_role_harness(f"{role}=codex"), (role, "codex"))
+        self.assertEqual(_config(roles={role: {"harness": "codex"}}).roles[role]["harness"], "codex")
+        self.assertEqual(routing.check_role_harness(role, "claude-code"), "claude-code")
+        self.assertEqual(routing.NO_OVERRIDES.chain(role)[0].harness, "claude-code")
 
     def test_adapter_role_maps_every_routing_role_to_a_declared_one(self) -> None:
         self.assertEqual(set(routing.ADAPTER_ROLE), set(routing.ROLES))
@@ -354,18 +363,17 @@ class HarnessFieldTest(unittest.TestCase):
         for role in routing.LOCAL_APPLY_ROLES:
             self.assertEqual(routing.ADAPTER_ROLE[role], harness.LOCAL_APPLIER)
         self.assertEqual(set(routing.LOCAL_APPLY_ROLES), {"apply-plan-review", "apply-implementation-review"})
-        # h4f, D1: exactly the checkpoint role runs as the implementer; the wrap-up role stays a worker.
-        self.assertEqual(routing.IMPLEMENT_ROLES, ("milestone-implement",))
+        # h4f/h4g, D1: exactly the checkpoint role and the wrap-up role run as the implementer.
+        self.assertEqual(routing.IMPLEMENT_ROLES, ("milestone-implement", "milestone-implement-self-review"))
         for role in routing.IMPLEMENT_ROLES:
             self.assertEqual(routing.ADAPTER_ROLE[role], harness.IMPLEMENTER)
-        self.assertEqual(routing.ADAPTER_ROLE["milestone-implement-self-review"], harness.WORKER)
         for role in routing.ROLES - {"functional-tester", *routing.LOCAL_REVIEW_ROLES, *routing.LOCAL_APPLY_ROLES, *routing.IMPLEMENT_ROLES}:
             self.assertEqual(routing.ADAPTER_ROLE[role], harness.WORKER)
         for adapter_role in routing.ADAPTER_ROLE.values():
             self.assertIn(adapter_role, harness.CLAUDE_CODE.roles)
 
     def test_codex_is_refused_in_a_default_and_in_each_kind_of_role(self) -> None:
-        for role in ("milestone-implement-self-review", "milestone-plan", "satisfy-gate"):
+        for role in ("milestone-plan", "satisfy-gate"):
             with self.subTest(role=role), self.assertRaises(RoutingConfigError) as ctx:
                 _config(roles={role: {"harness": "codex"}})
             self.assertIn(f"role {role!r} runs as a {routing.ADAPTER_ROLE[role]!r} and harness 'codex' "

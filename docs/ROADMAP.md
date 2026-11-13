@@ -87,7 +87,7 @@
 | 81 | [Codex worker, step 5d: the carry and recovery for the two apply roles, without running the Workflow's generator](items/workflow-controller-h4e3.md) `workflow-controller-h4e3` | Done | - | workflow-controller-h4e2b |
 | 82 | [Codex worker, step 5e: run the managed repository's generator safely after a landing](items/workflow-controller-h4e3b.md) `workflow-controller-h4e3b` | Done | - | workflow-controller-h4e3 |
 | 83 | [Codex worker, step 6](items/workflow-controller-h4f.md) `workflow-controller-h4f` | Done | - | workflow-controller-h4e3b |
-| 84 | [Codex worker, step 7](items/workflow-controller-h4g.md) `workflow-controller-h4g` | Next | - | workflow-controller-h4f |
+| 84 | [Codex worker, step 7](items/workflow-controller-h4g.md) `workflow-controller-h4g` | Done | - | workflow-controller-h4f |
 | 85 | [Fix the timing flakes: OrphanWatchdogTest readiness waits (#246) and the Ctrl-C test under load (#342); owner priority](items/workflow-controller-fx1.md) `workflow-controller-fx1` | Next | - | - |
 | 86 | [Move this repository to Workflow 2.29.3](items/workflow-controller-w1.md) `workflow-controller-w1` | Next | - | - |
 | 87 | [Run worker test commands in an isolated PID namespace (#329)](items/workflow-controller-ns1.md) `workflow-controller-ns1` | Next | - | - |

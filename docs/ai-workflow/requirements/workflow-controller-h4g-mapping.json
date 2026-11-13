@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-h4g",
+  "requirements": {
+    "R1": {
+      "description": "`milestone-implement-self-review` can be routed to `codex` and to nothing else of the worker roles; the default is unchanged (#312)",
+      "checkpoint_ids": [
+        "CP1",
+        "CP5"
+      ]
+    },
+    "R2": {
+      "description": "The landing takes a named state profile; the self-review profile is derived from the Workflow's two writers and no checkpoint landing may write a generation record (#312)",
+      "checkpoint_ids": [
+        "CP2",
+        "CP5"
+      ]
+    },
+    "R3": {
+      "description": "The role runs on a clean tree through the carry of the implementation stage's out members, never carrying a derived file (#312)",
+      "checkpoint_ids": [
+        "CP3",
+        "CP5"
+      ]
+    },
+    "R4": {
+      "description": "The Controller regenerates the implementation bundle after the landing with the guarded run, and every window of the ordered job is recoverable (#312)",
+      "checkpoint_ids": [
+        "CP4",
+        "CP5"
+      ]
+    },
+    "R5": {
+      "description": "The adversarial tests, the opt-in live proof and the pages say what is selectable, what is checked and what moved to follow-up items (#312)",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    }
+  }
+}

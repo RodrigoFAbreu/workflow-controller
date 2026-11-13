@@ -245,6 +245,82 @@ class SetTest(Case):
                                                 out_members=()).is_derived(member), member)
 
 
+class SelfReviewRoleTest(Case):
+    """`workflow-controller-h4g` CP3 (D4): the wrap-up role's carry is the implementation stage's, and nothing named."""
+
+    SELF = "milestone-implement-self-review"
+
+    def test_the_role_is_the_implementation_stage_with_the_apply_roles_members(self) -> None:
+        self.assertEqual(carry.ROLES[self.SELF], "implementation")
+        mine, apply = self.set_for(self.SELF), self.set_for("apply-implementation-review")
+        self.assertEqual(mine.stage, "implementation")
+        self.assertEqual(mine.named, ())
+        self.assertEqual(list(mine.out_members), IMPL_MEMBERS)
+        self.assertEqual((mine.out_members, mine.derived_names, mine.derived_prefixes, mine.item_root),
+                         (apply.out_members, apply.derived_names, apply.derived_prefixes, apply.item_root))
+        self.assertEqual(mine.role, self.SELF)
+
+    def test_the_other_roles_are_unchanged(self) -> None:
+        self.assertEqual(carry.ROLES["apply-plan-review"], "plan")
+        self.assertEqual(carry.ROLES["apply-implementation-review"], "implementation")
+        self.assertEqual(len(carry.ROLES), 3)
+
+    def test_a_first_round_carries_the_plan_stage_bundle_in_and_needs_no_feedback(self) -> None:
+        """`current/` holds the approved plan-stage bundle on a first self-review round; `feedback/` is absent."""
+        self.make_clean()
+        shutil.rmtree(self.root / ITEM / "feedback")
+        for rel in ("CHANGED_FILES.txt", "COMMITS.txt"):
+            write(self.root, f"{ITEM}/current/{rel}", "derived\n")
+        _set, block, prepared = self.go_in(self.set_for(self.SELF))
+        for rel in ("REVIEW_REQUEST.md", "PLAN.md", "CONTEXT_FILES.txt", "MANIFEST.md", "CHANGED_FILES.txt",
+                    "DIFF.patch", "COMMITS.txt", "files/a.txt"):
+            self.assertTrue((prepared.path / ITEM / "current" / rel).is_file(), rel)
+        self.assertFalse((prepared.path / ITEM / "feedback").exists())
+        self.assertEqual(block["intent_to_add"], [])
+        self.assertEqual(out(prepared.path, "status", "--porcelain"), "")
+
+    def test_a_dirty_managed_tree_is_foreign_dirt_for_the_carry_itself(self) -> None:
+        """The cause the job reports is `managed_tree_not_clean`, from its own check before `carry_in` (CP4)."""
+        self.make_clean()
+        write(self.root, "src.txt", "changed\n")
+        self.refused("carry_foreign_dirt", carry.check_dirty, self.root, self.set_for(self.SELF))
+
+    def test_a_worker_modified_derived_file_is_never_carried_out(self) -> None:
+        self.make_clean()
+        carry_set, block, prepared = self.go_in(self.set_for(self.SELF))
+        for rel in ("MANIFEST.md", "DIFF.patch", "CHANGED_FILES.txt", "COMMITS.txt", "files/a.txt", "files/new.txt"):
+            self.edit(prepared, f"{ITEM}/current/{rel}", "forged by the worker\n")
+        for rel in (".pin/pinned.txt", "review-bundle.tar.gz", "CHANGES_SINCE_REVIEW.md"):
+            self.edit(prepared, f"{ITEM}/{rel}", "forged by the worker\n")
+        plan = self.check(carry_set, block)
+        self.assertEqual(plan.writes, ())
+        before = self.managed_snapshot()
+        carry.write_out(self.managed, self.layout, carry_set, block, plan)
+        self.assertEqual(self.managed_snapshot(), before)
+
+    def test_only_the_changed_out_members_are_written_and_the_state_is_not_carried(self) -> None:
+        self.make_clean()
+        carry_set, block, prepared = self.go_in(self.set_for(self.SELF))
+        self.edit(prepared, IMPL_MEMBERS[1], "new summary\n")
+        self.edit(prepared, IMPL_MEMBERS[4], "new plan\n")
+        self.edit(prepared, f"{ITEM}/current/MANIFEST.md", "forged\n")
+        plan = self.check(carry_set, block)
+        self.assertEqual(sorted(w.rel for w in plan.writes), sorted([IMPL_MEMBERS[1], IMPL_MEMBERS[4]]))
+        self.assertIsNone(plan.state)
+        carry.write_out(self.managed, self.layout, carry_set, block, plan)
+        self.assertEqual((self.root / IMPL_MEMBERS[1]).read_text(), "new summary\n")
+        self.assertEqual((self.root / f"{ITEM}/current/MANIFEST.md").read_text(), "manifest\n")
+        self.assertEqual(self.state_calls, [])
+
+    def test_an_out_member_that_became_a_link_is_refused(self) -> None:
+        self.make_clean()
+        carry_set, block, prepared = self.go_in(self.set_for(self.SELF))
+        member = prepared.path / IMPL_MEMBERS[0]
+        member.unlink()
+        member.symlink_to("/etc/hostname")
+        self.refused("carry_member_refused", self.check, carry_set, block)
+
+
 class DirtTest(Case):
     def test_named_dirt_is_accepted(self) -> None:
         self.assertEqual(carry.check_dirty(self.root, self.set_for()), sorted([ARTIFACTS, PLAN, STATE]))

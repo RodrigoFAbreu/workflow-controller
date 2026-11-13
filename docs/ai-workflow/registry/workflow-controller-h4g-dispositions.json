@@ -1,0 +1,67 @@
+{
+  "dispositions": {
+    "F-02826b2e5ab1": {
+      "disposition": "fixed"
+    },
+    "F-0a19ffb1fb4b": {
+      "disposition": "fixed"
+    },
+    "F-10c77990f849": {
+      "disposition": "fixed"
+    },
+    "F-2a44b894949f": {
+      "disposition": "fixed"
+    },
+    "F-354b1038226b": {
+      "disposition": "fixed"
+    },
+    "F-44d3b767f146": {
+      "disposition": "fixed"
+    },
+    "F-4bd28add6c8b": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174"
+    },
+    "F-51354f45ca9e": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174"
+    },
+    "F-71108757dba6": {
+      "disposition": "fixed"
+    },
+    "F-71f7896a4ce0": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174"
+    },
+    "F-7d84a0ae7a84": {
+      "disposition": "fixed"
+    },
+    "F-7e9d9c8898b5": {
+      "disposition": "fixed"
+    },
+    "F-86648930694a": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174"
+    },
+    "F-9539f346b8dd": {
+      "disposition": "fixed"
+    },
+    "F-b4cce068cf32": {
+      "disposition": "fixed"
+    },
+    "F-da9d07a980f9": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174"
+    },
+    "F-db461519bde3": {
+      "disposition": "dropped",
+      "reason": "TEST_RESULTS.md is a gitignored review-bundle file regenerated at each generation; it is not shipped, and the post-fix full-suite result is recorded in IMPLEMENTATION_SUMMARY.md."
+    },
+    "F-fc6bf2ae3211": {
+      "disposition": "dropped",
+      "reason": "Wording only on the plan's D6 (the test list is stated twice); nothing is missing, and an approved plan is a historical record that is not edited after acceptance."
+    }
+  },
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-h4g"
+}

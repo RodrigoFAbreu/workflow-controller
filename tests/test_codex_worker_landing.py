@@ -1011,9 +1011,10 @@ class SurfaceFixture(Fixture):
         self.clone = self.prepared.path
 
     def land(self, *, breach: bool = False, on_intent=None, prepared=None, surface=landing.LandingSurface.IMPLEMENTER,
-             work_item_id=WI) -> landing.Landing:
+             work_item_id=WI, **kw) -> landing.Landing:
         return landing.land(self.managed, prepared or self.prepared, self.runtime, JOB, worker_breach=breach,
-                            on_intent=on_intent or self.intents.append, surface=surface, work_item_id=work_item_id)
+                            on_intent=on_intent or self.intents.append, surface=surface, work_item_id=work_item_id,
+                            **kw)
 
     def remove(self, name: str, message: str = "remove") -> str:
         git(self.clone, "rm", "-q", name)
@@ -1291,6 +1292,149 @@ print(json.dumps(steps))
 
     def test_the_claim_and_witness_writers_are_not_state_writers(self) -> None:
         self.assertFalse({"amendment_history", "plan_approval"} & landing.CHECKPOINT_WRITTEN_FIELDS)
+
+
+class StateProfileTest(SurfaceFixture):
+    """``workflow-controller-h4g`` D2: the landing's state profile is a named argument, default the checkpoint's."""
+
+    def state_commit(self, **changes) -> None:
+        self.commit("docs/ai-workflow/WORKFLOW_STATE.json", state_text(**changes), "state")
+
+    def record(self) -> dict:
+        return {"implementation_revision": 2, "reviewed_implementation_head": "c" * 40,
+                "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "state_revision": 4,
+                "last_transition": "2026-01-02T00:00:00Z"}
+
+    def test_the_default_is_the_checkpoint_profile(self) -> None:
+        self.assertIs(inspect_default(), landing.CHECKPOINT)
+        self.assertEqual(landing.CHECKPOINT.fields, landing.CHECKPOINT_WRITTEN_FIELDS)
+        self.assertEqual((landing.CHECKPOINT.name, landing.SELF_REVIEW.name), ("checkpoint", "self-review"))
+
+    def test_a_generation_record_is_refused_for_the_checkpoint_profile_with_its_name(self) -> None:
+        self.state_commit(**self.record())
+        result = self.refuses("state_touched")
+        self.assertIn("checkpoint", result.message)
+
+    def test_a_generation_record_lands_for_the_self_review_profile(self) -> None:
+        self.state_commit(**self.record())
+        result = self.land(state_profile=landing.SELF_REVIEW)
+        self.assertEqual((result.outcome, result.cause), ("landed", None), result.message)
+
+    def test_the_phase_commit_alone_lands_for_the_self_review_profile(self) -> None:
+        self.state_commit(phase="SELF_REVIEWING_IMPLEMENTATION", state_revision=4,
+                          last_transition="2026-01-02T00:00:00Z")
+        self.assertEqual(self.land(state_profile=landing.SELF_REVIEW).outcome, "landed")
+
+    def test_the_self_review_profile_refuses_every_other_field_with_its_name(self) -> None:
+        cases = {"checkpoints": {}, "current_checkpoint_id": "CP9", "last_completed_checkpoint_id": "CP9",
+                 "plan_approval": {"status": "FORGED"}, "technical_approval": {"status": "CURRENT"},
+                 "gate_policy_adoption": {"x": 2}, "governing_workflow_version": "2.2"}
+        for field, value in cases.items():
+            with self.subTest(field=field):
+                self.setUp()
+                self.state_commit(**{field: value})
+                result = self.refuses("state_touched", state_profile=landing.SELF_REVIEW)
+                self.assertIn("self-review", result.message)
+                self.assertIn(field, result.message)
+
+    def test_the_surface_check_applies_to_every_profile(self) -> None:
+        self.commit("scripts/evil.py", "x\n")
+        self.refuses("surface_touched", state_profile=landing.SELF_REVIEW)
+
+    def test_the_profile_names_no_approval_review_binding_or_policy_field(self) -> None:
+        for field in ("plan_approval", "technical_approval", "gate_policy_adoption", "gate_policy_floor",
+                      "checkpoints", "amendment_history"):
+            self.assertNotIn(field, landing.SELF_REVIEW.fields)
+
+    def test_the_profiles_differ_where_the_roles_differ(self) -> None:
+        self.assertEqual(landing.SELF_REVIEW.fields - landing.CHECKPOINT.fields,
+                         {"implementation_revision", "reviewed_implementation_head"})
+        self.assertIn("checkpoints", landing.CHECKPOINT.fields - landing.SELF_REVIEW.fields)
+
+
+def inspect_default():
+    import inspect
+    return inspect.signature(landing.land).parameters["state_profile"].default
+
+
+class SelfReviewWrittenFieldsTest(unittest.TestCase):
+    """``workflow-controller-h4g`` D3: the profile is what the Workflow's two self-review writers change, derived by
+    running them for both governing versions and both outcomes."""
+
+    SCRIPT = r"""
+import json, pathlib, sys
+sys.path.insert(0, sys.argv[1])
+import workflow_state as ws
+wid = "wi"
+reg = {"schema_version": 1, "work_item_id": wid, "plan_revision": 1,
+       "checkpoints": [{"id": "CP1", "name": "n", "depends_on": [], "complexity": 1, "session_target": 1}]}
+root = pathlib.Path(".").resolve()
+path = root / "docs/ai-workflow/WORKFLOW_STATE.json"
+path.parent.mkdir(parents=True)
+def snap():
+    return json.loads(path.read_text())
+def diff(a, b):
+    fields = {"TOP:" + k for k in set(a) | set(b) if k != "work_items" and a.get(k) != b.get(k)}
+    ea, eb = a["work_items"][wid], b["work_items"][wid]
+    return fields | {k for k in set(ea) | set(eb) if ea.get(k) != eb.get(k)}
+results = []
+tick = 0
+for version in ("2.1", "2.2"):
+    for outcome in ("ordinary", "same_content"):
+        entry = {"work_item_id": wid, "phase": "IMPLEMENTING", "governing_workflow_version": version,
+                 "plan_revision": 1, "checkpoints": {"CP1": {"status": "COMPLETE", "start_commit": "a" * 40}},
+                 "current_checkpoint_id": None, "last_completed_checkpoint_id": "CP1", "state_revision": 1,
+                 "last_transition": "2026-11-12T19:00:00Z", "plan_approval": {"status": "CURRENT"},
+                 "implementation_revision": 1, "reviewed_implementation_head": "b" * 40}
+        path.write_text(json.dumps({"schema_version": 2, "active_work_item_id": wid, "work_items": {wid: entry}}))
+        phase_before = snap()
+        tick += 1
+        ws.state_transaction(root, lambda st: ws.enter_self_reviewing_implementation(
+            st, wid, reg, now=f"2026-11-12T20:00:{tick:02d}Z"))
+        mid = snap()
+        tick += 1
+        ws.state_transaction(root, lambda st: ws.record_bundle_generation(
+            st, wid, stage="implementation", head="c" * 40, now=f"2026-11-12T20:00:{tick:02d}Z", outcome=outcome))
+        last = snap()
+        results.append({"version": version, "outcome": outcome, "phase_changed": sorted(diff(phase_before, mid)),
+                        "record_changed": sorted(diff(mid, last)), "target": last["work_items"][wid]["phase"]})
+print(json.dumps(results))
+"""
+
+    def derived(self) -> list[dict]:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixtures.git_init(tmp)
+            result = subprocess.run([sys.executable, "-B", "-c", self.SCRIPT, str(REPO_ROOT / "scripts")], cwd=tmp,
+                                    capture_output=True, text=True, timeout=120)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout)
+
+    def test_the_profile_equals_the_fields_the_two_writers_change_in_both_directions(self) -> None:
+        results = self.derived()
+        self.assertEqual(len(results), 4)
+        changed = set()
+        for result in results:
+            changed |= set(result["phase_changed"]) | set(result["record_changed"])
+        self.assertEqual(changed, set(landing.SELF_REVIEW_WRITTEN_FIELDS))
+
+    def test_both_governing_versions_and_both_outcomes_are_covered_and_the_target_phases_differ(self) -> None:
+        results = self.derived()
+        self.assertEqual({(r["version"], r["outcome"]) for r in results},
+                         {("2.1", "ordinary"), ("2.1", "same_content"), ("2.2", "ordinary"), ("2.2", "same_content")})
+        targets = {r["version"]: r["target"] for r in results}
+        self.assertEqual(targets, {"2.1": "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+                                   "2.2": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW"})
+
+    def test_the_recovered_outcome_changes_a_subset_of_the_ordinary_outcome(self) -> None:
+        by = {(r["version"], r["outcome"]): set(r["record_changed"]) for r in self.derived()}
+        for version in ("2.1", "2.2"):
+            self.assertLess(by[(version, "same_content")], by[(version, "ordinary")])
+            self.assertEqual(by[(version, "same_content")], {"phase", "state_revision", "last_transition"})
+
+    def test_the_checkpoint_profile_accepts_no_field_the_generation_record_adds(self) -> None:
+        added = {"implementation_revision", "reviewed_implementation_head"}
+        self.assertFalse(added & landing.CHECKPOINT.fields)
+        self.assertTrue(added <= landing.SELF_REVIEW.fields)
 
 
 class UnfinishedWorkTest(Fixture):

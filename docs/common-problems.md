@@ -32,7 +32,7 @@ A previous [job](glossary.md#job) was never reconciled. Run `workflow-controller
 
 ## A Codex worker's landing was refused
 
-This applies to every role that runs a Codex worker in a private clone: the fixture role behind the seam (H4e), the two apply roles (H4e3) and `milestone-implement` (H4f). The job ended `FAILED` with `reconciliation_evidence.code` `CodexLandingRefused`, a `cause` and the clone's path in `reconciliation_evidence.clone`. The commits the worker made are in that clone, nothing was landed, and the managed repository is exactly as it was, except for `landing_unverified` and `merge_left_tree_dirty` below. The mechanism is in [harnesses](guide/harnesses.md#a-codex-workers-private-clone-and-its-landing). By cause:
+This applies to every role that runs a Codex worker in a private clone: the fixture role behind the seam (H4e), the two apply roles (H4e3) and `milestone-implement` (H4f) and `milestone-implement-self-review` (H4g). The job ended `FAILED` with `reconciliation_evidence.code` `CodexLandingRefused`, a `cause` and the clone's path in `reconciliation_evidence.clone`. The commits the worker made are in that clone, nothing was landed, and the managed repository is exactly as it was, except for `landing_unverified` and `merge_left_tree_dirty` below. The mechanism is in [harnesses](guide/harnesses.md#a-codex-workers-private-clone-and-its-landing). By cause:
 
 - `managed_branch_moved`, `managed_tree_not_clean`: the managed branch moved, or the tree gained a change, between the clone and the landing. Put the repository back (commit or discard the change) and run again. A file ignored only through your own global ignore file (`~/.config/git/ignore`) counts as untracked here, because the Controller reads with a scrubbed environment; ignore it in the repository's `.gitignore` or `.git/info/exclude` instead.
 - `runtime_inside_managed`: the runtime root is inside the managed repository. Keep it outside, for example with `--runtime-dir` on a path elsewhere.
@@ -59,6 +59,16 @@ This applies when `milestone-implement` is routed to `codex` ([harnesses](guide/
 - A `FINISHED` job whose record has `tree_left = {reason: unfinished_work, ...}`: the commit landed, but the clone holds uncommitted work the worker did not commit. It is kept and never carried; read it, apply what you want by hand and remove the clone.
 
 Every other cause of a refused landing is in [A Codex worker's landing was refused](#a-codex-workers-landing-was-refused).
+
+## A Codex wrap-up was refused or stopped early
+
+This applies when `milestone-implement-self-review` is routed to `codex` ([harnesses](guide/harnesses.md#the-wrap-up-role-on-codex)).
+
+- `state_touched` with the profile named `self-review` in its message and evidence: the worker's commits change the state file outside the wrap-up's fields (`phase`, `state_revision`, `last_transition`, `implementation_revision`, `reviewed_implementation_head`), for example a checkpoint, a plan or review approval, another item's entry or a gate policy field. `surface_touched` is the checkpoint role's: a change under `scripts/`, `.workflow-manager/`, `.claude/`, `.codex/` or the root `.mcp.json`. Nothing reached the managed branch and the clone is kept; handle them as in [a Codex checkpoint was refused](#a-codex-checkpoint-was-refused-surface_touched-state_touched-or-managed_).
+- `carry_member_refused` (`CodexCarryRefused`): one of the five out members under `.ai-review/<item>/current/` is a link, a special file or holds a private-key armour line in the clone. Refused before the landing, so the managed repository is unchanged and the clone is kept; remove the clone and run again.
+- `managed_tree_not_clean`, `managed_claim_present` and the other `managed_*` causes: refused before the clone was made, as for the checkpoint role. A dirty tree is never carried for this role.
+- `carry_bundle_regeneration_pending` with `copy_source_unsafe` in `reconciliation_evidence.regeneration`: the landing succeeded, but the bundle's `current/CONTEXT_FILES.txt` names a path outside the repository or a link, so the Controller did not run the generator. The landed commits (the generation record included) and the carried author files stay. Fix the list and run the generator by hand as the gate's text says, or ask for a new round.
+- A `FINISHED` or stopped job with the item still at `SELF_REVIEWING_IMPLEMENTATION` and no `regeneration` block: a partial self-review. The worker committed the phase change (or code) but stopped before the generation record, so the Controller started no generator. Run `/milestone-implement` again; the next invocation continues from the phase.
 
 ## A Codex apply was refused (`carry_*`)
 

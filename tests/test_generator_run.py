@@ -251,6 +251,28 @@ class CheckCopySourcesTest(Fixture):
         write(self.root, LIST, "../x\n")
         self.refused("copy_source_unsafe", self.check, "plan")
 
+    def test_the_implementation_stage_is_a_stage_and_reads_the_live_list_alone(self) -> None:
+        # workflow-controller-h4g, D5: the wrap-up role's stage has the post-fix lists and no plan source.
+        self.assertIn("implementation", gr.STAGES)
+        self.assertEqual(gr._context_lists(self.root, "implementation", WID), gr._context_lists(self.root, "post-fix", WID))
+        write(self.root, PLAN_LIST, f"{self.canary}\n")
+        self.check("implementation")  # plan-inputs is not read
+        write(self.root, LIST, "../x\n")
+        exc = self.refused("copy_source_unsafe", self.check, "implementation")
+        self.assertEqual(exc.evidence["path"], "../x")
+        self.assertEqual(exc.evidence["source"], LIST)
+
+    def test_the_guarded_run_passes_the_implementation_stage_to_the_generator(self) -> None:
+        argv: list[list[str]] = []
+
+        def fake(root, args, **kw):
+            argv.append(args)
+            return mock.Mock(returncode=0, stdout=b"", stderr=b"")
+
+        with mock.patch.object(gr.workflow_contract, "run_in_place", side_effect=fake):
+            gr.run(self.root, stage="implementation", base_commit=self.base, work_item_id=WID)
+        self.assertEqual(argv[0][-3:], [self.base, "implementation", WID])
+
     def test_a_changed_link_tracked_or_untracked_is_refused_and_an_ignored_one_is_not_a_candidate(self) -> None:
         os.symlink(str(self.canary), self.root / "src/tracked-link")
         head = self.commit()
@@ -369,7 +391,7 @@ class RunTest(Fixture):
 
     def test_an_unknown_stage_is_a_programming_error(self) -> None:
         with self.assertRaises(ValueError):
-            self.run_it(stage="implementation")
+            self.run_it(stage="bogus")
 
 
 #: The test that produces each cause of :data:`generator_run.CAUSES`.

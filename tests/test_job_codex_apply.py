@@ -1553,6 +1553,57 @@ class SelfReviewHandoverTest(SelfReviewCase):
                         f"Workflow-Supersedes: {base}"], cwd=self.root, check=True)
         self.assertFalse(job._self_review_handover(fields, self.carry(base), self.root))
 
+    #: Sets ``argv[1]`` (a JSON object) on the item and commits with message ``argv[2]``.
+    SET_FIELDS = r'''
+import subprocess, sys
+path = Path.cwd() / "docs/ai-workflow/WORKFLOW_STATE.json"
+document = ws.json.loads(path.read_text())
+document["work_items"]["wi-1"].update(ws.json.loads(sys.argv[1]))
+path.write_text(ws.json.dumps(document, indent=2) + "\n")
+subprocess.run(["git", "add", "docs/ai-workflow/WORKFLOW_STATE.json"], check=True)
+subprocess.run(["git", "-c", "user.name=W", "-c", "user.email=w@example.invalid", "commit", "-m", sys.argv[2]], check=True)
+'''
+
+    #: Prints whether the Workflow's own validator accepts the HEAD commit as a generation record.
+    VALIDATE_HEAD = r'''
+import subprocess
+head = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
+try:
+    ws.validate_bundle_generation_record_commit(Path.cwd(), head, "wi-1")
+    print("accepted")
+except ws.MalformedBundleGenerationRecordCommitError:
+    print("rejected")
+'''
+
+    def assert_workflow_rejects_and_no_handover(self, base: str) -> None:
+        verdict = fixtures.run_workflow_python(self.root, self.VALIDATE_HEAD).stdout.strip()
+        self.assertEqual(verdict, "rejected")
+        self.assertFalse(job._self_review_handover(
+            self.fields("AWAITING_LOCAL_IMPLEMENTATION_REVIEW"), self.carry(base), self.root))
+
+    def test_an_ordinary_record_whose_phase_an_earlier_commit_already_moved_is_not_handed_over(self) -> None:
+        base = _git(self.root, "rev-parse", "HEAD").strip()
+        fixtures.run_workflow_python(
+            self.root, self.SET_FIELDS, '{"phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW"}',
+            "phase moved\n\nWorkflow-Work-Item: wi-1")
+        fixtures.run_workflow_python(
+            self.root, self.SET_FIELDS, '{"implementation_revision": 2}',
+            f"record\n\nWorkflow-Bundle-Generation-Record: {WID}/2\nWorkflow-Work-Item: {WID}")
+        self.assert_workflow_rejects_and_no_handover(base)
+
+    def test_a_recovered_record_that_changes_the_reviewed_head_is_not_handed_over(self) -> None:
+        self.commit_work(SELF_REVIEW_RECORD)
+        first = _git(self.root, "rev-parse", "HEAD").strip()
+        fixtures.run_workflow_python(
+            self.root, STATE_COMMIT, "SELF_REVIEWING_IMPLEMENTATION", "re-approved\n\nWorkflow-Work-Item: wi-1")
+        base = _git(self.root, "rev-parse", "HEAD").strip()
+        fixtures.run_workflow_python(
+            self.root, self.SET_FIELDS,
+            '{"phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "reviewed_implementation_head": "' + "f" * 40 + '"}',
+            f"recovered record\n\nWorkflow-Bundle-Generation-Record: {WID}/1\nWorkflow-Work-Item: {WID}\n"
+            f"Workflow-Supersedes: {first}")
+        self.assert_workflow_rejects_and_no_handover(base)
+
     def test_a_commit_that_touches_more_than_the_state_file_is_not_the_record(self) -> None:
         base = self.commit_work(SELF_REVIEW_RECORD)
         subprocess.run(["git", "reset", "-q", "--soft", "HEAD~1"], cwd=self.root, check=True)

@@ -9652,6 +9652,51 @@ def _generation_record_at(root: Path, work_item_id: str, rev: str) -> str | None
     return None
 
 
+#: The fields a generation-record commit may change in the item's own entry, by role: the mirror of the Workflow's
+#: ``ORDINARY_BUNDLE_GENERATION_RECORD_FIELDS`` / ``RECOVERED_BUNDLE_GENERATION_RECORD_FIELDS`` (the recovered role
+#: never moves ``reviewed_implementation_head`` or ``implementation_revision``).
+_RECORD_RESIDUE_FIELDS = frozenset({"phase", "state_revision", "last_transition", "implementation_review_stages",
+                                    "gate_evidence", "reopenings", "optional_findings", "review_round_counts"})
+_ORDINARY_RECORD_FIELDS = _RECORD_RESIDUE_FIELDS | {"reviewed_implementation_head", "implementation_revision"}
+_RECOVERED_RECORD_FIELDS = _RECORD_RESIDUE_FIELDS
+#: The mirror of ``RECOVERED_BUNDLE_GENERATION_RECORD_LEGAL_SOURCE_PHASES``: the parent phases a recovered record may follow.
+_RECOVERED_RECORD_SOURCE_PHASES = frozenset({
+    "SELF_REVIEWING_IMPLEMENTATION", "APPLYING_REVIEW_FEEDBACK", "AWAITING_FUNCTIONAL_REVIEW",
+    "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW", "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+    "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW"})
+
+
+def _record_commit_contract_holds(root: Path, commit: str, work_item_id: str, role: str) -> bool:
+    """The per-commit contract of ``workflow_state.validate_bundle_generation_record_commit`` that the plain-Git
+    hand-over mirrors: the commit changes nothing outside ``work_items[work_item_id]`` (no top-level field, no other
+    item), its own field changes are a non-empty subset of the role's fields, an ordinary record changes ``phase``
+    itself (a phase already moved by an earlier commit is not an ordinary record), and a recovered record follows one
+    of the legal source phases. Anything Git cannot read is a failure."""
+    before_state = evidence._committed_state(root, f"{commit}^")
+    after_state = evidence._committed_state(root, commit)
+    if before_state is None or after_state is None:
+        return False
+
+    def differs(left: Mapping, right: Mapping, key: str) -> bool:
+        return (key in left) != (key in right) or left.get(key) != right.get(key)
+
+    top = (set(before_state) | set(after_state)) - {"work_items"}
+    if any(differs(before_state, after_state, key) for key in top):
+        return False
+    before_items, after_items = before_state.get("work_items") or {}, after_state.get("work_items") or {}
+    others = (set(before_items) | set(after_items)) - {work_item_id}
+    if any(differs(before_items, after_items, key) for key in others):
+        return False
+    before, after = before_items.get(work_item_id), after_items.get(work_item_id)
+    if not isinstance(before, dict) or not isinstance(after, dict):
+        return False
+    diff = {key for key in set(before) | set(after) if differs(before, after, key)}
+    if role == "ordinary":
+        return bool(diff) and diff <= _ORDINARY_RECORD_FIELDS and "phase" in diff
+    return (bool(diff) and diff <= _RECOVERED_RECORD_FIELDS
+            and before.get("phase") in _RECOVERED_RECORD_SOURCE_PHASES)
+
+
 def _self_review_handover(fields: Mapping, record: Mapping, root: Path) -> bool:
     """H4g, D5: whether a wrap-up role's first ``reconcile`` answer (``FINISHED`` with progress) may be handed to the
     guarded generator: the observed phase is the version's target phase and the landed range holds the item's
@@ -9688,6 +9733,8 @@ def _self_review_handover(fields: Mapping, record: Mapping, root: Path) -> bool:
         before = evidence.committed_work_item(root, work_item_id, f"{commit}^")
         after = evidence.committed_work_item(root, work_item_id, commit)
         if before is None or after is None or after.get("phase") != target:
+            continue
+        if not _record_commit_contract_holds(root, commit, work_item_id, role):
             continue
         revision_before, revision_after = before.get("implementation_revision"), after.get("implementation_revision")
         if role == "ordinary":

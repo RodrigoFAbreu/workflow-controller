@@ -634,7 +634,7 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-fx1` (FX1), implementation revision 1, plan `docs/ai-workflow/CONTROLLER_FX1_PLAN.md` (revision 2), base
+Item `workflow-controller-fx1` (FX1), implementation revision 2, plan `docs/ai-workflow/CONTROLLER_FX1_PLAN.md` (revision 2), base
 commit `a2e1cc1`. The item changes tests and docs only: `OrphanWatchdogTest` reads pid files and the monitor's sleeper `argv[0]` through
 readiness helpers (#246), and the two Ctrl-C tests share one failure message that names which end happened (#342). Every flow runs
 offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and

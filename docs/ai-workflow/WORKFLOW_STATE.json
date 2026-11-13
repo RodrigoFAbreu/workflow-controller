@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-h4g",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -71210,6 +71210,351 @@
         },
         "evaluated_at": "2026-11-13T01:52:19Z",
         "workflow_release": "2.27.0"
+      }
+    },
+    "workflow-controller-h4g": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-h4g",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_H4G_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-h4g-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4g-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 8,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "77ac321c66df279da56f1f80819ee3883a4e98c6",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "b5bfbae0be43f744bea1cfd61f4446c0dd54c61d3406cd954a50c12b7a1b95f3",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "b5bfbae0be43f744bea1cfd61f4446c0dd54c61d3406cd954a50c12b7a1b95f3",
+        "approved_review_content_id": "05c066049e4b23b25182e136de92b729b59e1da5e1dd6b4a1f3fd56c3cda28c4",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_H4G_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9d339c22873d270285f86bea1c5faff831429227"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-h4g-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "32ddda2673331f6290cba840f55b9ca30e40ee91"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-h4g-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c5a135e93b87ba8e23af1b851472c1c188bd408f"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-13T08:17:01Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "05c066049e4b23b25182e136de92b729b59e1da5e1dd6b4a1f3fd56c3cda28c4",
+            "ledger": {
+              "local": {
+                "bundle_id": "b5bfbae0be43f744bea1cfd61f4446c0dd54c61d3406cd954a50c12b7a1b95f3",
+                "verdict": "APPROVE",
+                "round": 8,
+                "verdict_sha256": "077f2538cf658f9963ac7f9c00ff4780448903985c1494eb29cef62535c648c4",
+                "ledger_entry_sha256": "31399be622a03a8e5b0769ca55878fbf0179d90edb81e2cc5ab6932314556852",
+                "run_ref": "session:local .ai-review/workflow-controller-h4g/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "b5bfbae0be43f744bea1cfd61f4446c0dd54c61d3406cd954a50c12b7a1b95f3",
+                "verdict": "APPROVE",
+                "round": 8,
+                "verdict_sha256": "a9bb62dccdc50f993e160885db21fafbfb680581a564187b66ead8adf549cb1e",
+                "ledger_entry_sha256": "b037afa16c1cae8229e19fc6878b9dff84292955dbb11c2bb553fbbbfa523079",
+                "run_ref": "codex:20261113T081257Z-be41f19a",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-13T08:17:01Z",
+          "workflow_release": "2.27.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "05c066049e4b23b25182e136de92b729b59e1da5e1dd6b4a1f3fd56c3cda28c4",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "b5bfbae0be43f744bea1cfd61f4446c0dd54c61d3406cd954a50c12b7a1b95f3",
+          "verdict": "APPROVE",
+          "round": 8,
+          "completed_at": "2026-11-13T08:12:24Z",
+          "verdict_sha256": "077f2538cf658f9963ac7f9c00ff4780448903985c1494eb29cef62535c648c4",
+          "run_ref": "session:local .ai-review/workflow-controller-h4g/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "b5bfbae0be43f744bea1cfd61f4446c0dd54c61d3406cd954a50c12b7a1b95f3",
+          "verdict": "APPROVE",
+          "round": 8,
+          "completed_at": "2026-11-13T08:15:18Z",
+          "verdict_sha256": "a9bb62dccdc50f993e160885db21fafbfb680581a564187b66ead8adf549cb1e",
+          "run_ref": "codex:20261113T081257Z-be41f19a",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 8,
+          "external": 2
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 29,
+      "last_transition": "2026-11-13T08:17:01Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-13T08:11:06Z",
+        "consumed": {
+          "review_content_id": "8ba3f1934417a40d0a7d108fbfaddbc26a3b437edc2bad44a4e33b565039012a",
+          "plan_revision": 7,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "05c066049e4b23b25182e136de92b729b59e1da5e1dd6b4a1f3fd56c3cda28c4",
+          "plan_revision": 8
+        },
+        "bound": {
+          "review_content_id": "05c066049e4b23b25182e136de92b729b59e1da5e1dd6b4a1f3fd56c3cda28c4",
+          "bundle_id": "b5bfbae0be43f744bea1cfd61f4446c0dd54c61d3406cd954a50c12b7a1b95f3",
+          "plan_revision": 8
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "27860abc1a5cf16a07f23ea6f39a6e6e589ab9452fe284eb35b803304c31de27",
+        "3ecae1c4887e2574bf538ab434f08e7bd2aeaf250f09ae35babc16e1924e1a85",
+        "69a88c142ffef1505b9099761c8af01604dc2b5c9a8d9a13eafa5cfe4275d1d1",
+        "8ba3f1934417a40d0a7d108fbfaddbc26a3b437edc2bad44a4e33b565039012a",
+        "b3df53910083f11432b10cce5989f2f9d5eb1d5e66b350aa6ef9903658ebe3fe",
+        "d1fe425a3d60e2c0c983a59d712a4c839e554c2fadc0bfa4914ee024640cb491",
+        "d9c7cb77c70e957c57f9895dd8eb0778ec52a7fef3f9fbdddabb4cb8d2772c7a"
+      ],
+      "optional_findings": {
+        "F-02826b2e5ab1": {
+          "digest": "02826b2e5ab1a26ceb6fe92379fb21dae897605862cc9929e534454ae523808a",
+          "text": "**H4G-R1-005 (SR-2/D5 overstate what the `implementation` stage reads).** SR-2 says a third stage \"reads a different list of files (the implementation context list and the plan source)\". The generator treats `implementation` and `post-fix` identically (`scripts/prepare-ai-review.sh:220,344,482,628`). At both stages `PLAN.md` is an author file that is stubbed when absent, and no plan source is read. `generator_run._context_lists` already returns the live `current/CONTEXT_FILES.txt` for every stage that is not `plan`. Say that the stage reuses the `post-fix` lists, so that CP4 does not invent a check of a \"plan source\".",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "69a88c142ffef1505b9099761c8af01604dc2b5c9a8d9a13eafa5cfe4275d1d1",
+              "verdict": "REVISE",
+              "at": "2026-11-13T03:22:00Z"
+            }
+          ]
+        },
+        "F-71108757dba6": {
+          "digest": "71108757dba6014cc807167e08740fb72ceae61a1659a6df9028a1e66da07f34",
+          "text": "**H4G-R1-006 (cover the `IMPLEMENTING` entry in D7).** Every D7 fixture is at `SELF_REVIEWING_IMPLEMENTATION`, where `enter_self_reviewing_implementation` is a no-op and no state commit is made (`.claude/commands/milestone-implement.md` step 2). So D7's \"lands its state commit\" and the phase half of D3's profile are never exercised through the job. Add a fixture at `IMPLEMENTING` with every checkpoint `COMPLETE`, plus the partial case of H4G-R1-001.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "69a88c142ffef1505b9099761c8af01604dc2b5c9a8d9a13eafa5cfe4275d1d1",
+              "verdict": "REVISE",
+              "at": "2026-11-13T03:22:00Z"
+            }
+          ]
+        },
+        "F-b4cce068cf32": {
+          "digest": "b4cce068cf32a40cb2954702cdbaf5cd9a7eb1ce5eec6587b00680a877b9acd1",
+          "text": "**H4G-R1-007 (four or five files).** D4 judges \"the five out members\", while D7 \"carries the four files out\". Use one count; `PLAN.md` is the fifth.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "69a88c142ffef1505b9099761c8af01604dc2b5c9a8d9a13eafa5cfe4275d1d1",
+              "verdict": "REVISE",
+              "at": "2026-11-13T03:22:00Z"
+            }
+          ]
+        },
+        "F-9539f346b8dd": {
+          "digest": "9539f346b8dd4a26d2b982100fdfadedd1a8f2143216f3cb92d59e69c2f34383",
+          "text": "**H4G-R2-004 (D5 still says \"the plan source\").** SR-2 now says correctly that the `implementation` stage reads the `post-fix` lists, that no plan source is read, and that \"CP4 adds no check of one\". But D5 still says `check_copy_sources` \"reads the implementation context list and the plan source for that stage\". Change D5 to match SR-2 (`_context_lists` already returns the live `current/CONTEXT_FILES.txt` for every stage that is not `plan`), so that CP4 does not add a check of a plan source.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "27860abc1a5cf16a07f23ea6f39a6e6e589ab9452fe284eb35b803304c31de27",
+              "verdict": "REVISE",
+              "at": "2026-11-13T03:27:30Z"
+            }
+          ]
+        },
+        "F-10c77990f849": {
+          "digest": "10c77990f84972612c89d4ec413fb1f63cd951b797e60eff7ab25a480cf4f5d5",
+          "text": "**H4G-R2-005 (the stale-bundle answer).** D5 keeps \"this role's expected stale-bundle answer\" open until a CP4 test. The existing implementation apply role ends `FINISHED` at `AWAITING_LOCAL_IMPLEMENTATION_REVIEW` with a stale bundle (`tests/test_job_codex_apply.py:376,490`), so the self-review most likely gives the same answer and needs no second narrow check. If so, say so, rather than leaving room for a new `invalid`-accepting predicate like `_is_expected_stale_bundle`, which is a safety gate.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "27860abc1a5cf16a07f23ea6f39a6e6e589ab9452fe284eb35b803304c31de27",
+              "verdict": "REVISE",
+              "at": "2026-11-13T03:27:30Z"
+            }
+          ]
+        },
+        "F-354b1038226b": {
+          "digest": "354b1038226b41f999129579a9f1a0d8a92c018b2f6dec1a70d0c02e5a80d70f",
+          "text": "**H4G-R3-004 (D3 names a \"generation record\" field that does not exist).** `record_bundle_generation` changes `phase`, `reviewed_implementation_head`, `implementation_revision`, `state_revision` and `last_transition` (`scripts/workflow_state.py:15142-15270`). The generation record is the trailer commit, not a field. The test derives the set, so this is wording only. Name the real fields so that CP2's reviewer can compare them.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "d1fe425a3d60e2c0c983a59d712a4c839e554c2fadc0bfa4914ee024640cb491",
+              "verdict": "REVISE",
+              "at": "2026-11-13T03:33:00Z"
+            }
+          ]
+        },
+        "F-44d3b767f146": {
+          "digest": "44d3b767f1462a8d89570a46cd61cd9b918c75c6add77d96e65005a340d4f54d",
+          "text": "**H4G-R3-005 (a mis-cited test line).** D5 cites `tests/test_job_codex_apply.py:376` for \"ends `FINISHED` at `AWAITING_LOCAL_IMPLEMENTATION_REVIEW` with a stale bundle\". Line 376 is in the no-progress test (`test_a_worker_that_changed_nothing_is_the_no_progress_judgement`). Cite the stale-bundle test only (around line 490).",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "d1fe425a3d60e2c0c983a59d712a4c839e554c2fadc0bfa4914ee024640cb491",
+              "verdict": "REVISE",
+              "at": "2026-11-13T03:33:00Z"
+            }
+          ]
+        },
+        "F-7d84a0ae7a84": {
+          "digest": "7d84a0ae7a8423a1ddcd6b162322d351ac074830cd3bf1770a63e2433c2ca66d",
+          "text": "**H4G-R3-006 (D8 and CP5's Files).** D8 says `docs/ACTIVE_MILESTONE.md` is the milestone narrative, but CP5's `**Files:**` does not list it. The path is excluded, so the declaration gate does not need it. Either list it or drop it from D8, so that CP5's writes are what its Files say.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "d1fe425a3d60e2c0c983a59d712a4c839e554c2fadc0bfa4914ee024640cb491",
+              "verdict": "REVISE",
+              "at": "2026-11-13T03:33:00Z"
+            }
+          ]
+        },
+        "F-2a44b894949f": {
+          "digest": "2a44b894949fba8215330b8eb2762310f049e83c53f35727f6336619261123b7",
+          "text": "**H4G-R4-002 (`_interrupted_publication` bypasses the hand-over predicate on resume).** `_carry_resolution`'s `FAILED` branch hands a resumed record with an in-flight `regeneration` block to `_guarded_regeneration` for any role (`controller/job.py:9595-9604`). For this role a `regeneration` block exists only after the predicate was met, so this is consistent. Saying so in D6 would let CP4's implementer see that the predicate belongs only on the `FINISHED` branch.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "3ecae1c4887e2574bf538ab434f08e7bd2aeaf250f09ae35babc16e1924e1a85",
+              "verdict": "REVISE",
+              "at": "2026-11-13T03:36:38Z"
+            }
+          ]
+        },
+        "F-7e9d9c8898b5": {
+          "digest": "7e9d9c8898b502a2a53929b5bdb0cdc4e1fb539146479cf4294df6fe95d2093c",
+          "text": "**H4G-R4-003 (D8 punctuation).** \"...that the split created; The follow-up items...\" has a semicolon followed by a capital letter. That is left over from removing the `docs/ACTIVE_MILESTONE.md` clause (H4G-R3-006).",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "3ecae1c4887e2574bf538ab434f08e7bd2aeaf250f09ae35babc16e1924e1a85",
+              "verdict": "REVISE",
+              "at": "2026-11-13T03:36:38Z"
+            }
+          ]
+        },
+        "F-0a19ffb1fb4b": {
+          "digest": "0a19ffb1fb4b4682d960dfee92db21ab4df8272be47b05366bf32399577c463c",
+          "text": "**H4G-R5-002 (`commit_pending` is the one stage-keyed site the \"one predicate\" rule must not reach).** `_run_codex_apply` calls `codex_carry.commit_pending` when `carry_set.stage == \"implementation\"` (`controller/job.py`, about line 9744). After CP3 that test is true for the self-review role too. D4 and D6 say in prose that `commit_pending` is skipped for this role. But D6's rule replaces role tests with the stage fact, and here the stage fact gives the wrong answer. Naming this site in D6 (\"keyed on the role, not the stage: the self-review role takes the clean-tree check instead\") would stop CP4's implementer from leaving it stage-keyed. It would also show that the clean-tree check, not `carry_foreign_dirt`, is what refuses a dirty tree (D4's own test).",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "b3df53910083f11432b10cce5989f2f9d5eb1d5e66b350aa6ef9903658ebe3fe",
+              "verdict": "REVISE",
+              "at": "2026-11-13T03:41:19Z"
+            }
+          ]
+        },
+        "F-fc6bf2ae3211": {
+          "digest": "fc6bf2ae32114d701a9551f184a4cdca0d713346b05ac2d5ce988e58f34ec2f2",
+          "text": "**H4G-R6-001 (D6's test list is stated twice and reads as one long paragraph).** D6 lists CP4's tests under \"CP4 tests, in addition to those above:\" and then again under \"CP4 tests:\", and the whole decision is one paragraph of about 1,500 words. Gathering CP4's tests into one list at the end of D6 would let the CP4 implementer check them off without re-reading the composition text. This is wording only; nothing is missing.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 6,
+              "review_content_id": "d9c7cb77c70e957c57f9895dd8eb0778ec52a7fef3f9fbdddabb4cb8d2772c7a",
+              "verdict": "APPROVE",
+              "at": "2026-11-13T03:44:45Z"
+            }
+          ]
+        }
       }
     }
   }

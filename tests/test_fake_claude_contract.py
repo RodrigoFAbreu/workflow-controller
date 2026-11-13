@@ -1591,7 +1591,7 @@ class OrphanWatchdogTest(unittest.TestCase):
 
         def sleep_argument(pid: int) -> int:
             argv = read_argv0_when(pid, "sleep")
-            self.assertEqual(argv[0], "sleep", argv)
+            self.assertEqual(argv[:1], ["sleep"], argv)
             return int(float(argv[1]))
 
         # Hang mode, started directly in the runner's group (the fake does not lead it).

@@ -70123,12 +70123,12 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-h4f-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4f-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "APPLYING_REVIEW_FEEDBACK",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 5,
-      "implementation_revision": 3,
+      "implementation_revision": 4,
       "functional_review_round": null,
       "base_commit": "37577106d2778384ba5410098d0c61bb0ac64aff",
-      "reviewed_implementation_head": "5d1abe7341a6c9dbf8a52957b307fe7eaade5ae9",
+      "reviewed_implementation_head": "d01a68ba787b9e402406216cf36e4e31a9dbd680",
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": "CP5",
       "checkpoints": {
@@ -70279,8 +70279,8 @@
           "external": 1
         }
       },
-      "state_revision": 37,
-      "last_transition": "2026-11-13T00:05:57Z",
+      "state_revision": 38,
+      "last_transition": "2026-11-13T00:29:13Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

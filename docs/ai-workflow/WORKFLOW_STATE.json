@@ -72220,7 +72220,7 @@
         }
       },
       "technical_approval": {
-        "status": "CURRENT",
+        "status": "STALE",
         "basis": "POLICY_SATISFIED",
         "reviewed_bundle_id": "aff1241f3c89766a648e82e4dbe10b8a2d21a2d14e239794cd6b59a280cba33b",
         "approved_review_content_id": "7f74c223a24f7c4658e9f572bc0ffaf3072dca4405667be655ffe688fcf09bd7",
@@ -72349,8 +72349,8 @@
           "external": 1
         }
       },
-      "state_revision": 17,
-      "last_transition": "2026-11-13T16:53:23Z",
+      "state_revision": 18,
+      "last_transition": "2026-11-13T17:05:47Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -72520,6 +72520,93 @@
           "verdict_sha256": "a9db380e485ec605e6e0b65fe64b006d6d17262cff549d21f774a967d1482df9",
           "run_ref": "codex:20261113T164929Z-ff427bf8",
           "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "gate_evidence": {
+        "functional": {
+          "flow-1": {
+            "flow_id": "flow-1",
+            "status": "passed",
+            "head": "6c1e8d017d100c26e93ab87451b5076ef4a7aefa",
+            "ran_at": "2026-11-13T17:05:15Z",
+            "summary": {
+              "checklist_blob": "6d2e7b0912c0a89ef9e89e624f4753da61783680",
+              "text": "103 tests ran, OK (skipped=1); PidReadinessHelperTest and OrphanWatchdogTest pass."
+            },
+            "log_digest": "be0d4d6fc78976e32e83244bd42a0f7f2dfa401c5a41737e7f653e82f03e3cb8",
+            "run_ref": "controller:20261113T165448Z-087830dc",
+            "reporter": "workflow-controller 1.29.0",
+            "identity": "7f74c223a24f7c4658e9f572bc0ffaf3072dca4405667be655ffe688fcf09bd7",
+            "recorded_at": "2026-11-13T17:05:15Z"
+          },
+          "flow-2": {
+            "flow_id": "flow-2",
+            "status": "passed",
+            "head": "6c1e8d017d100c26e93ab87451b5076ef4a7aefa",
+            "ran_at": "2026-11-13T17:05:15Z",
+            "summary": {
+              "checklist_blob": "6d2e7b0912c0a89ef9e89e624f4753da61783680",
+              "text": "OrphanWatchdogTest (lines 1331-1756) has read_text only at 1619 and 1701, which read test sources, not pid paths. Pids come from read_pid_when_ready and the sleeper program from read_argv0_when."
+            },
+            "log_digest": "ea7db24f6312527ddf10ab78b2626bc4acf0b1db74d244fe92d8e165aea84647",
+            "run_ref": "controller:20261113T165448Z-087830dc",
+            "reporter": "workflow-controller 1.29.0",
+            "identity": "7f74c223a24f7c4658e9f572bc0ffaf3072dca4405667be655ffe688fcf09bd7",
+            "recorded_at": "2026-11-13T17:05:15Z"
+          },
+          "flow-3": {
+            "flow_id": "flow-3",
+            "status": "passed",
+            "head": "6c1e8d017d100c26e93ab87451b5076ef4a7aefa",
+            "ran_at": "2026-11-13T17:05:16Z",
+            "summary": {
+              "checklist_blob": "6d2e7b0912c0a89ef9e89e624f4753da61783680",
+              "text": "Three concurrent copies pinned with taskset -c 0,1, run twice (6 runs): each printed OK, 20 tests."
+            },
+            "log_digest": "c94d401833c2653ffbd79bcbcd8465d860ac3faf7d4b08ea7ee54fd4e29ab059",
+            "run_ref": "controller:20261113T165448Z-087830dc",
+            "reporter": "workflow-controller 1.29.0",
+            "identity": "7f74c223a24f7c4658e9f572bc0ffaf3072dca4405667be655ffe688fcf09bd7",
+            "recorded_at": "2026-11-13T17:05:16Z"
+          },
+          "flow-4": {
+            "flow_id": "flow-4",
+            "status": "failed",
+            "head": "6c1e8d017d100c26e93ab87451b5076ef4a7aefa",
+            "ran_at": "2026-11-13T17:05:16Z",
+            "summary": {
+              "checklist_blob": "6d2e7b0912c0a89ef9e89e624f4753da61783680",
+              "reason": "defect",
+              "text": "First full run of tests.test_job_codex_apply: 84 tests, 1 failure, in PlanGuardedRunTest.test_a_generator_that_survives_a_kill_is_ended_before_resume_runs_it_again (line 1145: tags list empty, expected the recorded job1-regeneration tag). It is not an ImplRecoveryTest case and not the Ctrl-C tests, so the documented limitation does not cover it. PlanGuardedRunTest alone passed (9 tests), and a second full run passed (84 OK). The two Ctrl-C tests passed, and interrupted_or_explained is used by both (lines 1046, 1243). The test is flaky in an unloaded run."
+            },
+            "log_digest": "77e96ae84ed53b20b59747a2f679bd1c4a191cd2e1062bb8a364c9c435138607",
+            "run_ref": "controller:20261113T165448Z-087830dc",
+            "reporter": "workflow-controller 1.29.0",
+            "identity": "7f74c223a24f7c4658e9f572bc0ffaf3072dca4405667be655ffe688fcf09bd7",
+            "recorded_at": "2026-11-13T17:05:16Z"
+          },
+          "flow-5": {
+            "flow_id": "flow-5",
+            "status": "passed",
+            "head": "6c1e8d017d100c26e93ab87451b5076ef4a7aefa",
+            "ran_at": "2026-11-13T17:05:16Z",
+            "summary": {
+              "checklist_blob": "6d2e7b0912c0a89ef9e89e624f4753da61783680",
+              "text": "check_docs.py rc=0. development.md says #342 did not reproduce (60 pinned runs and a loaded full run) and that the shared message records the run_in_place calls, the generator result and the regeneration cause and detail. fx1.md describes the #342 work. The stage field is not mentioned in the development.md entry; the message contents were not checked against the code beyond the usage lines."
+            },
+            "log_digest": "93ff7811a209e2a8479230bbb9b6bc19f7f311d3af383ec350c1db2a7e7d5494",
+            "run_ref": "controller:20261113T165448Z-087830dc",
+            "reporter": "workflow-controller 1.29.0",
+            "identity": "7f74c223a24f7c4658e9f572bc0ffaf3072dca4405667be655ffe688fcf09bd7",
+            "recorded_at": "2026-11-13T17:05:16Z"
+          }
+        },
+        "pr": null,
+        "pr_reported": null,
+        "pr_keys": {
+          "reopened_for": [],
+          "applied": [],
+          "ingest_seq": 0
         }
       }
     }

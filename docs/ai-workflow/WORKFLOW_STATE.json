@@ -72110,7 +72110,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-fx1-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-fx1-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 2,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -72219,7 +72219,102 @@
           "workflow_release": "2.27.0"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "aff1241f3c89766a648e82e4dbe10b8a2d21a2d14e239794cd6b59a280cba33b",
+        "approved_review_content_id": "7f74c223a24f7c4658e9f572bc0ffaf3072dca4405667be655ffe688fcf09bd7",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-fx1-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a5880418973d64c2175e1961a446ed182b6996c5"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f872d46695b2e62a6ca0f702ddf925ae0df5d24d"
+          },
+          {
+            "path": "tests/test_fake_claude_contract.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "944d0fbd3b351029cf7c828a4db98fb8b1ffc8f0"
+          },
+          {
+            "path": "tests/test_job_codex_apply.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8b61bc66293da56f9b0f44f86fc7d142c7c7a33d"
+          }
+        ],
+        "reviewed_content_commit": "ddcf56b63cdc1e89f4f82d17590de02f1b3f5bfc",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-13T16:53:23Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "7f74c223a24f7c4658e9f572bc0ffaf3072dca4405667be655ffe688fcf09bd7",
+            "ledger": {
+              "local": {
+                "bundle_id": "aff1241f3c89766a648e82e4dbe10b8a2d21a2d14e239794cd6b59a280cba33b",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "42e12408629635213cf933a1692228b582e79d44ea94a4b08cfa32822db5c61c",
+                "ledger_entry_sha256": "2edb275b021a8d7eebaee4d22f046f33e6dde497f05c3b740e2363e401585ef2",
+                "run_ref": "session:local .ai-review/workflow-controller-fx1/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "aff1241f3c89766a648e82e4dbe10b8a2d21a2d14e239794cd6b59a280cba33b",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "a9db380e485ec605e6e0b65fe64b006d6d17262cff549d21f774a967d1482df9",
+                "ledger_entry_sha256": "d659edf9751f438383440d44856da2ec5179c20cbf947b334e54f56dbd204f6a",
+                "run_ref": "codex:20261113T164929Z-ff427bf8",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-13T16:53:23Z",
+          "workflow_release": "2.27.0"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "07fe9ca2055ba35579b11ab4824d9a395f8f9336fd3a67f2551e87680f03fa41",
@@ -72250,12 +72345,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 14,
-      "last_transition": "2026-11-13T16:41:45Z",
+      "state_revision": 17,
+      "last_transition": "2026-11-13T16:53:23Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -72362,6 +72457,69 @@
               "at": "2026-11-13T14:45:41Z"
             }
           ]
+        },
+        "F-42dc28bdef51": {
+          "digest": "42dc28bdef513a231687577cb3ab0ab07d08dcaf7f048131dfd13873e86ccca1",
+          "text": "**O1 (plan conformance, CP2 repro method 2).** The plan's second repro method was \"`tools/run_tests.py` replaying shard 5 under parallel load, then one full run under the same load\". `IMPLEMENTATION_SUMMARY.md`, `TEST_RESULTS.md`, `docs/items/workflow-controller-fx1.md` and `docs/guide/development.md` record only the loaded full run (two pinned CPUs, four busy loops); the shard-5 replay step is not mentioned. The evidence recorded is enough for D3's \"not reproduced\" disposition, so this does not block, but the item page could say whether the shard-5 replay ran (and with what result) so the record of what was tried on #342 is complete.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "7f74c223a24f7c4658e9f572bc0ffaf3072dca4405667be655ffe688fcf09bd7",
+              "verdict": "APPROVE",
+              "at": "2026-11-13T16:49:11Z"
+            }
+          ]
+        },
+        "F-2b953f27160e": {
+          "digest": "2b953f27160eaef79d40cd02e973b7a3027fec00c5db904e81980c3afa0966f0",
+          "text": "`tests/test_fake_claude_contract.py:1243–1266`: Clarify the helper’s completeness guarantee. Integer mode accepts any parseable numeric prefix: an in-memory probe returning `\"42\"` before `\"4242\"` produced `42` immediately. The current writers emit each pid in one write, so this does not demonstrate a remaining race at the changed call sites; the documentation should state that assumption.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "7f74c223a24f7c4658e9f572bc0ffaf3072dca4405667be655ffe688fcf09bd7",
+              "verdict": "APPROVE",
+              "at": "2026-11-13T16:52:03Z"
+            }
+          ]
+        },
+        "F-ace10a098c70": {
+          "digest": "ace10a098c70cfb5f53668ac70d55257692a5d37071e4b18805671bb56384d7b",
+          "text": "The CP2 evidence records six parallel copies of `ImplGuardedRunTest` and a loaded full-suite run. The plan requested the whole module in parallel and a separate shard-5 replay. Record whether those additional checks ran, or explicitly identify their omission. The recorded evidence supports the limited “not reproduced” conclusion.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "7f74c223a24f7c4658e9f572bc0ffaf3072dca4405667be655ffe688fcf09bd7",
+              "verdict": "APPROVE",
+              "at": "2026-11-13T16:52:03Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "7f74c223a24f7c4658e9f572bc0ffaf3072dca4405667be655ffe688fcf09bd7",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "aff1241f3c89766a648e82e4dbe10b8a2d21a2d14e239794cd6b59a280cba33b",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-13T16:49:11Z",
+          "verdict_sha256": "42e12408629635213cf933a1692228b582e79d44ea94a4b08cfa32822db5c61c",
+          "run_ref": "session:local .ai-review/workflow-controller-fx1/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "aff1241f3c89766a648e82e4dbe10b8a2d21a2d14e239794cd6b59a280cba33b",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-13T16:52:03Z",
+          "verdict_sha256": "a9db380e485ec605e6e0b65fe64b006d6d17262cff549d21f774a967d1482df9",
+          "run_ref": "codex:20261113T164929Z-ff427bf8",
+          "reviewer_model": "openai/gpt-6.1-sol"
         }
       }
     }

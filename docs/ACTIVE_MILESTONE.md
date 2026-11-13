@@ -630,56 +630,63 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-h4f` (H4f, issue [#312](https://github.com/RodrigoFAbreu/workflow-controller/issues/312)),
-implementation revision 4, plan `docs/ai-workflow/CONTROLLER_H4F_PLAN.md` (revision 5), base commit `3757710`. The item lets an
-operator route `milestone-implement` to Codex in a private clone; the checkpoint commits land only after a check of the paths and
-state fields they touch (`surface_touched`, `state_touched`), and the managed claim, amendment and tree are checked before the clone
-is made (`managed_*` causes). Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex`
-or `ssh`, a `PATH` of the sandbox's `bin/` and the system directories, and no write inside the read-only product clone. Run from
-the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write only to the scratch `TMPDIR`. The tests drive the fake
-`codex` of `tests/fake_codex.py` against scratch repositories and a scratch origin, so no flow needs a pull request or a forge call.
+Item `workflow-controller-h4g` (H4g), implementation revision 2, plan `docs/ai-workflow/CONTROLLER_H4G_PLAN.md` (revision 8), base
+commit `77ac321`. The item lets an operator route `milestone-implement-self-review` (the wrap-up role) to Codex: it runs as the
+`implementer` adapter role in a private clone, the landing takes the `self-review` state profile, the five out members of the
+implementation stage are carried in and out, and the Controller runs the guarded `implementation` generator only when the landing
+holds the item's generation record (the hand-over predicate, with the per-commit contract added by review fix I1). Every flow runs
+offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and
+the system directories, and no write inside the read-only product clone. Run from the product clone with `python3 -B` and no
+`PYTHONPATH=.`; flows write only to the scratch `TMPDIR`. The tests drive the fake `codex` of `tests/fake_codex.py` against scratch
+repositories and a scratch origin, so no flow needs a pull request or a forge call.
 
 Setup: `export TMPDIR=$(mktemp -d)`. No data to seed.
 
-**Flow 1: The role, the launcher table and the routing (CP1).**
-Run `python3 -B -m unittest tests.test_harness tests.test_routing tests.test_routing_chain tests.test_worker_launch tests.test_review_mode tests.test_route_select 2>&1 | tail -4`.
-Expected: `OK`. `milestone-implement` has adapter role `implementer`; both adapters declare it; `(claude-code, implementer)` and
-`(codex, implementer)` are registered launchers; `(codex, worker)` stays unregistered, so `milestone-implement-self-review` and
-every other worker role still refuse `codex`; the default route is unchanged.
+**Flow 1: Routing and the launcher table (CP1).**
+Run `python3 -B -m unittest tests.test_routing tests.test_harness tests.test_worker_launch tests.test_review_mode tests.test_harness_table 2>&1 | tail -4`.
+Expected: `OK`. `milestone-implement-self-review` has adapter role `implementer` and `codex` is accepted for it; every other worker
+role still refuses `codex`; the default route is unchanged.
 
-**Flow 2: Landing surface and state checks, guard metadata setting (CP2).**
-Run `python3 -B -m unittest tests.test_gitrepo tests.test_codex_worker_landing tests.test_codex_worker_sandbox tests.test_codex_worker tests.test_codex_worker_tree tests.test_codex_worker_job 2>&1 | tail -4`.
-Expected: `OK`. The implementer landing refuses `surface_touched` (a path under `scripts/`, `.workflow-manager/`, `.claude/`,
-`.codex/` or a root `.mcp.json`, a link, a mode change, an unreadable diff) and `state_touched` (the state file changed outside the
-item's checkpoint fields); `guard_digest(..., workflow_metadata=True)` ignores only the clone's `.git/ai-workflow` bookkeeping.
+**Flow 2: The self-review state profile at the landing (CP2).**
+Run `python3 -B -m unittest tests.test_codex_worker_landing 2>&1 | tail -4`.
+Expected: `OK`. The `self-review` profile allows only `phase`, `state_revision`, `last_transition`, `implementation_revision` and
+`reviewed_implementation_head`, proved equal to what the Workflow's two writers change; the checkpoint profile still refuses a
+generation record; a refusal names the profile.
 
-**Flow 3: The job, managed-state refusals and the kept dirty clone (CP3 and review fixes).**
-Run `python3 -B -m unittest tests.test_checkpoint_claims tests.test_job_codex_worker tests.test_job_codex_worker_landing tests.test_job_codex_worker_resume tests.test_job_codex_apply 2>&1 | tail -4`.
-Expected: `OK`. A claim, an open/stale/conflicting/unreadable amendment, a lagging worktree (reading lagging worktrees only; the
-lagging resolution-conflict refusal, review round 4) or a dirty managed tree ends `WorkerNotStarted` with the cause and its remedy
-and no clone left; a landed clone with unfinished work is kept and named (`tree_left`) on the normal ending and on `resume`; every
-other route passes none of the implementer options.
+**Flow 3: The carry of the implementation stage (CP3).**
+Run `python3 -B -m unittest tests.test_codex_carry 2>&1 | tail -4`.
+Expected: `OK`. The role carries the five out members and never a derived file or the state file; a worker-modified derived file is
+not written out; a link is refused; a dirty tree is refused.
 
-**Flow 4: Adversarial plants and the whole checkpoint run through `execute_step` (CP4).**
-Run `python3 -B -m unittest tests.test_codex_implement_job tests.test_codex_implement_safety 2>&1 | tail -4`.
-Expected: `OK`. A clean checkpoint (fake worker runs identity, claim, transition, completion, commit, release) ends `FINISHED` and
-lands; each surface and state plant ends `FAILED` at the landing with refs, index, tree and state unchanged and the clone kept; a
-link, special file, hook, `config` change or alternates file under the clone's `.git` is a `sandbox_breach`.
+**Flow 4: The job, the hand-over predicate and the generator stage (CP4, review fix I1).**
+Run `python3 -B -m unittest tests.test_job_codex_apply tests.test_generator_run 2>&1 | tail -4`.
+Expected: `OK` (see the known flake below if two `ImplRecoveryTest` cases fail in a loaded run; rerun the class alone). A clean
+self-review from `SELF_REVIEWING_IMPLEMENTATION` and from `IMPLEMENTING` hands the generation record to the guarded `implementation`
+run; a partial self-review, a dirty tree, a claim and a record that breaks the per-commit contract end without a generator run.
 
-**Flow 5: Live test is opt-in; structure and containment; pages.**
-Run `python3 -B -m unittest tests.test_codex_implement_live tests.test_package_structure tests.test_write_containment 2>&1 | tail -4`, then
+**Flow 5: Whole runs and adversarial plants through `execute_step` (CP5).**
+Run `python3 -B -m unittest tests.test_codex_selfreview_job tests.test_codex_selfreview_safety tests.test_codex_selfreview_live 2>&1 | tail -4`.
+Expected: `OK` (the live module is collected and skipped: no Codex turn). Clean, recovered-role and partial runs end as described;
+each plant of a link, dangling link or fifo as an out member is refused with refs and state unchanged; a `scripts/` or `.claude/`
+edit and an approval, checkpoint or review-stage field are refused by the landing; a context list naming a file outside the
+repository ends `carry_bundle_regeneration_pending` with no external byte copied.
+
+**Flow 6: Structure, containment and pages.**
+Run `python3 -B -m unittest tests.test_package_structure tests.test_write_containment tests.test_docs 2>&1 | tail -4`, then
 `python3 -B tools/harness_table.py --check; echo rc=$?` and `python3 -B tools/check_docs.py; echo rc=$?`. Read `docs/guide/harnesses.md`
-section "The checkpoint role on Codex", the `surface_touched`, `state_touched`, `managed_*` and kept-clone entries of
-`docs/common-problems.md`, and `docs/items/workflow-controller-h4f.md`.
-Expected: `OK` (the live module is collected and skipped, no Codex turn), `rc=0` each. The pages say what is selectable, what is
-checked before and at landing, each cause with its remedy, and that the live proof is not run.
+section "The wrap-up role on Codex", `docs/common-problems.md` section "A Codex wrap-up was refused or stopped early", and
+`docs/items/workflow-controller-h4g.md`.
+Expected: `OK`, `rc=0` each. The pages say what is selectable, what is carried and checked, each refusal with its remedy, that the
+live proof has not been run, and that the other roles stay open under H4g.
 
-**Known limitations / out of scope.** The live Codex proof (`CONTROLLER_LIVE_CODEX_TESTS=1`) is not run: it spends Codex usage, so
-`tests/harness_contract/codex/implement_role.txt` does not exist and the sandbox-toolchain question is open. H4g
-(`milestone-implement-self-review` on Codex) is out of scope. The full suite (`python3 tools/run_tests.py`) is not a flow: three
-`tests.test_fake_codex_contract` tests fail in a sandbox that reads `~/.codex` config (environmental), and
-`tests.test_job_codex_worker.OutcomeTest.test_a_timeout_run_...` has a known timing flake under load (passes alone).
+**Known limitations / out of scope.** The live Codex proof (`CONTROLLER_LIVE_CODEX_TESTS=1`) is not run, so
+`tests/harness_contract/codex/selfreview_role.txt` does not exist. The other roles (`milestone-plan`, `apply-functional-review`,
+`apply-pr-review`, `satisfy-gate`, `prepare-functional-review`, `record-manual-*`) are not routable to Codex and stay open under H4g;
+splitting them into follow-up items is the owner's decision (plan O1). The full suite (`python3 tools/run_tests.py`) is not a flow:
+three `tests.test_fake_codex_contract` tests fail where `~/.codex` config is read (environmental), and two
+`tests.test_job_codex_apply.ImplRecoveryTest` cases can fail from a shared `job1` tag collision with `tests.test_codex_worker_sandbox`
+in another shard (they pass alone).
 
 ## Next action
 
-Functional review of `workflow-controller-h4f` (see the checklist above), then `/accept-milestone`.
+Functional review of `workflow-controller-h4g` (see the checklist above), then `/accept-milestone`.

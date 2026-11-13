@@ -70123,7 +70123,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-h4f-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4f-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 5,
       "implementation_revision": 3,
       "functional_review_round": null,
@@ -70275,12 +70275,12 @@
           "external": 3
         },
         "implementation": {
-          "local": 2,
+          "local": 3,
           "external": 1
         }
       },
-      "state_revision": 36,
-      "last_transition": "2026-11-12T23:36:37Z",
+      "state_revision": 37,
+      "last_transition": "2026-11-13T00:05:57Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -70542,6 +70542,34 @@
               "review_content_id": "9598eae9c79a2f1520bb04d3f10a8393abd18ce8ee2accd77be7993ffe79ff0e",
               "verdict": "REVISE",
               "at": "2026-11-12T22:39:07Z"
+            }
+          ]
+        },
+        "F-c77d46bc70ef": {
+          "digest": "c77d46bc70ef299ef2e60fc85d061c94bb622c070f7f058ec760c652b6436a01",
+          "text": "**O1 -- `filter_disabling_config` misses filters defined in `config.worktree`** (carried from rounds 1 and 2, not applied). `controller/gitrepo.py:1013` reads `git config --local --includes --name-only --list -z`, which omits a `--worktree` driver under `extensions.worktreeConfig`. Defence in depth only; the landing guard compares `config.worktree`.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "506c5202e23c42426c44680fce90147f72f3b11d446445e1de7f2ae299a98fa3",
+              "verdict": "REVISE",
+              "at": "2026-11-13T00:05:57Z"
+            }
+          ]
+        },
+        "F-b7cdfc56917a": {
+          "digest": "b7cdfc56917aac9b1094aca59dac622e195c4f881627e01786912ff93d88b0be",
+          "text": "**O2 -- The probe's state reads have no size cap.** `_check_lagging_worktrees` reads each worktree's state through `_read` and `gitrepo.show` without the `MAX_BYTES` limit that `_committed_entry` applies (`:189`). An oversized state file in any linked worktree is parsed whole. Apply the same cap, and treat an oversized file as unreadable, as `_committed_entry` does.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "506c5202e23c42426c44680fce90147f72f3b11d446445e1de7f2ae299a98fa3",
+              "verdict": "REVISE",
+              "at": "2026-11-13T00:05:57Z"
             }
           ]
         }

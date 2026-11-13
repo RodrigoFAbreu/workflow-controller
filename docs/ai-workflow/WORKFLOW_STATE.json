@@ -70123,7 +70123,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-h4f-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4f-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 5,
       "implementation_revision": 4,
       "functional_review_round": null,
@@ -70244,7 +70244,360 @@
           "workflow_release": "2.27.0"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "8a59815b54d37e78dd78b9422844cf445302e4e23c43c587846a96a177c19e36",
+        "approved_review_content_id": "75cf08d6a48b804310ff23de95fd9dd29b6eecc5f84a2a8227863faee9ff1951",
+        "review_content_manifest": [
+          {
+            "path": "controller/__init__.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "07aba1d840931a53e4c775afc2b09f0edd1c386c"
+          },
+          {
+            "path": "controller/checkpoint_claims.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "507d881743cade4cf87dd02132e9a3f50b353308"
+          },
+          {
+            "path": "controller/codex_carry.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "63f08d6b1c0dad8e6ebf38c03e3572b903d0e955"
+          },
+          {
+            "path": "controller/codex_worker.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0dd859536ab6ac08c6cf3d9b7b9f5254936f5815"
+          },
+          {
+            "path": "controller/codex_worker_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "36c536b97a5204ef2ddf373ca1e0eba26f8ed68c"
+          },
+          {
+            "path": "controller/codex_worker_landing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "398915b8a6905c9df34ec19aa4392204bd78d63f"
+          },
+          {
+            "path": "controller/codex_worker_sandbox.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "83a69f8f7b52c760be3add867c45c6fa33c61664"
+          },
+          {
+            "path": "controller/codex_worker_tree.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e182cd708bc2ac128793dfaa2332c46aff9af8c9"
+          },
+          {
+            "path": "controller/gitrepo.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "223977fc92299177517b8ea1964103ce6e3b831b"
+          },
+          {
+            "path": "controller/harness.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "75d8bfe4c37297a37f946e961acbfa8c0f1eaf66"
+          },
+          {
+            "path": "controller/job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2633cd0c621b849cb78ee65150f7b1769c654f0f"
+          },
+          {
+            "path": "controller/review_mode.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3b322f11078c37807a885d8227e59b742ea61f5f"
+          },
+          {
+            "path": "controller/routing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ae62b674eedca2b554434cbf49c94edf97b41d45"
+          },
+          {
+            "path": "controller/worker_launch.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fbb6d1bd0087c25ba3b7a7c43f8c10d30bdb0811"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-h4f-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2ea952b6d5f99a758a25744f448e88e810ba855a"
+          },
+          {
+            "path": "docs/common-problems.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "96f4d0b132dd4d02616764de5a9f1f133fb06929"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "27af7bbeedac2320b5a9ea42c930d345dfd2ffc0"
+          },
+          {
+            "path": "docs/guide/harnesses.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f734a537042ea5a087761997d8ac30536acb4292"
+          },
+          {
+            "path": "docs/guide/workers.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "07fbe72a14e7a086ba6b31b65abc5452b775f233"
+          },
+          {
+            "path": "tests/fake_codex.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d6e0d8c882ee209d99d01c9efd56845957506e97"
+          },
+          {
+            "path": "tests/test_checkpoint_claims.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9ac3c397182049a6a7490979a984c84920c03c0f"
+          },
+          {
+            "path": "tests/test_codex_implement_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5c08ec8715a46d21461313253407a294ca27572a"
+          },
+          {
+            "path": "tests/test_codex_implement_live.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "11afaaf02cd632448ca99f4596db3c87243924fa"
+          },
+          {
+            "path": "tests/test_codex_implement_safety.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d84e19db9fd2b9cda47402988ef59255523e3503"
+          },
+          {
+            "path": "tests/test_codex_worker.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "873a3d11f01fc42e30499d4d27d469602a8ac6b9"
+          },
+          {
+            "path": "tests/test_codex_worker_clone_live.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9a79ffadf3a5a359ba0952ed6737daa0acbcd1fa"
+          },
+          {
+            "path": "tests/test_codex_worker_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b67bbda7ba412f8d8113ba525cea0bd1facfbe0d"
+          },
+          {
+            "path": "tests/test_codex_worker_job_live.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4c922023d778c195c82c147b92ebb484e32ec181"
+          },
+          {
+            "path": "tests/test_codex_worker_landing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2ca3aa390aae8cce024615922b08db7f9382ef89"
+          },
+          {
+            "path": "tests/test_codex_worker_ownership_live.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e3af0509fca0683ca26ada419c1e5b375f25fa5e"
+          },
+          {
+            "path": "tests/test_codex_worker_sandbox.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9398d6a41578776553cb58d58a3a99c27304894f"
+          },
+          {
+            "path": "tests/test_codex_worker_tree.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "67cf5adbdda138a74da36cc043ad2c2a3a9c370f"
+          },
+          {
+            "path": "tests/test_codex_worker_usage_live.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "dbf11f462cf03f0d6414246c194484aefdecaa3c"
+          },
+          {
+            "path": "tests/test_gitrepo.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "346371c5b28918268b31b114b7dc91fd7e91293c"
+          },
+          {
+            "path": "tests/test_harness.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c7da627e0c8b9144ebf5491eb2607b5f127fe1dc"
+          },
+          {
+            "path": "tests/test_harness_table.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9c82f054f8ab843dcd8b4a2c87e845835df7b4e4"
+          },
+          {
+            "path": "tests/test_job_codex_worker.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "034d518bd5e78918857d5636c9c178e282047e1c"
+          },
+          {
+            "path": "tests/test_job_codex_worker_landing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "876632c3fddf7221efdcb2d5cbd5aa0d0a8c60ca"
+          },
+          {
+            "path": "tests/test_job_codex_worker_resume.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c2ca8535e99d0d732b17f35b48fcaacb36eb90f8"
+          },
+          {
+            "path": "tests/test_job_codex_worker_usage.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4f6d586e059683ebcd8cada226fbaa56eb9e26de"
+          },
+          {
+            "path": "tests/test_package_structure.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fe729303a5c72cf1dcb1770811dd2cb9faef82bf"
+          },
+          {
+            "path": "tests/test_review_mode.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2d392de26980090e917a236541ee664a43da7b70"
+          },
+          {
+            "path": "tests/test_route_select.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e7027574058da806d34d7e95506ccb1b0379a5af"
+          },
+          {
+            "path": "tests/test_routing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "51d369da29d2ba71ab07c5832ba64fd7f9e70483"
+          },
+          {
+            "path": "tests/test_routing_chain.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a68e32ef9c9ed6733b1d37ee93ffbda6e4ddbd7d"
+          },
+          {
+            "path": "tests/test_worker_launch.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b9c163629a8c5c602c4269a9c427f77d21c99c08"
+          },
+          {
+            "path": "tools/harness_table.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b2ef450ccf92357cd7715facdef517ab45f26283"
+          }
+        ],
+        "reviewed_content_commit": "d01a68ba787b9e402406216cf36e4e31a9dbd680",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-13T01:09:45Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "75cf08d6a48b804310ff23de95fd9dd29b6eecc5f84a2a8227863faee9ff1951",
+            "ledger": {
+              "local": {
+                "bundle_id": "8a59815b54d37e78dd78b9422844cf445302e4e23c43c587846a96a177c19e36",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "dc9c498f3954076c5c52a2e58ba3aa6fcb9495e40106990842cc37507cc991f2",
+                "ledger_entry_sha256": "62d1e6689a1bba8d9320c8ca1c95d5be2e88b4dfa4d6cf2cd906c4199c638d42",
+                "run_ref": "session:local .ai-review/workflow-controller-h4f/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "8a59815b54d37e78dd78b9422844cf445302e4e23c43c587846a96a177c19e36",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "6f1000b979b7ad91eaa4deafb0f2b492c606a193737ce4e6fa4d69d219baccb6",
+                "ledger_entry_sha256": "9d09cb0b41baecbb3f8e9d0651d305262e2684d4c3d3863b7a8cc45c93800194",
+                "run_ref": "codex:20261113T010339Z-f5599ade",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-13T01:09:45Z",
+          "workflow_release": "2.27.0"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "185d9ed577778c8d67db9599175c68edf12cbe596d8fc6ccd8d4eafae1187ca4",
@@ -70275,12 +70628,12 @@
           "external": 3
         },
         "implementation": {
-          "local": 3,
-          "external": 1
+          "local": 4,
+          "external": 2
         }
       },
-      "state_revision": 38,
-      "last_transition": "2026-11-13T00:29:13Z",
+      "state_revision": 41,
+      "last_transition": "2026-11-13T01:09:45Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -70572,20 +70925,84 @@
               "at": "2026-11-13T00:05:57Z"
             }
           ]
+        },
+        "F-26856e7e8399": {
+          "digest": "26856e7e839967dd01c5e7e2012a8850c50d5290e1cb46499899338db9cd3daa",
+          "text": "**O1 -- `filter_disabling_config` misses filters defined in `config.worktree`** (carried from rounds 1-3, not applied; the summary says a follow-up issue is planned). `controller/gitrepo.py:1013` reads `git config --local --includes --name-only --list -z`, which leaves out a `--worktree` driver under `extensions.worktreeConfig`. This is defence in depth only: the landing guard already compares `config.worktree`.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "75cf08d6a48b804310ff23de95fd9dd29b6eecc5f84a2a8227863faee9ff1951",
+              "verdict": "APPROVE",
+              "at": "2026-11-13T01:03:17Z"
+            }
+          ]
+        },
+        "F-ab9c07fab1da": {
+          "digest": "ab9c07fab1dae89262cfa6d7400fdbde686544647eb99d89954d890040b6a592",
+          "text": "**O2 -- `TEST_RESULTS.md` has no revision 4 section.** The bundle's `TEST_RESULTS.md` ends at \"Revision 3\" (content head `5d1abe7`). `IMPLEMENTATION_SUMMARY.md`'s \"Round 4\" section says what was fixed but gives no test run for `d01a68b`. This reviewer ran the suite at revision 4 (see below), so nothing goes unverified. Still, the bundle's own record should state the run for the content it covers, as round 2's O2 asked.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "75cf08d6a48b804310ff23de95fd9dd29b6eecc5f84a2a8227863faee9ff1951",
+              "verdict": "APPROVE",
+              "at": "2026-11-13T01:03:17Z"
+            }
+          ]
+        },
+        "F-d867a6f6c045": {
+          "digest": "d867a6f6c0457b683b8cc794c9f7aeb63bf66b128e0df317759118c0d9608e84",
+          "text": "**O3 -- An absent witness skips the Workflow's cross-worktree bootstrap conflict check.** With no witness file, the Workflow's `_evaluate_lifecycle` runs `_bootstrap_amendment_witness`. That scans *every* worktree (`_scan_views`) and refuses `AmendmentBootstrapConflictError` when their `amendment_history` entries diverge. A clone's bootstrap can see only the clone. `checkpoint_claims.check` treats an absent witness as clean apart from the lagging check, which is exactly what plan D5 specifies (\"An absent witness is clean\"). So this is not a conformance gap. It is a residual case like round 2's I1, reachable only before the managed repository's first 2.6.0+ lifecycle evaluation writes the witness. Consider a follow-up issue, or a sentence in `docs/guide/harnesses.md` naming it.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "75cf08d6a48b804310ff23de95fd9dd29b6eecc5f84a2a8227863faee9ff1951",
+              "verdict": "APPROVE",
+              "at": "2026-11-13T01:03:17Z"
+            }
+          ]
+        },
+        "F-10db4aac5f55": {
+          "digest": "10db4aac5f554728b04c475cd015f40186156bd6a7a26d3fd58b325756f6965f",
+          "text": "**O1 — Filter enumeration still omits worktree configuration.** `controller/gitrepo.py:1013` uses `git config --local`, excluding drivers in `config.worktree`. Carry forward the previous optional hardening recommendation; the normal landing guard detects configuration changes.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "75cf08d6a48b804310ff23de95fd9dd29b6eecc5f84a2a8227863faee9ff1951",
+              "verdict": "APPROVE",
+              "at": "2026-11-13T01:08:13Z"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "9598eae9c79a2f1520bb04d3f10a8393abd18ce8ee2accd77be7993ffe79ff0e",
+        "review_content_id": "75cf08d6a48b804310ff23de95fd9dd29b6eecc5f84a2a8227863faee9ff1951",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "1c9a39948053ef415178498b2697ed1403216147dc47aceaaf1f379793520128",
+          "bundle_id": "8a59815b54d37e78dd78b9422844cf445302e4e23c43c587846a96a177c19e36",
           "verdict": "APPROVE",
-          "round": 2,
-          "completed_at": "2026-11-12T22:35:05Z",
-          "verdict_sha256": "308430e0fae9ae27f6378fc55fa995cc3462cb778848f4bdaf82d107fb396f66",
-          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-h4f/feedback/REVIEW_FEEDBACK.md",
+          "round": 4,
+          "completed_at": "2026-11-13T01:03:17Z",
+          "verdict_sha256": "dc9c498f3954076c5c52a2e58ba3aa6fcb9495e40106990842cc37507cc991f2",
+          "run_ref": "session:local .ai-review/workflow-controller-h4f/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
-        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "8a59815b54d37e78dd78b9422844cf445302e4e23c43c587846a96a177c19e36",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-11-13T01:08:13Z",
+          "verdict_sha256": "6f1000b979b7ad91eaa4deafb0f2b492c606a193737ce4e6fa4d69d219baccb6",
+          "run_ref": "codex:20261113T010339Z-f5599ade",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
       }
     }
   }

@@ -614,68 +614,56 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-h4e3b` (H4e3b, issue [#334](https://github.com/RodrigoFAbreu/workflow-controller/issues/334)),
-implementation revision 7, plan `docs/ai-workflow/CONTROLLER_H4E3B_PLAN.md` (revision 4), base commit `ea271e1`. The item lets the
-Controller run the managed repository's review-bundle generator after a Codex apply role's landing, only when it shows that nothing
-the worker could have written is on what the interpreter loads or what the generator copies; otherwise the lane stops at
-`carry_bundle_regeneration_pending`, now naming the cause. Every flow runs offline: no network, no real `gh` (the stand-in refuses
-and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the system directories, and no write inside the
-read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write only to the scratch
-`TMPDIR`. The tests drive the fake `codex` of `tests/fake_codex.py` against scratch repositories and a scratch origin, so no flow
-needs a pull request or a forge call.
+Item `workflow-controller-h4f` (H4f, issue [#312](https://github.com/RodrigoFAbreu/workflow-controller/issues/312)),
+implementation revision 4, plan `docs/ai-workflow/CONTROLLER_H4F_PLAN.md` (revision 5), base commit `3757710`. The item lets an
+operator route `milestone-implement` to Codex in a private clone; the checkpoint commits land only after a check of the paths and
+state fields they touch (`surface_touched`, `state_touched`), and the managed claim, amendment and tree are checked before the clone
+is made (`managed_*` causes). Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex`
+or `ssh`, a `PATH` of the sandbox's `bin/` and the system directories, and no write inside the read-only product clone. Run from
+the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write only to the scratch `TMPDIR`. The tests drive the fake
+`codex` of `tests/fake_codex.py` against scratch repositories and a scratch origin, so no flow needs a pull request or a forge call.
 
 Setup: `export TMPDIR=$(mktemp -d)`. No data to seed.
 
-**Flow 1: The guard and the isolated generator run (D2 to D5a).**
-Run `python3 -B -m unittest tests.test_generator_run tests.test_workflow_contract tests.test_gitrepo 2>&1 | tail -4`.
-Expected: `OK`. `check_landing`, `check_tree` and `check_copy_sources` refuse each unsafe input with one cause of
-`generator_run.CAUSES`; every member of `CAUSES` has a case (`CAUSE_CASES`); `run_in_place` runs a command with the five interpreter
-pins, a private `python3` and the hook/filter isolation; a private-key armour line is never kept in the record's output tail, even
-one cut by the 4 KiB bound.
+**Flow 1: The role, the launcher table and the routing (CP1).**
+Run `python3 -B -m unittest tests.test_harness tests.test_routing tests.test_routing_chain tests.test_worker_launch tests.test_review_mode tests.test_route_select 2>&1 | tail -4`.
+Expected: `OK`. `milestone-implement` has adapter role `implementer`; both adapters declare it; `(claude-code, implementer)` and
+`(codex, implementer)` are registered launchers; `(codex, worker)` stays unregistered, so `milestone-implement-self-review` and
+every other worker role still refuse `codex`; the default route is unchanged.
 
-**Flow 2: The job: second reconcile, gate with a cause, record and recovery.**
-Run `python3 -B -m unittest tests.test_job_codex_apply 2>&1 | tail -4`.
-Expected: `OK`. `PlanGuardedRunTest` and `ImplGuardedRunTest` cover a clean landing (regenerated, then a second reconcile), a
-refusal (gate `carry_bundle_regeneration_pending` with the cause leading the text and `reconciliation_evidence.regeneration =
-{cause, detail}`), a landed `scripts/` change, a kill at `started` and at `finished` (`resume` runs the guard and generator
-again), a kill in the middle of a `post-fix` bundle rewrite (`resume` ends with a bundle that verifies), a kill between the
-`current/` and the archive replacement (a missing manifest, or a stale archive: `resume` regenerates either way, review round 6),
-a generator that outlives a killed Controller (carries its own recorded ownership tag; `resume` ends it before running the
-generator again) and `abandon` (no generator).
+**Flow 2: Landing surface and state checks, guard metadata setting (CP2).**
+Run `python3 -B -m unittest tests.test_gitrepo tests.test_codex_worker_landing tests.test_codex_worker_sandbox tests.test_codex_worker tests.test_codex_worker_tree tests.test_codex_worker_job 2>&1 | tail -4`.
+Expected: `OK`. The implementer landing refuses `surface_touched` (a path under `scripts/`, `.workflow-manager/`, `.claude/`,
+`.codex/` or a root `.mcp.json`, a link, a mode change, an unreadable diff) and `state_touched` (the state file changed outside the
+item's checkpoint fields); `guard_digest(..., workflow_metadata=True)` ignores only the clone's `.git/ai-workflow` bookkeeping.
 
-**Flow 3: Adversarial plants through `execute_step`.**
-Run `python3 -B -m unittest tests.test_codex_apply_regeneration tests.test_codex_apply_safety 2>&1 | tail -4`.
-Expected: plain `OK`, with no `expectedFailure` (a landed script edit with its record digest edited to match is refused by the landing check alone, with no query run, on the first run and on `resume`). A clean landing is regenerated for both roles; each plant (`scripts/sitecustomize.py`,
-`scripts/secrets.py`, a sourceless `.pyc`, a package directory, a `.so`-named file, a link in place of the generator, a forged
-`scripts/__pycache__` file, root-level `sitecustomize.py`, `secrets.py`, `json.py`) writes no marker and ends at the gate with its
-cause or completes; a poisoned environment (`PYTHONPATH`, `PYTHONSTARTUP`, `BASH_ENV`, a hostile `python3`) runs nothing; the D5a
-canary cases leave no canary byte in the bundle or archive.
+**Flow 3: The job, managed-state refusals and the kept dirty clone (CP3 and review fixes).**
+Run `python3 -B -m unittest tests.test_checkpoint_claims tests.test_job_codex_worker tests.test_job_codex_worker_landing tests.test_job_codex_worker_resume tests.test_job_codex_apply 2>&1 | tail -4`.
+Expected: `OK`. A claim, an open/stale/conflicting/unreadable amendment, a lagging worktree (reading lagging worktrees only; the
+lagging resolution-conflict refusal, review round 4) or a dirty managed tree ends `WorkerNotStarted` with the cause and its remedy
+and no clone left; a landed clone with unfinished work is kept and named (`tree_left`) on the normal ending and on `resume`; every
+other route passes none of the implementer options.
 
-**Flow 4: The carry beneath it is unchanged, structure and containment.**
-Run `python3 -B -m unittest tests.test_codex_carry tests.test_package_structure tests.test_write_containment 2>&1 | tail -4`.
-Expected: `OK` (the H4e3 carry and its recovery are untouched; the new module is in the package map and writes only through the
-runtime primitives).
+**Flow 4: Adversarial plants and the whole checkpoint run through `execute_step` (CP4).**
+Run `python3 -B -m unittest tests.test_codex_implement_job tests.test_codex_implement_safety 2>&1 | tail -4`.
+Expected: `OK`. A clean checkpoint (fake worker runs identity, claim, transition, completion, commit, release) ends `FINISHED` and
+lands; each surface and state plant ends `FAILED` at the landing with refs, index, tree and state unchanged and the clone kept; a
+link, special file, hook, `config` change or alternates file under the clone's `.git` is a `sandbox_breach`.
 
-**Flow 5: Pages and generated tables.**
-Run `python3 -B tools/harness_table.py --check; echo rc=$?` and `python3 -B tools/check_docs.py; echo rc=$?`. Then read
-`docs/guide/harnesses.md` section "What the Controller runs after a landing", the section "A routed apply stopped at
-`carry_bundle_regeneration_pending`" of `docs/common-problems.md` (each cause with its remedy), and
-`docs/items/workflow-controller-h4e3b.md`.
-Expected: `rc=0` each. The pages say what the Controller runs, each cause and its remedy, that a refusal needs a manual
-regeneration, that `resume` regenerates after a kill between the `current/` and archive replacements and ends a surviving
-generator (found by its own recorded tag) first, that a generator failure's gate detail is a short excerpt with the bounded tails in the
-record's `regeneration` block, and that the implementation role's landing check runs before any post-landing Workflow query (the `reconcile` and
-`resume` included), so a refused landing runs no query. The pages mention no known gap and no `expectedFailure` test.
+**Flow 5: Live test is opt-in; structure and containment; pages.**
+Run `python3 -B -m unittest tests.test_codex_implement_live tests.test_package_structure tests.test_write_containment 2>&1 | tail -4`, then
+`python3 -B tools/harness_table.py --check; echo rc=$?` and `python3 -B tools/check_docs.py; echo rc=$?`. Read `docs/guide/harnesses.md`
+section "The checkpoint role on Codex", the `surface_touched`, `state_touched`, `managed_*` and kept-clone entries of
+`docs/common-problems.md`, and `docs/items/workflow-controller-h4f.md`.
+Expected: `OK` (the live module is collected and skipped, no Codex turn), `rc=0` each. The pages say what is selectable, what is
+checked before and at landing, each cause with its remedy, and that the live proof is not run.
 
-**Known limitations / out of scope.** There is no known gap in the landing check's order (closed in review round 1, `d3111b3`). The live Codex proof is not run (it spends
-Codex usage). `milestone-implement` (H4f) still cannot be routed to `codex`. The full suite (`python3 tools/run_tests.py`) is not a
-flow: three `tests.test_fake_codex_contract` tests fail in a sandbox that reads `~/.codex` config (environmental), and
-`test_functional_sandbox` / the mid-rewrite kill test have known timing flakes under load (each passes alone and on replay).
-
-**Functional-review round 1 (automated tester, head da80395).** Flows 1 to 4 passed. Flow 5 was reported as a defect, but it was a checklist defect, not a product defect: the checklist and this narrative still described the CP3-era known gap (an `expectedFailure` test), which review round 1 closed in `d3111b3`, so the tester compared accurate pages with a stale expectation. `09c87cf` changed the pages to match the checklist; it is reverted, and the pages again say the landing check runs before any post-landing query. The checklist (flows 3 and 5, known limitations) and this narrative are corrected. No product code changed; no remediation child. Re-test: flow 5 (read the two pages against the corrected expectation; run both checkers).
-
-**Functional-review preparation, revision 7.** Review rounds 5 and 6 changed code after round 1: the landing-check order and checklist were restored (round 5), and round 6 made `resume` recover a bundle publication cut off between the `current/` and archive replacements and end a generator that survived a killed Controller (`job.py`, `generator_run.py`, `workflow_contract.py`). Flows 2 and 5 now name those cases; re-run all five flows against this head.
+**Known limitations / out of scope.** The live Codex proof (`CONTROLLER_LIVE_CODEX_TESTS=1`) is not run: it spends Codex usage, so
+`tests/harness_contract/codex/implement_role.txt` does not exist and the sandbox-toolchain question is open. H4g
+(`milestone-implement-self-review` on Codex) is out of scope. The full suite (`python3 tools/run_tests.py`) is not a flow: three
+`tests.test_fake_codex_contract` tests fail in a sandbox that reads `~/.codex` config (environmental), and
+`tests.test_job_codex_worker.OutcomeTest.test_a_timeout_run_...` has a known timing flake under load (passes alone).
 
 ## Next action
 
-Functional review of `workflow-controller-h4e3b` (see the checklist above), then `/accept-milestone`.
+Functional review of `workflow-controller-h4f` (see the checklist above), then `/accept-milestone`.

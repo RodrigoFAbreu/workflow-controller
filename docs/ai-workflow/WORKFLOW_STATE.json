@@ -71221,7 +71221,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-h4g-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-h4g-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 8,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -71373,12 +71373,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 40,
-      "last_transition": "2026-11-13T09:40:01Z",
+      "state_revision": 42,
+      "last_transition": "2026-11-13T10:53:52Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -71575,7 +71575,62 @@
               "at": "2026-11-13T03:44:45Z"
             }
           ]
+        },
+        "F-71f7896a4ce0": {
+          "digest": "71f7896a4ce0bb532c31cdfc3aa31d06befcea8ad11a3bcbe3117ef840b86705",
+          "text": "**H4G-I1-001 (the hand-over predicate does not require the record to be the landed tip).** `_self_review_handover` (`controller/job.py`) accepts a generation-record commit anywhere in the first-parent range `carry_base..HEAD`. D5 says \"a clean landing whose tip is the record commit therefore meets the predicate\", and the Workflow requires the record to be HEAD when the bundle is generated. A worker that lands the record and then another commit (code, for example) is still handed to the guarded `implementation` run. The generator then runs, and only the second `reconcile` reports the bundle that does not verify. Nothing unsafe lands, because the landing's surface and profile checks have already run, but one generator run is wasted. Requiring `landed[0]` (the tip) to be the record would match D5's wording and stop that run before it starts.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "5d799c4539e605f37409bc7a7bfd85d681e9cb79eebbd1278c303cc3a4678d2c",
+              "verdict": "APPROVE",
+              "at": "2026-11-13T10:49:18Z"
+            }
+          ]
+        },
+        "F-86648930694a": {
+          "digest": "86648930694a86ab1e188b4cbe0bd1dc45fb1ec3bd2b0eb97330052cf1e61cec",
+          "text": "**H4G-I1-002 (the target-phase mirror is not tied to the Workflow by a test).** `_SELF_REVIEW_TARGET_PHASE` / `_SELF_REVIEW_DEFAULT_TARGET_PHASE` copy `workflow_state.bundle_generation_target_phase(\"implementation\", version)`. `SelfReviewWrittenFieldsTest` checks the target phases for `2.1` and `2.2` against literal strings, not against the Controller's table. A test that runs the Workflow function for `\"1\"`, `\"2.1\"`, `\"2.2\"` and `None` and compares each result with the table would catch a Workflow release that changes a target. Without one, such a change shows up only as a correct self-review that is never handed over, which is the safe direction.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "5d799c4539e605f37409bc7a7bfd85d681e9cb79eebbd1278c303cc3a4678d2c",
+              "verdict": "APPROVE",
+              "at": "2026-11-13T10:49:18Z"
+            }
+          ]
+        },
+        "F-da9d07a980f9": {
+          "digest": "da9d07a980f93bf004343413510d91eea9418a4ee58236cf38e0fe339d392870",
+          "text": "**H4G-I1-003 (a harnesses page sentence names follow-up items that do not exist).** The last paragraph of \"The wrap-up role on Codex\" in `docs/guide/harnesses.md` says \"The roles that stay on Claude Code, and the follow-up items that track them, are on the H4g item page\". The item page says correctly that no split has landed and that it links no follow-up item. Say \"and that they stay open under H4g\" until the split lands. Also, in `docs/common-problems.md`, \"`surface_touched` is the checkpoint role's: ...\" would read better as \"`surface_touched` is checked as for the checkpoint role: ...\".",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "5d799c4539e605f37409bc7a7bfd85d681e9cb79eebbd1278c303cc3a4678d2c",
+              "verdict": "APPROVE",
+              "at": "2026-11-13T10:49:18Z"
+            }
+          ]
         }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "5d799c4539e605f37409bc7a7bfd85d681e9cb79eebbd1278c303cc3a4678d2c",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "1e0dc23050c79fd60dc860430379288f059ea39b073189c6e6394d3a97c75d66",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-13T10:49:18Z",
+          "verdict_sha256": "2d3688df542b85eac806c4a2f0234b63582d1bb98967b06eda931456be0fea13",
+          "run_ref": "session:local .ai-review/workflow-controller-h4g/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

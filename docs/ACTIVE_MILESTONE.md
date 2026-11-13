@@ -634,62 +634,44 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-h4g` (H4g), implementation revision 2, plan `docs/ai-workflow/CONTROLLER_H4G_PLAN.md` (revision 8), base
-commit `77ac321`. The item lets an operator route `milestone-implement-self-review` (the wrap-up role) to Codex: it runs as the
-`implementer` adapter role in a private clone, the landing takes the `self-review` state profile, the five out members of the
-implementation stage are carried in and out, and the Controller runs the guarded `implementation` generator only when the landing
-holds the item's generation record (the hand-over predicate, with the per-commit contract added by review fix I1). Every flow runs
+Item `workflow-controller-fx1` (FX1), implementation revision 1, plan `docs/ai-workflow/CONTROLLER_FX1_PLAN.md` (revision 2), base
+commit `a2e1cc1`. The item changes tests and docs only: `OrphanWatchdogTest` reads pid files and the monitor's sleeper `argv[0]` through
+readiness helpers (#246), and the two Ctrl-C tests share one failure message that names which end happened (#342). Every flow runs
 offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and
 the system directories, and no write inside the read-only product clone. Run from the product clone with `python3 -B` and no
-`PYTHONPATH=.`; flows write only to the scratch `TMPDIR`. The tests drive the fake `codex` of `tests/fake_codex.py` against scratch
-repositories and a scratch origin, so no flow needs a pull request or a forge call.
+`PYTHONPATH=.`; flows write only to the scratch `TMPDIR`. No flow needs a pull request or a forge call.
 
 Setup: `export TMPDIR=$(mktemp -d)`. No data to seed.
 
-**Flow 1: Routing and the launcher table (CP1).**
-Run `python3 -B -m unittest tests.test_routing tests.test_harness tests.test_worker_launch tests.test_review_mode tests.test_harness_table 2>&1 | tail -4`.
-Expected: `OK`. `milestone-implement-self-review` has adapter role `implementer` and `codex` is accepted for it; every other worker
-role still refuses `codex`; the default route is unchanged.
+**Flow 1: The readiness helpers and the orphan watchdog (CP1, #246).**
+Run `python3 -B -m unittest tests.test_fake_claude_contract 2>&1 | tail -4`.
+Expected: `OK` (103 tests). `PidReadinessHelperTest` shows `read_pid_when_ready` never returns an empty or half-written read and
+times out naming the file; `OrphanWatchdogTest` passes.
 
-**Flow 2: The self-review state profile at the landing (CP2).**
-Run `python3 -B -m unittest tests.test_codex_worker_landing 2>&1 | tail -4`.
-Expected: `OK`. The `self-review` profile allows only `phase`, `state_revision`, `last_transition`, `implementation_revision` and
-`reviewed_implementation_head`, proved equal to what the Workflow's two writers change; the checkpoint profile still refuses a
-generation record; a refusal names the profile.
+**Flow 2: No raw pid read is left in `OrphanWatchdogTest` (CP1).**
+Read the class `OrphanWatchdogTest` in `tests/test_fake_claude_contract.py`, or run `grep -n "read_text" tests/test_fake_claude_contract.py` and check none falls inside it.
+Expected: no `read_text()` of a pid path in the class; pids come from `read_pid_when_ready` and the sleeper's program from
+`read_argv0_when`.
 
-**Flow 3: The carry of the implementation stage (CP3).**
-Run `python3 -B -m unittest tests.test_codex_carry 2>&1 | tail -4`.
-Expected: `OK`. The role carries the five out members and never a derived file or the state file; a worker-modified derived file is
-not written out; a link is refused; a dirty tree is refused.
+**Flow 3: The orphan watchdog under CPU pressure (CP1).**
+Run, in three terminals at once, `taskset -c 0,1 python3 -B -m unittest tests.test_fake_claude_contract.OrphanWatchdogTest 2>&1 | tail -3`.
+Expected: `OK` in each copy, repeated a few times.
 
-**Flow 4: The job, the hand-over predicate and the generator stage (CP4, review fix I1).**
-Run `python3 -B -m unittest tests.test_job_codex_apply tests.test_generator_run 2>&1 | tail -4`.
-Expected: `OK` (see the known flake below if two `ImplRecoveryTest` cases fail in a loaded run; rerun the class alone). A clean
-self-review from `SELF_REVIEWING_IMPLEMENTATION` and from `IMPLEMENTING` hands the generation record to the guarded `implementation`
-run; a partial self-review, a dirty tree, a claim and a record that breaks the per-commit contract end without a generator run.
+**Flow 4: The Ctrl-C tests and the shared failure message (CP2, #342).**
+Run `python3 -B -m unittest tests.test_job_codex_apply 2>&1 | tail -4`.
+Expected: `OK`. Both Ctrl-C tests (`PlanGuardedRunTest`, `ImplGuardedRunTest`) call `GuardedRunMixin.interrupted_or_explained`, whose
+failure message records the `run_in_place` call count, the generator result, and the `regeneration` `cause`, `detail` and `stage`.
+(If two `ImplRecoveryTest` cases fail in a loaded run, rerun the class alone; see the limitations.)
 
-**Flow 5: Whole runs and adversarial plants through `execute_step` (CP5).**
-Run `python3 -B -m unittest tests.test_codex_selfreview_job tests.test_codex_selfreview_safety tests.test_codex_selfreview_live 2>&1 | tail -4`.
-Expected: `OK` (the live module is collected and skipped: no Codex turn). Clean, recovered-role and partial runs end as described;
-each plant of a link, dangling link or fifo as an out member is refused with refs and state unchanged; a `scripts/` or `.claude/`
-edit and an approval, checkpoint or review-stage field are refused by the landing; a context list naming a file outside the
-repository ends `carry_bundle_regeneration_pending` with no external byte copied.
+**Flow 5: Docs.**
+Run `python3 -B tools/check_docs.py; echo rc=$?`. Read `docs/guide/development.md` (the entry "The Ctrl-C test under load (#342)")
+and `docs/items/workflow-controller-fx1.md`.
+Expected: `rc=0`. The pages say #342 did not reproduce and what the shared message now records.
 
-**Flow 6: Structure, containment and pages.**
-Run `python3 -B -m unittest tests.test_package_structure tests.test_write_containment tests.test_docs 2>&1 | tail -4`, then
-`python3 -B tools/harness_table.py --check; echo rc=$?` and `python3 -B tools/check_docs.py; echo rc=$?`. Read `docs/guide/harnesses.md`
-section "The wrap-up role on Codex", `docs/common-problems.md` section "A Codex wrap-up was refused or stopped early", and
-`docs/items/workflow-controller-h4g.md`.
-Expected: `OK`, `rc=0` each. The pages say what is selectable, what is carried and checked, each refusal with its remedy, that the
-live proof has not been run, and that the other roles stay open under H4g.
-
-**Known limitations / out of scope.** The live Codex proof (`CONTROLLER_LIVE_CODEX_TESTS=1`) is not run, so
-`tests/harness_contract/codex/selfreview_role.txt` does not exist. The other roles (`milestone-plan`, `apply-functional-review`,
-`apply-pr-review`, `satisfy-gate`, `prepare-functional-review`, `record-manual-*`) are not routable to Codex and stay open under H4g;
-splitting them into follow-up items is the owner's decision (plan O1). The full suite (`python3 tools/run_tests.py`) is not a flow:
-three `tests.test_fake_codex_contract` tests fail where `~/.codex` config is read (environmental), and two
-`tests.test_job_codex_apply.ImplRecoveryTest` cases can fail from a shared `job1` tag collision with `tests.test_codex_worker_sandbox`
-in another shard (they pass alone).
+**Known limitations / out of scope.** #342 did not reproduce, so the Ctrl-C tests keep their behaviour: only the failure message
+changes, and the issue stays open for the next occurrence. No production code changes. The full suite (`python3 tools/run_tests.py`)
+is not a flow: three `tests.test_fake_codex_contract` tests fail where `~/.codex` config is read (environmental), and two
+`tests.test_job_codex_apply.ImplRecoveryTest` cases can fail from a shared `job1` tag collision in another shard (they pass alone).
 
 ## Next action
 

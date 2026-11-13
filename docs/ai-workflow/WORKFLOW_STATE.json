@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-w1",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -72829,6 +72829,276 @@
         },
         "evaluated_at": "2026-11-13T17:58:35Z",
         "workflow_release": "2.27.0"
+      }
+    },
+    "workflow-controller-w1": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-w1",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_W1_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-w1-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-w1-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 3,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "956b14f15c1e614cdcb17bd30277afbd1578335f",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "d8b9f689a0438fda9a2bcd5551c7165dc4a61d547c34e2990206fbc724c3de94",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "d8b9f689a0438fda9a2bcd5551c7165dc4a61d547c34e2990206fbc724c3de94",
+        "approved_review_content_id": "02a8f6a2b86900022365e023302dfbdeacddc410173d49b3a40e20222c4ac36b",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_W1_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "11f72c0df9a4012fc3ff9b641aa57110691c9acd"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-w1-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "bf96655557cefb682fad62029cc9827603cf8df4"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-w1-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "396e40d3efc0841fcbd5466ecd01e6fd4f47f6dd"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-13T19:51:32Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "02a8f6a2b86900022365e023302dfbdeacddc410173d49b3a40e20222c4ac36b",
+            "ledger": {
+              "local": {
+                "bundle_id": "d8b9f689a0438fda9a2bcd5551c7165dc4a61d547c34e2990206fbc724c3de94",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "f8d0512229bd571104b1ea7adce6dbcea04cc0bbb99c0848777a3d1397567205",
+                "ledger_entry_sha256": "d50e91b9a1eb76371d1eb2162260c876fc0ed122ae75368328d9d790b2a9bde6",
+                "run_ref": "session:local .ai-review/workflow-controller-w1/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "d8b9f689a0438fda9a2bcd5551c7165dc4a61d547c34e2990206fbc724c3de94",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "e58c6bf89c3d2209f059b8e2e28a0c0be33583d49cf529a1f535954e55480064",
+                "ledger_entry_sha256": "1a78cf299d97907a5a36edffba2cf34e15d19e7e26c0d1358274e4d78ff4bc13",
+                "run_ref": "codex:20261113T194704Z-bbde6d0f",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-13T19:51:32Z",
+          "workflow_release": "2.27.0"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "02a8f6a2b86900022365e023302dfbdeacddc410173d49b3a40e20222c4ac36b",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "d8b9f689a0438fda9a2bcd5551c7165dc4a61d547c34e2990206fbc724c3de94",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-11-13T19:46:26Z",
+          "verdict_sha256": "f8d0512229bd571104b1ea7adce6dbcea04cc0bbb99c0848777a3d1397567205",
+          "run_ref": "session:local .ai-review/workflow-controller-w1/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "d8b9f689a0438fda9a2bcd5551c7165dc4a61d547c34e2990206fbc724c3de94",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-11-13T19:49:05Z",
+          "verdict_sha256": "e58c6bf89c3d2209f059b8e2e28a0c0be33583d49cf529a1f535954e55480064",
+          "run_ref": "codex:20261113T194704Z-bbde6d0f",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 3,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 12,
+      "last_transition": "2026-11-13T19:51:32Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-13T19:44:46Z",
+        "consumed": {
+          "review_content_id": "e3804925c1b54a71e208adf5eb8e7cc6ed0237b3ddda5370eccdab4e781e15fd",
+          "plan_revision": 2,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "02a8f6a2b86900022365e023302dfbdeacddc410173d49b3a40e20222c4ac36b",
+          "plan_revision": 3
+        },
+        "bound": {
+          "review_content_id": "02a8f6a2b86900022365e023302dfbdeacddc410173d49b3a40e20222c4ac36b",
+          "bundle_id": "d8b9f689a0438fda9a2bcd5551c7165dc4a61d547c34e2990206fbc724c3de94",
+          "plan_revision": 3
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "ac2719ce8982c6c559420ce770fbb96b67298b80f0b8d704e54ffa070122d3b0",
+        "e3804925c1b54a71e208adf5eb8e7cc6ed0237b3ddda5370eccdab4e781e15fd"
+      ],
+      "optional_findings": {
+        "F-663cda40c95e": {
+          "digest": "663cda40c95e1b2e1b2b4ec5aa6d0e972a60f492ca8731d2fba7099bca4e50fb",
+          "text": "**O1.** `docs/compatibility.md` has no \"Workflow moves\" section. The per-release entries are in the \"Which Controller admits which Workflow\" prose (lines 34-36), the \"This repository itself runs ...\" paragraph is at line 57, and the header is at line 3. Name these locations in CP2 so the edit lands in the right places.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "ac2719ce8982c6c559420ce770fbb96b67298b80f0b8d704e54ffa070122d3b0",
+              "verdict": "REVISE",
+              "at": "2026-11-13T19:39:05Z"
+            }
+          ]
+        },
+        "F-6c20abc3c52f": {
+          "digest": "6c20abc3c52f1aa68d03a1c812140690c2eb3a1b77a171f48053ad84922dc6ae",
+          "text": "**O2.** `docs/update.md` requires a Controller that admits the new release to be installed before the move. D1 runs `inspect` only from the checkout (`PYTHONPATH=<repo>`). The Controller that drives the run is the installed one, `workflow-controller 1.29.0`; the latest tag is `v1.31.1`. Name the Controller release that drives the run and check that it admits 2.29.3 before the move.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "ac2719ce8982c6c559420ce770fbb96b67298b80f0b8d704e54ffa070122d3b0",
+              "verdict": "REVISE",
+              "at": "2026-11-13T19:39:05Z"
+            }
+          ]
+        },
+        "F-dbaf72f8a83a": {
+          "digest": "dbaf72f8a83a0eb8c239614f716c19694ea9b2560259deaf17d30087a3b4e056",
+          "text": "**O3.** CP1 changes only paths under `scripts/`, `.claude/` and `.workflow-manager/`. A Codex implementer's landing refuses all three as `surface_touched` (`controller/codex_worker_landing.py` `SURFACE_DIRECTORIES`). Today the ignored local `.controller/routing.json` routes `milestone-implement` to Claude, so nothing refuses. State that CP1 requires an in-place implementer, so a later routing change does not fail it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "ac2719ce8982c6c559420ce770fbb96b67298b80f0b8d704e54ffa070122d3b0",
+              "verdict": "REVISE",
+              "at": "2026-11-13T19:39:05Z"
+            }
+          ]
+        },
+        "F-9a7b8257fe4d": {
+          "digest": "9a7b8257fe4dafb95168abc05749f16280aaa9f88adb1dc39f195679b16b8192",
+          "text": "**O1.** D2 step 1 contradicts itself. It says to run both `inspect`s \"after the move\" and also \"if the installed one refuses 2.29.3, stop and install a Controller that admits it first ... before any file is moved\". You cannot run `inspect` against 2.29.3 before the move. State the check before the move as `docs/compatibility.md` gives it: Controller 1.7.0 and later admit by capability any release whose `workflow_protocol.py` answers protocol major 1, and 2.29.3 keeps 1.5, so 1.29.0 admits it. Keep the `inspect` after the move as the confirmation, with the pre-CP1 checkout rollback as the remedy if it refuses.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "e3804925c1b54a71e208adf5eb8e7cc6ed0237b3ddda5370eccdab4e781e15fd",
+              "verdict": "REVISE",
+              "at": "2026-11-13T19:43:26Z"
+            }
+          ]
+        },
+        "F-a48a81e7397a": {
+          "digest": "a48a81e7397a088aaf688f4a5a082f9743d9c4c189c0b4b93ad1556e0e17722a",
+          "text": "**O2.** CP1's \"nothing else\" dirty-set check leaves out `docs/ACTIVE_MILESTONE.md`, which `/milestone-implement` step 1e updates for a product item at every checkpoint. Also, CP1 says \"the worker changes no managed file\" and \"nothing is committed beyond what the workflow's own commit rules authorize\", but never says that CP1's checkpoint commit (step 1f) is the commit that carries the twelve Manager-written paths. Say so, so a cautious worker does not treat the checkpoint as having no changes, or the operator's files as unrelated working-tree changes (a stop condition in step 1e).",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "e3804925c1b54a71e208adf5eb8e7cc6ed0237b3ddda5370eccdab4e781e15fd",
+              "verdict": "REVISE",
+              "at": "2026-11-13T19:43:26Z"
+            }
+          ]
+        },
+        "F-9fd99627bb49": {
+          "digest": "9fd99627bb4928504e92213667702521a3f4e0552eb72375fde875b9ca02eedb",
+          "text": "**O3.** Some wording is stale after the redesign. D1 says a Manager refusal \"stops the checkpoint\", but the move now runs outside any checkpoint, so it stops the operator's sequence. CP2 should also reword the \"since a `chore:` update pull request\" phrasing of `docs/compatibility.md` line 57, because this move lands through a work item's own pull request.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "e3804925c1b54a71e208adf5eb8e7cc6ed0237b3ddda5370eccdab4e781e15fd",
+              "verdict": "REVISE",
+              "at": "2026-11-13T19:43:26Z"
+            }
+          ]
+        },
+        "F-42ac7e627a04": {
+          "digest": "42ac7e627a0463098d78d8f9442276deeef16749ea760879782dc9d6a0354b4e",
+          "text": "**O4.** CP2 says `docs/update.md` needs no change because \"D2 follows it\". The section's general rule (line 51) says \"between milestones, with no work item in flight\", which this move does not follow. What D2 follows is the subsection \"In the middle of a milestone\" (lines 65-70, \"`IMPLEMENTING`, between checkpoints\"). Cite that subsection in D2. This item's own run is new evidence for that proven phase, and could be recorded there in one sentence.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "e3804925c1b54a71e208adf5eb8e7cc6ed0237b3ddda5370eccdab4e781e15fd",
+              "verdict": "REVISE",
+              "at": "2026-11-13T19:43:26Z"
+            }
+          ]
+        }
       }
     }
   }

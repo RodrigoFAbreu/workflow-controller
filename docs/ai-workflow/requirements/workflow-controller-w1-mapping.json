@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-w1",
+  "requirements": {
+    "R1": {
+      "description": "The repository's installed Workflow is 2.29.3 through the Manager, verify and inspect clean, the suite and docs check passing",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The compatibility page and the item page record the move and the releases between",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    }
+  }
+}

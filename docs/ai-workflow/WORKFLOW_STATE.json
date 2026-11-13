@@ -72110,7 +72110,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-fx1-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-fx1-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 2,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -72220,10 +72220,10 @@
         }
       },
       "technical_approval": {
-        "status": "STALE",
+        "status": "CURRENT",
         "basis": "POLICY_SATISFIED",
-        "reviewed_bundle_id": "aff1241f3c89766a648e82e4dbe10b8a2d21a2d14e239794cd6b59a280cba33b",
-        "approved_review_content_id": "7f74c223a24f7c4658e9f572bc0ffaf3072dca4405667be655ffe688fcf09bd7",
+        "reviewed_bundle_id": "1c3c49856390329b8fbe5e5d9bdff98fa43a3837c60882a2f6c74e9c55df8c01",
+        "approved_review_content_id": "555247df1daa2ecfccd4ca838f9f6fb1fb4be86aea1f0f9484f6701493102cbb",
         "review_content_manifest": [
           {
             "path": "docs/ai-workflow/registry/workflow-controller-fx1-artifacts.json",
@@ -72235,7 +72235,7 @@
             "path": "docs/guide/development.md",
             "exists": true,
             "mode": "100644",
-            "blob": "f872d46695b2e62a6ca0f702ddf925ae0df5d24d"
+            "blob": "152accaa66b5393e62ac40574dc1c9d05fe3e4d8"
           },
           {
             "path": "tests/test_fake_claude_contract.py",
@@ -72247,14 +72247,14 @@
             "path": "tests/test_job_codex_apply.py",
             "exists": true,
             "mode": "100644",
-            "blob": "8b61bc66293da56f9b0f44f86fc7d142c7c7a33d"
+            "blob": "558b9bdbb7b985a624a0860e09b8955197cf2f3a"
           }
         ],
-        "reviewed_content_commit": "ddcf56b63cdc1e89f4f82d17590de02f1b3f5bfc",
+        "reviewed_content_commit": "26bd07fdf8006b5f8a462e270f116cb5719a4565",
         "legacy_evidence": null,
         "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
         "waived_guarantees": [],
-        "recorded_at": "2026-11-13T16:53:23Z",
+        "recorded_at": "2026-11-13T17:20:05Z",
         "policy_evidence": {
           "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
           "policy_source": "default",
@@ -72284,24 +72284,24 @@
             }
           ],
           "inputs": {
-            "review_content_id": "7f74c223a24f7c4658e9f572bc0ffaf3072dca4405667be655ffe688fcf09bd7",
+            "review_content_id": "555247df1daa2ecfccd4ca838f9f6fb1fb4be86aea1f0f9484f6701493102cbb",
             "ledger": {
               "local": {
-                "bundle_id": "aff1241f3c89766a648e82e4dbe10b8a2d21a2d14e239794cd6b59a280cba33b",
+                "bundle_id": "1c3c49856390329b8fbe5e5d9bdff98fa43a3837c60882a2f6c74e9c55df8c01",
                 "verdict": "APPROVE",
-                "round": 1,
-                "verdict_sha256": "42e12408629635213cf933a1692228b582e79d44ea94a4b08cfa32822db5c61c",
-                "ledger_entry_sha256": "2edb275b021a8d7eebaee4d22f046f33e6dde497f05c3b740e2363e401585ef2",
+                "round": 2,
+                "verdict_sha256": "8346993eacedb52a99e2b3455f3337e19c6d1cf47227a082e89744015e8d5450",
+                "ledger_entry_sha256": "421ee914127931f8d80ed560bada9dcd91010e1225122f67ab46c51daffe06e7",
                 "run_ref": "session:local .ai-review/workflow-controller-fx1/feedback/REVIEW_FEEDBACK.md",
                 "reviewer_model": "anthropic/claude-opus-5-5"
               },
               "manual": {
-                "bundle_id": "aff1241f3c89766a648e82e4dbe10b8a2d21a2d14e239794cd6b59a280cba33b",
+                "bundle_id": "1c3c49856390329b8fbe5e5d9bdff98fa43a3837c60882a2f6c74e9c55df8c01",
                 "verdict": "APPROVE",
-                "round": 1,
-                "verdict_sha256": "a9db380e485ec605e6e0b65fe64b006d6d17262cff549d21f774a967d1482df9",
-                "ledger_entry_sha256": "d659edf9751f438383440d44856da2ec5179c20cbf947b334e54f56dbd204f6a",
-                "run_ref": "codex:20261113T164929Z-ff427bf8",
+                "round": 2,
+                "verdict_sha256": "2b56c4a9e85625f8e95257b163f0fcd165f70a6d8f7ac7f93c18d02834709b92",
+                "ledger_entry_sha256": "483546ba06fdec40d4c9e844c4d2f978b243f9f46a427e297d6fc9911296c111",
+                "run_ref": "codex:20261113T171558Z-d357ff0a",
                 "reviewer_model": "openai/gpt-6.1-sol"
               }
             },
@@ -72311,7 +72311,7 @@
           "trust": {
             "review_verdicts": "orchestrator"
           },
-          "evaluated_at": "2026-11-13T16:53:23Z",
+          "evaluated_at": "2026-11-13T17:20:05Z",
           "workflow_release": "2.27.0"
         }
       },
@@ -72345,12 +72345,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 1,
-          "external": 1
+          "local": 2,
+          "external": 2
         }
       },
-      "state_revision": 19,
-      "last_transition": "2026-11-13T17:07:02Z",
+      "state_revision": 22,
+      "last_transition": "2026-11-13T17:20:05Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -72499,26 +72499,96 @@
               "at": "2026-11-13T16:52:03Z"
             }
           ]
+        },
+        "F-82771a63d0bc": {
+          "digest": "82771a63d0bcb1e870fd736d824e9b1d2cc9703ff1df99de53e49835f322824c",
+          "text": "**O1 (bundle evidence for the post-fix round).** `IMPLEMENTATION_SUMMARY.md` says `implementation_revision: 2`, but its body describes only CP1, CP2 and `ddcf56b`. `TEST_RESULTS.md` is still headed \"implementation revision 1\", and `REVIEW_REQUEST.md` still says \"revision 1\". None of them mentions the functional-review fix (`dbffee1`) or a test run of it. The fix is recorded in `docs/items/workflow-controller-fx1.md` and `docs/guide/development.md`, and this review re-ran it (above), so nothing is unverified. Still, a post-fix bundle should name the fix commit and the checks that ran on it, so the next reviewer does not have to rebuild that from `COMMITS.txt`.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "555247df1daa2ecfccd4ca838f9f6fb1fb4be86aea1f0f9484f6701493102cbb",
+              "verdict": "APPROVE",
+              "at": "2026-11-13T17:15:31Z"
+            }
+          ]
+        },
+        "F-b9ab8bd2f2d7": {
+          "digest": "b9ab8bd2f2d747b00fd91906b15e399ef5f5e1576f13d14b198b31717f41956d",
+          "text": "**O2 (comment attribution).** The new comment in `tests/test_job_codex_apply.py` (at the environ poll) calls the race \"(#342 family)\". #342 is the `KeyboardInterrupt not raised` flake. This race is the separate \"environ empty mid-exec\" readiness kind (an empty `/proc/<pid>/environ` right after exec). Naming it that way, or saying it was found during FX1's functional review, would stop a later reader from linking this test to #342's open diagnosis.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "555247df1daa2ecfccd4ca838f9f6fb1fb4be86aea1f0f9484f6701493102cbb",
+              "verdict": "APPROVE",
+              "at": "2026-11-13T17:15:31Z"
+            }
+          ]
+        },
+        "F-e9cba8234213": {
+          "digest": "e9cba823421382a019d462ad79fba4598654c35360440b0e59fe73d2ce5354a1",
+          "text": "Previous finding remains: `tests/test_fake_claude_contract.py:1243–1247` overstates completeness. Integer mode accepts a numeric prefix (`\"42\"` before `\"4242\"`). Current writers publish each integer in one write; document that assumption.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "555247df1daa2ecfccd4ca838f9f6fb1fb4be86aea1f0f9484f6701493102cbb",
+              "verdict": "APPROVE",
+              "at": "2026-11-13T17:18:36Z"
+            }
+          ]
+        },
+        "F-4464dfdbaf2f": {
+          "digest": "4464dfdbaf2f8655cbb9a67fc6c2be787b63e6a285a0d74c0c55457b76067790",
+          "text": "Previous finding remains: CP2 evidence records parallel copies of `ImplGuardedRunTest` and a loaded full-suite run, but omits the planned whole-module parallel run and separate shard-5 replay. Explicitly record those omissions. The evidence supports the limited “not reproduced” conclusion.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "555247df1daa2ecfccd4ca838f9f6fb1fb4be86aea1f0f9484f6701493102cbb",
+              "verdict": "APPROVE",
+              "at": "2026-11-13T17:18:36Z"
+            }
+          ]
+        },
+        "F-50ae63e757c4": {
+          "digest": "50ae63e757c40b920ad047757e0fc936f4af26c25fc1f09110a83573be6238e4",
+          "text": "The bundle’s `TEST_RESULTS.md` and `REVIEW_REQUEST.md` still describe revision 1, and `IMPLEMENTATION_SUMMARY.md` omits the ownership-tag polling fix. Update them to identify `dbffee1` and the checks performed on revision 2.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "555247df1daa2ecfccd4ca838f9f6fb1fb4be86aea1f0f9484f6701493102cbb",
+              "verdict": "APPROVE",
+              "at": "2026-11-13T17:18:36Z"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "7f74c223a24f7c4658e9f572bc0ffaf3072dca4405667be655ffe688fcf09bd7",
+        "review_content_id": "555247df1daa2ecfccd4ca838f9f6fb1fb4be86aea1f0f9484f6701493102cbb",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "aff1241f3c89766a648e82e4dbe10b8a2d21a2d14e239794cd6b59a280cba33b",
+          "bundle_id": "1c3c49856390329b8fbe5e5d9bdff98fa43a3837c60882a2f6c74e9c55df8c01",
           "verdict": "APPROVE",
-          "round": 1,
-          "completed_at": "2026-11-13T16:49:11Z",
-          "verdict_sha256": "42e12408629635213cf933a1692228b582e79d44ea94a4b08cfa32822db5c61c",
+          "round": 2,
+          "completed_at": "2026-11-13T17:15:31Z",
+          "verdict_sha256": "8346993eacedb52a99e2b3455f3337e19c6d1cf47227a082e89744015e8d5450",
           "run_ref": "session:local .ai-review/workflow-controller-fx1/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
         "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "aff1241f3c89766a648e82e4dbe10b8a2d21a2d14e239794cd6b59a280cba33b",
+          "bundle_id": "1c3c49856390329b8fbe5e5d9bdff98fa43a3837c60882a2f6c74e9c55df8c01",
           "verdict": "APPROVE",
-          "round": 1,
-          "completed_at": "2026-11-13T16:52:03Z",
-          "verdict_sha256": "a9db380e485ec605e6e0b65fe64b006d6d17262cff549d21f774a967d1482df9",
-          "run_ref": "codex:20261113T164929Z-ff427bf8",
+          "round": 2,
+          "completed_at": "2026-11-13T17:18:36Z",
+          "verdict_sha256": "2b56c4a9e85625f8e95257b163f0fcd165f70a6d8f7ac7f93c18d02834709b92",
+          "run_ref": "codex:20261113T171558Z-d357ff0a",
           "reviewer_model": "openai/gpt-6.1-sol"
         }
       },

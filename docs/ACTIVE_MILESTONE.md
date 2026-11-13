@@ -662,6 +662,8 @@ Run `python3 -B -m unittest tests.test_job_codex_apply 2>&1 | tail -4`.
 Expected: `OK`. Both Ctrl-C tests (`PlanGuardedRunTest`, `ImplGuardedRunTest`) call `GuardedRunMixin.interrupted_or_explained`, whose
 failure message records the `run_in_place` call count, the generator result, and the `regeneration` `cause`, `detail` and `stage`.
 (If two `ImplRecoveryTest` cases fail in a loaded run, rerun the class alone; see the limitations.)
+Functional review round 1 found `test_a_generator_that_survives_a_kill_is_ended_before_resume_runs_it_again` failing once (empty
+`/proc/<pid>/environ` right after `Popen`); fixed by a bounded poll for the ownership tag (re-test: run it, and the class, a few times).
 
 **Flow 5: Docs.**
 Run `python3 -B tools/check_docs.py; echo rc=$?`. Read `docs/guide/development.md` (the entry "The Ctrl-C test under load (#342)")

@@ -288,7 +288,12 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   busy loops. Both tests now fail with one message (`interrupted_or_explained`)
   that names which end happened: the patched `run_in_place` calls, the
   generator result, and the refusal's `regeneration` cause and detail. Read it
-  before guessing at a cause.
+  before guessing at a cause. The functional review's first run then found a
+  neighbour in the same file: `test_a_generator_that_survives_a_kill_is_ended_before_resume_runs_it_again`
+  read the survivor's `/proc/<pid>/environ` once, right after `Popen` returned,
+  and saw it empty (the kernel publishes the new environment a moment after
+  the exec is committed). It now polls, bounded at 10 s, until the ownership
+  tag shows.
 
 ## Running signal tests safely
 

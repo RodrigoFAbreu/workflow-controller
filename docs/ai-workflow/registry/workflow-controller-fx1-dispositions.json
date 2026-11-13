@@ -1,0 +1,20 @@
+{
+  "dispositions": {
+    "F-0a945b278000": {"disposition": "dropped", "reason": "Plan wording only; not applied. The shard-5 replay was not run (see F-42dc28bdef51), so no plan source was needed. The 'not reproduced' disposition stands on the parallel-copy and loaded full-run evidence."},
+    "F-2b953f27160e": {"disposition": "dropped", "reason": "Documentation nit on read_pid_when_ready. Current writers emit each pid in one write and no race remains at the changed call sites; the helper docstring was left as is. Both reviewers approved."},
+    "F-42dc28bdef51": {"disposition": "dropped", "reason": "The planned shard-5 replay was not run; only the loaded full run and six parallel copies were. The item page records a 'not reproduced' disposition from that evidence and the omission is accepted as non-blocking by both reviewers."},
+    "F-4464dfdbaf2f": {"disposition": "dropped", "reason": "Same as F-42dc28bdef51: the whole-module parallel run and separate shard-5 replay did not run. The evidence supports only the limited 'not reproduced' conclusion, which is what the item records."},
+    "F-4693634f9987": {"disposition": "fixed", "reason": "Plan revision 2 limits the check to non-atomic pid-file reads (CP1 and D1)."},
+    "F-50ae63e757c4": {"disposition": "dropped", "reason": "Bundle evidence wording only. The fix commit dbffee1 is in the bundle's COMMITS.txt and in docs/items/workflow-controller-fx1.md and docs/guide/development.md, and the reviewers re-ran it. Generated bundle files are not hand-edited."},
+    "F-5b100df6b3b0": {"disposition": "fixed", "reason": "Plan revision 2 limits the pid-path grep to non-atomic reads."},
+    "F-82771a63d0bc": {"disposition": "dropped", "reason": "Same as F-50ae63e757c4: bundle wording; the fix is recorded in the item page, the development guide and COMMITS.txt, and was verified by the reviewer's re-run."},
+    "F-9698af0d1768": {"disposition": "fixed", "reason": "Plan revision 2 describes the race at the monitor's sleeper found through _children, and says the hang-child pid file is already atomic."},
+    "F-ace10a098c70": {"disposition": "dropped", "reason": "Same as F-42dc28bdef51: the omission of the whole-module parallel run and the shard-5 replay is accepted as non-blocking."},
+    "F-b9ab8bd2f2d7": {"disposition": "dropped", "reason": "Comment attribution nit: '(#342 family)' in the environ-poll comment of tests/test_job_codex_apply.py was not reworded. The item page and guide describe the race as a separate readiness kind."},
+    "F-d2d86f569b97": {"disposition": "fixed", "reason": "Plan revision 2 says the mixin test also runs for PlanGuardedRunTest and names the class each #342 sighting used."},
+    "F-e9cba8234213": {"disposition": "dropped", "reason": "Same as F-2b953f27160e: the one-write assumption was not added to the docstring; no race remains at the changed call sites."},
+    "F-fe7820fd5859": {"disposition": "fixed", "reason": "Plan revision 2 says the diagnostic adds regeneration.cause and detail printed explicitly."}
+  },
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-fx1"
+}

@@ -88,7 +88,7 @@
 | 82 | [Codex worker, step 5e: run the managed repository's generator safely after a landing](items/workflow-controller-h4e3b.md) `workflow-controller-h4e3b` | Done | - | workflow-controller-h4e3 |
 | 83 | [Codex worker, step 6](items/workflow-controller-h4f.md) `workflow-controller-h4f` | Done | - | workflow-controller-h4e3b |
 | 84 | [Codex worker, step 7](items/workflow-controller-h4g.md) `workflow-controller-h4g` | Done | - | workflow-controller-h4f |
-| 85 | [Fix the timing flakes: OrphanWatchdogTest readiness waits (#246) and the Ctrl-C test under load (#342); owner priority](items/workflow-controller-fx1.md) `workflow-controller-fx1` | Next | - | - |
+| 85 | [Fix the timing flakes: OrphanWatchdogTest readiness waits (#246) and the Ctrl-C test under load (#342); owner priority](items/workflow-controller-fx1.md) `workflow-controller-fx1` | Done | - | - |
 | 86 | [Move this repository to Workflow 2.29.3](items/workflow-controller-w1.md) `workflow-controller-w1` | Next | - | - |
 | 87 | [Run worker test commands in an isolated PID namespace (#329)](items/workflow-controller-ns1.md) `workflow-controller-ns1` | Next | - | - |
 | 88 | [Review follow-ups of the Codex worker items H4e2, H4e3 and H4e3b (#320, #339, #341)](items/workflow-controller-cx1.md) `workflow-controller-cx1` | Next | - | - |

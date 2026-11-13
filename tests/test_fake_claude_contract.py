@@ -1240,6 +1240,94 @@ with open(spec["pids"], "w") as fh:
 """
 
 
+def read_pid_when_ready(path: Path, *, keys: tuple[str, ...] = (), timeout: float = 30) -> "int | dict":
+    """The value of a pid file once it parses (FX1, #246): an integer, or with ``keys`` a JSON
+    object holding every one of them. A writer creates the file and then writes it (the JSON
+    ones in place), so ``Path.exists`` alone can see an empty or half-written file; this polls
+    (bounded) until the content is whole and fails naming the file when it never is."""
+    from tests import process_fixtures
+
+    found: list = []
+
+    def ready() -> bool:
+        try:
+            text = Path(path).read_text()
+            value = json.loads(text) if keys else int(text)
+        except (OSError, ValueError):
+            return False
+        if keys and not (isinstance(value, dict) and all(key in value for key in keys)):
+            return False
+        found.append(value)
+        return True
+
+    if not process_fixtures.wait_until(ready, timeout=timeout):
+        raise AssertionError(f"{path} never held a complete {'JSON object' if keys else 'integer'} "
+                             f"within {timeout}s")
+    return found[-1]
+
+
+def read_argv0_when(pid: int, program: str, *, timeout: float = 10) -> list[str]:
+    """``/proc/<pid>/cmdline`` once ``argv[0]`` is ``program`` (bounded): a child listed by
+    ``/proc/<pid>/task/<pid>/children`` is there before its exec, still running the parent's
+    program (#246). Returns the argv, or the last one seen when it never became ``program``."""
+    from tests import process_fixtures
+
+    seen: list[list[str]] = [[]]
+
+    def argv() -> bool:
+        try:
+            seen[0] = Path(f"/proc/{pid}/cmdline").read_bytes().decode().split("\0")[:-1]
+        except OSError:
+            return False
+        return seen[0][:1] == [program]
+
+    process_fixtures.wait_until(argv, timeout=timeout)
+    return seen[0]
+
+
+class PidReadinessHelperTest(unittest.TestCase):
+    """``read_pid_when_ready`` never returns an empty or partial read (FX1, #246)."""
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp(prefix="pid-ready-"))
+        self.addCleanup(__import__("shutil").rmtree, self.tmp, True)
+
+    def _writer(self, path: Path, first: str, second: str) -> None:
+        """Creates ``path`` holding ``first`` now and appends ``second`` half a second later."""
+        import threading
+        import time
+
+        handle = open(path, "w")
+        handle.write(first)
+        handle.flush()
+
+        def finish() -> None:
+            time.sleep(0.5)
+            handle.write(second)
+            handle.close()
+
+        thread = threading.Thread(target=finish)
+        thread.start()
+        self.addCleanup(thread.join)
+
+    def test_an_integer_written_after_the_file_appears_is_read_whole(self):
+        path = self.tmp / "pid"
+        self._writer(path, "", "4242")
+        self.assertEqual(read_pid_when_ready(path), 4242)
+
+    def test_a_json_object_written_in_two_parts_is_read_whole(self):
+        path = self.tmp / "pids"
+        self._writer(path, '{"fake": 7, ', '"holder": null}')
+        self.assertEqual(read_pid_when_ready(path, keys=("fake", "holder")), {"fake": 7, "holder": None})
+
+    def test_a_file_that_is_never_written_times_out_naming_it(self):
+        path = self.tmp / "never"
+        path.touch()
+        with self.assertRaises(AssertionError) as caught:
+            read_pid_when_ready(path, timeout=0.3)
+        self.assertIn(str(path), str(caught.exception))
+
+
 class OrphanWatchdogTest(unittest.TestCase):
     """An orphaned fake ends itself (and its group, when it leads one)
     after ``FAKE_CLAUDE_ORPHAN_SECONDS`` (``tests/fake_claude.py``, D2)."""
@@ -1273,19 +1361,15 @@ class OrphanWatchdogTest(unittest.TestCase):
         intermediate = subprocess.Popen([sys.executable, "-c", _INTERMEDIATE, json.dumps(spec)])
         self.addCleanup(intermediate.wait)
         self._track(intermediate.pid)
-        self.assertTrue(process_fixtures.wait_until(pids.exists, timeout=30), "the intermediate never started")
-        found = json.loads(pids.read_text())
+        found = read_pid_when_ready(pids, keys=("fake", "holder"))
         for pid in found.values():
             if pid:
                 self._track(pid)
-        self.assertTrue(process_fixtures.wait_until(ready.exists, timeout=30),
-                        "the fake never announced readiness")
-        self.assertEqual(int(ready.read_text()), found["fake"])
+        self.assertEqual(read_pid_when_ready(ready), found["fake"], "the fake never announced readiness")
         child_file = spec["env"]["FAKE_CLAUDE_HANG_CHILD_PID_FILE"]
         if child_file and spec["env"]["FAKE_CLAUDE_HANG"]:
             # The fake's own `sleep`, in the fake's group; ended by exact pid at cleanup.
-            self.assertTrue(process_fixtures.wait_until(Path(child_file).exists, timeout=10))
-            self._track(int(Path(child_file).read_text()))
+            self._track(read_pid_when_ready(Path(child_file)))
         return intermediate, found
 
     def _orphan(self, intermediate: subprocess.Popen) -> None:
@@ -1302,7 +1386,7 @@ class OrphanWatchdogTest(unittest.TestCase):
         from tests import process_fixtures
 
         intermediate, found = self._start()
-        child = int((self.tmp / "child").read_text())
+        child = read_pid_when_ready(self.tmp / "child")
         self.assertFalse(_gone(found["fake"]))
         self.assertFalse(_gone(child))
         self._orphan(intermediate)
@@ -1347,14 +1431,12 @@ class OrphanWatchdogTest(unittest.TestCase):
         launcher = subprocess.Popen([sys.executable, "-c", _LAUNCHER, json.dumps(spec)], start_new_session=True)
         self.addCleanup(launcher.wait)
         self._track(launcher.pid)
-        self.assertTrue(process_fixtures.wait_until(pids.exists, timeout=30), "the launcher never finished")
+        found = read_pid_when_ready(pids, keys=("fake", "sibling", "pgrp"))
         launcher.wait(timeout=10)
-        found = json.loads(pids.read_text())
         for pid in (found["fake"], found["sibling"]):
             self._track(pid)
         # The hang-mode fake's own `sleep` is in the launcher's group, not the fake's.
-        self.assertTrue(process_fixtures.wait_until((self.tmp / "child").exists, timeout=10))
-        self._track(int((self.tmp / "child").read_text()))
+        self._track(read_pid_when_ready(self.tmp / "child"))
         self.assertNotEqual(found["fake"], found["pgrp"])
         self._assert_gone_within(found["fake"])
         self.assertFalse(_gone(found["sibling"]), "the group kill must not reach a fake that is not its leader")
@@ -1462,8 +1544,7 @@ class OrphanWatchdogTest(unittest.TestCase):
         turns = [[{"step": "bash_bg", "seconds": 0.2, "orphan": "daemon", "orphan_pid_file": str(pid_file)},
                   {"step": "text"}]]
         self._scripted(turns)
-        self.assertTrue(process_fixtures.wait_until(pid_file.exists, timeout=30))
-        pid = int(pid_file.read_text())
+        pid = read_pid_when_ready(pid_file)
         self._track(pid)
 
         def cmdline() -> list[str]:
@@ -1483,8 +1564,7 @@ class OrphanWatchdogTest(unittest.TestCase):
         turns = [[{"step": "bash_bg", "seconds": 600, "orphan": "setsid", "orphan_seconds": 1,
                    "orphan_gate": str(fifo), "orphan_pid_file": str(pid_file)}, {"step": "text"}]]
         intermediate, found = self._scripted(turns, env={"FAKE_CLAUDE_ORPHAN_SECONDS": "3"})
-        self.assertTrue(process_fixtures.wait_until(pid_file.exists, timeout=30))
-        pid = int(pid_file.read_text())
+        pid = read_pid_when_ready(pid_file)
         self._track(pid)
         self.assertFalse(_gone(pid))
         waiters: list[int] = []
@@ -1510,13 +1590,13 @@ class OrphanWatchdogTest(unittest.TestCase):
         self.assertLessEqual(process_fixtures.LEFTOVER_LIFETIME_SECONDS, 600)
 
         def sleep_argument(pid: int) -> int:
-            argv = Path(f"/proc/{pid}/cmdline").read_bytes().decode().split("\0")[:-1]
+            argv = read_argv0_when(pid, "sleep")
             self.assertEqual(argv[0], "sleep", argv)
             return int(float(argv[1]))
 
         # Hang mode, started directly in the runner's group (the fake does not lead it).
         intermediate, first = self._start(new_session=False)
-        self.assertLessEqual(sleep_argument(int((self.tmp / "child").read_text())), 600)
+        self.assertLessEqual(sleep_argument(read_pid_when_ready(self.tmp / "child")), 600)
         self._orphan(intermediate)
         # A monitor with a timeout, the same shape, with its own pids/ready files (every pid
         # the start reports, holder and fake included, is tracked by `_start`).
@@ -1638,8 +1718,7 @@ class OrphanWatchdogTest(unittest.TestCase):
         intermediate = subprocess.Popen([sys.executable, "-c", starter, root, stub, str(sentinel), str(pid_file)])
         self.addCleanup(intermediate.wait)
         self._track(intermediate.pid)
-        self.assertTrue(process_fixtures.wait_until(pid_file.exists, timeout=30))
-        stub_pid = int(pid_file.read_text())
+        stub_pid = read_pid_when_ready(pid_file)
         self._track(stub_pid)
         self.assertFalse(_gone(stub_pid))
         self._orphan(intermediate)

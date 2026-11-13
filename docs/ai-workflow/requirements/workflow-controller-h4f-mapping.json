@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-h4f",
+  "requirements": {
+    "R1": {
+      "description": "milestone-implement can be routed to codex and to nothing else of the worker roles; the default is unchanged and the independence check counts the role (#312)",
+      "checkpoint_ids": [
+        "CP1",
+        "CP4"
+      ]
+    },
+    "R2": {
+      "description": "The landing refuses, before the fast-forward, a range that touches `scripts/`, `.workflow-manager/`, `.claude/` or `.codex/` or changes a link or a mode, and leaves the managed branch untouched (#312)",
+      "checkpoint_ids": [
+        "CP2",
+        "CP4"
+      ]
+    },
+    "R3": {
+      "description": "The landing refuses a state file change outside the fields a checkpoint writes, the set pinned to the Workflow's own state writers, `transition_checkpoint_in_progress` and `complete_checkpoint` (#312)",
+      "checkpoint_ids": [
+        "CP2",
+        "CP4"
+      ]
+    },
+    "R4": {
+      "description": "The role runs through the existing Codex worker body on a real clone, a dirty managed tree, a stale managed claim, an open amendment and a resolved amendment the managed branch has not incorporated are refused before launch, and a killed run ends as D6 states per window (#312)",
+      "checkpoint_ids": [
+        "CP3",
+        "CP4"
+      ]
+    },
+    "R5": {
+      "description": "The live proof, the pages and the tables say what is selectable, what is checked and how each refusal is cleared (#312)",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    },
+    "R6": {
+      "description": "A legitimate checkpoint's Workflow bookkeeping under the clone's common dir is not a sandbox breach while the rest of the guard stays, and a clone holding unfinished work is kept and named, on the uninterrupted ending and on recovery (#312)",
+      "checkpoint_ids": [
+        "CP2",
+        "CP3",
+        "CP4"
+      ]
+    }
+  }
+}

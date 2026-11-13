@@ -11,6 +11,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -562,6 +563,7 @@ class GuardFixture(ProbeFixture):
         self.tree = self.tmp / "gtree"
         make_clone(self.tree)
         self.git = self.tree / ".git"
+        self.original_config = (self.git / "config").read_text()
 
     def digest(self) -> dict:
         return ws.guard_digest(self.tree)
@@ -1236,6 +1238,82 @@ class NestedGitTest(Fixture):
         self.assertEqual(caught.exception.evidence["entry"], "a/.git")
         self.assertEqual(caught.exception.evidence["check"], "nested")
         self.assertIn("a/.git", str(caught.exception))
+
+
+
+class GuardWorkflowMetadataTest(GuardFixture):
+    """``workflow-controller-h4f`` D4b: the Workflow's checkpoint bookkeeping root, for the implementer route only."""
+
+    def bookkeeping(self) -> None:
+        claims = self.git / "ai-workflow" / "checkpoint-claims"
+        claims.mkdir(parents=True)
+        (claims / "abc.json").write_text("{}")
+        (self.git / "ai-workflow" / "def.guardlock").write_text("")
+        (claims / "sub").mkdir()
+
+    def test_the_default_digest_is_unchanged_and_the_bookkeeping_is_a_breach(self) -> None:
+        before = self.digest()
+        self.assertNotIn("workflow_metadata", before)
+        self.bookkeeping()
+        self.refused(before, entry="ai-workflow")
+
+    def test_with_the_flag_the_bookkeeping_is_clean(self) -> None:
+        before = ws.guard_digest(self.tree, workflow_metadata=True)
+        self.assertTrue(before["workflow_metadata"])
+        self.bookkeeping()
+        after = ws.guard_digest(self.tree, workflow_metadata=True)
+        ws.check_guard(before, after)
+        (self.git / "ai-workflow" / "checkpoint-claims" / "abc.json").write_text('{"x": 1}')
+        (self.git / "ai-workflow" / "def.guardlock").unlink()
+        ws.check_guard(before, ws.guard_digest(self.tree, workflow_metadata=True))
+        shutil.rmtree(self.git / "ai-workflow")
+        ws.check_guard(after, ws.guard_digest(self.tree, workflow_metadata=True))
+
+    def test_a_flagged_digest_still_refuses_everything_else(self) -> None:
+        before = ws.guard_digest(self.tree, workflow_metadata=True)
+        cases = {
+            "config": lambda: (self.git / "config").write_text("[core]\n\thooksPath = /tmp/x\n"),
+            "hooks/pre-commit": lambda: ((self.git / "hooks").mkdir(exist_ok=True),
+                                         (self.git / "hooks" / "pre-commit").write_text("#!/bin/sh\n")),
+            "alternates": lambda: ((self.git / "objects" / "info").mkdir(parents=True, exist_ok=True),
+                                   (self.git / "objects" / "info" / "alternates").write_text("/x\n")),
+            "ai-workflow/link": lambda: ((self.git / "ai-workflow").mkdir(),
+                                         (self.git / "ai-workflow" / "link").symlink_to("/etc")),
+            "ai-workflow/fifo": lambda: ((self.git / "ai-workflow").mkdir(), os.mkfifo(self.git / "ai-workflow" / "fifo")),
+            "ai-workflow-root": lambda: (self.git / "ai-workflow").symlink_to("/etc"),
+        }
+        for name, plant in cases.items():
+            with self.subTest(name=name):
+                plant()
+                with self.assertRaises(ReviewLaunchRefusedError):
+                    ws.check_guard(before, ws.guard_digest(self.tree, workflow_metadata=True))
+                subprocess.run(["git", "-C", str(self.tree), "clean", "-fdxq", "--", ".git"], check=False)
+                for planted in (self.git / "ai-workflow", self.git / "hooks", self.git / "objects" / "info" / "alternates"):
+                    if planted.is_dir() and not planted.is_symlink():
+                        shutil.rmtree(planted)
+                    else:
+                        planted.unlink(missing_ok=True)
+                (self.git / "config").write_text(self.original_config)
+
+    def test_a_git_that_is_not_a_directory_is_refused_with_the_flag(self) -> None:
+        digest = ws.guard_digest(self.tree, workflow_metadata=True)
+        digest = {**digest, "git": "symlink"}
+        with self.assertRaises(ReviewLaunchRefusedError):
+            ws.check_guard(ws.guard_digest(self.tree, workflow_metadata=True), digest)
+
+    def test_a_pair_taken_with_different_settings_is_refused(self) -> None:
+        with self.assertRaises(ReviewLaunchRefusedError) as caught:
+            ws.check_guard(self.digest(), ws.guard_digest(self.tree, workflow_metadata=True))
+        self.assertIn("workflow_metadata", str(caught.exception))
+        with self.assertRaises(ReviewLaunchRefusedError):
+            ws.check_guard(ws.guard_digest(self.tree, workflow_metadata=True), self.digest())
+
+    def test_guard_digest_like_follows_the_recorded_setting(self) -> None:
+        for flag in (False, True):
+            recorded = ws.guard_digest(self.tree, workflow_metadata=flag)
+            self.assertEqual(ws.guard_digest_like(self.tree, recorded), recorded)
+        legacy = self.digest()
+        self.assertEqual(ws.guard_digest_like(self.tree, legacy), legacy)
 
 
 if __name__ == "__main__":

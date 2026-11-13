@@ -304,10 +304,13 @@ def parse_role_assignment(text: str) -> tuple[str, str]:
 #: test.
 LOCAL_REVIEW_ROLES: tuple[str, ...] = (REVIEW_PLAN, REVIEW_IMPLEMENTATION)
 LOCAL_APPLY_ROLES: tuple[str, ...] = (APPLY_PLAN_REVIEW, APPLY_IMPLEMENTATION_REVIEW)
+#: The checkpoint role (h4f, D1): a one-element tuple a later item can widen.
+IMPLEMENT_ROLES: tuple[str, ...] = (MILESTONE_IMPLEMENT,)
 ADAPTER_ROLE: Mapping[str, str] = MappingProxyType({
     role: (harness.FUNCTIONAL_TESTER if role == FUNCTIONAL_TESTER
            else harness.LOCAL_REVIEWER if role in LOCAL_REVIEW_ROLES
-           else harness.LOCAL_APPLIER if role in LOCAL_APPLY_ROLES else harness.WORKER)
+           else harness.LOCAL_APPLIER if role in LOCAL_APPLY_ROLES
+           else harness.IMPLEMENTER if role in IMPLEMENT_ROLES else harness.WORKER)
     for role in ROLE_ROUTES
 })
 

@@ -113,11 +113,14 @@ class LiveCloneLandingTest(unittest.TestCase):
         self.assertTrue(digest, "the Codex build cannot be bound to a digest")
         codex_build.record_verified(runtime, digest, {"note": "live test"})
 
-        fixture = dataclasses.replace(harness.CODEX, name=FIXTURE, reviewer_name=None, roles=(harness.WORKER,))
+        fixture = dataclasses.replace(harness.CODEX, name=FIXTURE, reviewer_name=None,
+                                      roles=(harness.WORKER, harness.IMPLEMENTER))
         roles = {role: {"harness": FIXTURE, "model": review.DEFAULT_MODEL, "effort": review.DEFAULT_EFFORT}
-                 for role in sorted(routing.ROLES) if routing.ADAPTER_ROLE[role] == harness.WORKER}
+                 for role in sorted(routing.ROLES)
+                 if routing.ADAPTER_ROLE[role] in (harness.WORKER, harness.IMPLEMENTER)}
         with mock.patch.object(harness, "ADAPTERS", {**harness.ADAPTERS, FIXTURE: fixture}), \
-                mock.patch.object(worker_launch, "LAUNCHERS", {**worker_launch.LAUNCHERS, (FIXTURE, harness.WORKER): LiveLauncher(commands)}), \
+                mock.patch.object(worker_launch, "LAUNCHERS", {**worker_launch.LAUNCHERS, **dict.fromkeys(
+                        ((FIXTURE, harness.WORKER), (FIXTURE, harness.IMPLEMENTER)), LiveLauncher(commands))}), \
                 mock.patch.object(job, "CODEX_WORKTREE_PREPARER", codex_worker_tree.prepare), \
                 mock.patch.object(job, "CODEX_LANDER", codex_worker_landing.land), \
                 mock.patch.object(job, "CODEX_HOME_RESOLVER", operator_codex_home):

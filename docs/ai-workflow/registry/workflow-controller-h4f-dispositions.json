@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-h4f",
+  "dispositions": {
+    "F-10db4aac5f55": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/344"
+    },
+    "F-26856e7e8399": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/344"
+    },
+    "F-35a9cf83b71c": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/344"
+    },
+    "F-410734701257": {
+      "disposition": "fixed",
+      "note": "Plan revision 5 D6b says LANDING_CONFIG has no filter overrides and adds a filter-disabling set built as workflow_contract._git_named_overrides does; controller/gitrepo.filter_disabling_config sets each named driver's process/clean/smudge empty and required false, used by codex_worker_landing.unfinished_work, with tests/test_gitrepo.py test_a_clean_filter_does_not_run_under_the_disabling_set."
+    },
+    "F-4b286f20a741": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/344"
+    },
+    "F-585c213c343e": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/344"
+    },
+    "F-68b801db67b0": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/344"
+    },
+    "F-6a081a82eb70": {
+      "disposition": "fixed",
+      "note": "Plan revision 5 D6b runs the probe with gitrepo.LANDING_CONFIG plus a filter-disabling set and no optional locks; controller/codex_worker_landing.unfinished_work passes (*gitrepo.LANDING_CONFIG, *gitrepo.filter_disabling_config(...)) through a runner with GIT_OPTIONAL_LOCKS=0, pinned by test_a_clean_filter_in_the_clone_config_does_not_run_and_the_managed_tree_is_untouched (tests/test_codex_worker_landing.py)."
+    },
+    "F-72213b0acae3": {
+      "disposition": "fixed",
+      "note": "Plan revision 5 D4b names the carry (controller/codex_carry.py:646) among the Prepared holders; both it and the landing's clone check now take their digest with codex_worker_sandbox.guard_digest_like(clone, prepared.guard), and check_guard refuses a pair with different workflow_metadata settings."
+    },
+    "F-752188782a78": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/344"
+    },
+    "F-8c7f1db640db": {
+      "disposition": "fixed",
+      "note": "Plan revision 5 D3 states a newly added 100755 file outside the surface is intentionally not refused (the implementation review judges it); _check_surface refuses a mode change only where both modes exist (no 000000 side), pinned by test_a_new_executable_outside_the_surface_is_not_refused (tests/test_codex_worker_landing.py) and test_a_new_executable_file_outside_the_surface_lands (tests/test_codex_implement_safety.py); docs/guide/harnesses.md says so."
+    },
+    "F-a1564ac10184": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6840996985"
+    },
+    "F-ab9c07fab1da": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/174#issuecomment-6840996985"
+    },
+    "F-b7cdfc56917a": {
+      "disposition": "fixed",
+      "note": "d01a68b caps the probe's state reads in controller/checkpoint_claims._check_lagging_worktrees: the HEAD read via gitrepo.show raises EFBIG above MAX_BYTES and the working-tree read goes through _read, which refuses a file above MAX_BYTES; both end managed_amendment_unreadable, as _committed_entry does."
+    },
+    "F-b92cec1bc4ff": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/344"
+    },
+    "F-bc89185d7499": {
+      "disposition": "fixed",
+      "note": "Plan revision 5 D3 says the check is on the net base..tip change and a path an intermediate commit adds and a later one removes is not judged; controller/codex_worker_landing._check_surface diffs base..tip, pinned by tests/test_codex_worker_landing.py test_a_path_added_and_removed_in_the_range_is_not_judged and tests/test_codex_implement_safety.py test_a_path_one_commit_adds_and_a_later_one_removes_lands."
+    },
+    "F-bcd6999ad4db": {
+      "disposition": "fixed",
+      "note": "The revision 3 post-fix bundle refreshed .ai-review/workflow-controller-h4f/current/TEST_RESULTS.md: heading 'implementation revision 3' and a 'Revision 3 (post-fix, round 2 review I1; content head 5d1abe7)' section with the post-fix runs. The same gap recurred at revision 4 (F-ab9c07fab1da, triaged on #174)."
+    },
+    "F-c77d46bc70ef": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/344"
+    },
+    "F-cbfbea08dd56": {
+      "disposition": "fixed",
+      "note": "Plan revision 5 D4 names last_completed_checkpoint_id (complete_checkpoint, scripts/workflow_state.py:5322); controller/codex_worker_landing.CHECKPOINT_WRITTEN_FIELDS includes it, and the derivation test in tests/test_codex_worker_landing.py asserts it changes at each completion."
+    },
+    "F-d867a6f6c045": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/344"
+    },
+    "F-e59686b75071": {
+      "disposition": "dropped",
+      "reason": "No change requested: the reviewer agreed with the plan's open decision (1) (milestone-implement-self-review stays on Claude by the sizing rule, and the surface and state checks are one mechanism), which the approved plan and the implementation kept."
+    },
+    "F-e659aff254e6": {
+      "disposition": "fixed",
+      "note": "Plan revision 5 D3 names the raw form `git diff-tree -r -z --raw --no-renames ...` and one helper beside commit_touches_submodule, leaving diff_name_status as is; controller/gitrepo.py diff_raw returns (old mode, new mode, status, path) and codex_worker_landing._check_surface uses it."
+    },
+    "F-e80524d56781": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/344"
+    }
+  }
+}

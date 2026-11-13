@@ -739,6 +739,10 @@ def sandbox_probe_argv(layout: WorkerLayout, *, binary: Path, command: str) -> l
 GUARD_EXCLUDED_ROOTS = ("objects", "refs", "logs")
 #: The regular files a commit or an automatic gc writes (and ``*.lock``): their existence and content are not recorded.
 GUARD_EXCLUDED_FILES = frozenset({"index", "HEAD", "ORIG_HEAD", "COMMIT_EDITMSG", "packed-refs", "info/refs"})
+#: The one root under ``.git`` the Workflow's own checkpoint bookkeeping writes (claims, ``.guardlock`` files): with the
+#: ``workflow_metadata`` setting only its type is recorded, as for :data:`GUARD_EXCLUDED_ROOTS`
+#: (``workflow-controller-h4f``, D4b).
+GUARD_METADATA_ROOT = "ai-workflow"
 #: Files whose existence means an object store outside the repository (recorded as a boolean, refused when true).
 GUARD_ALTERNATES = ("objects/info/alternates", "objects/info/http-alternates")
 
@@ -753,20 +757,29 @@ def _kind(mode: int) -> str:
     return "special"
 
 
-def _guard_excluded(rel: str, kind: str) -> bool:
-    """True when ``rel`` is a regular file or a directory that a commit may add, change or remove unrecorded."""
+def _guard_excluded(rel: str, kind: str, workflow_metadata: bool = False) -> bool:
+    """True when ``rel`` is a regular file or a directory that a commit may add, change or remove unrecorded (with
+    ``workflow_metadata``, also anything under :data:`GUARD_METADATA_ROOT`)."""
     if kind not in ("file", "dir"):
         return False
-    if rel.split("/", 1)[0] in GUARD_EXCLUDED_ROOTS:
+    first = rel.split("/", 1)[0]
+    if first in GUARD_EXCLUDED_ROOTS or (workflow_metadata and first == GUARD_METADATA_ROOT):
         return True
     return kind == "file" and (rel in GUARD_EXCLUDED_FILES or rel.endswith(".lock"))
 
 
-def guard_digest(worktree: Path) -> dict:
+def guard_digest(worktree: Path, *, workflow_metadata: bool = False) -> dict:
     """The digest of ``<worktree>/.git`` (D4): the type of ``.git`` itself; the type and mode (and the content of a
     regular file) of every entry except what a commit writes; the type of each excluded root; every symlink and every
     entry that is neither a regular file nor a directory, anywhere, by relative path; and whether an alternates file
-    exists. Nothing is followed: every entry is read with ``lstat``."""
+    exists. Nothing is followed: every entry is read with ``lstat``.
+
+    With ``workflow_metadata`` (the implementer route only, ``workflow-controller-h4f`` D4b) the single root
+    :data:`GUARD_METADATA_ROOT` is treated as the excluded roots are: its type is recorded and a regular file or a
+    directory anywhere under it may be added, changed or removed unrecorded. A symlink or special file under it is
+    still recorded by path and refused, and every other entry is still compared. The digest records the setting, only
+    when it is on, so every other digest is exactly what it was, and :func:`check_guard` refuses a pair taken with
+    different settings."""
     git = worktree / ".git"
     try:
         top = _kind(os.lstat(git).st_mode)
@@ -775,9 +788,11 @@ def guard_digest(worktree: Path) -> dict:
     except OSError as exc:
         raise _refuse(f"cannot read {git}: {exc}", check="guard", entry=".git") from exc
     digest: dict = {"git": top, "entries": {}, "roots": {}, "special": [], "alternates": False}
+    if workflow_metadata:
+        digest["workflow_metadata"] = True
     if top != "dir":
         return digest
-    for root in GUARD_EXCLUDED_ROOTS:
+    for root in (*GUARD_EXCLUDED_ROOTS, *((GUARD_METADATA_ROOT,) if workflow_metadata else ())):
         try:
             digest["roots"][root] = _kind(os.lstat(git / root).st_mode)
         except FileNotFoundError:
@@ -803,7 +818,7 @@ def guard_digest(worktree: Path) -> dict:
                     continue
                 if kind == "dir":
                     pending.append(rel)
-                if _guard_excluded(rel, kind):
+                if _guard_excluded(rel, kind, workflow_metadata):
                     continue
                 record = f"{kind} {stat.S_IMODE(mode.st_mode):o}"
                 if kind == "file":
@@ -815,10 +830,21 @@ def guard_digest(worktree: Path) -> dict:
     return digest
 
 
+def guard_digest_like(worktree: Path, reference: Mapping) -> dict:
+    """:func:`guard_digest` of ``worktree`` taken with the setting ``reference`` (a recorded digest) was taken with, so a
+    caller that holds a ``Prepared`` compares like with like (``workflow-controller-h4f``, D4b)."""
+    return guard_digest(worktree, workflow_metadata=bool(reference.get("workflow_metadata", False)))
+
+
 def check_guard(before: Mapping, after: Mapping) -> None:
     """Refuse, naming the entry, when ``.git`` is not a real directory in either digest, an excluded root is not a
     directory or changed type, a symlink or special entry exists in either digest, an alternates file exists, or any
-    other entry was added, removed or changed. A baseline that already holds a symlink is refused, not accepted."""
+    other entry was added, removed or changed. A baseline that already holds a symlink is refused, not accepted. A
+    pair taken with different ``workflow_metadata`` settings is refused: a caller cannot weaken a comparison by taking
+    one side again."""
+    if bool(before.get("workflow_metadata", False)) != bool(after.get("workflow_metadata", False)):
+        raise _refuse("the two guard digests were taken with different workflow_metadata settings", check="guard",
+                      entry=".git")
     for label, digest in (("before", before), ("after", after)):
         if digest["git"] != "dir":
             raise _refuse(f"the worktree's .git is {digest['git']} ({label} the run), not a directory",
@@ -828,6 +854,8 @@ def check_guard(before: Mapping, after: Mapping) -> None:
             if kind != "dir":
                 raise _refuse(f".git/{root} is {kind} ({label} the run), not a directory", check="guard", entry=root)
     for root in sorted(before["roots"]):
+        if root == GUARD_METADATA_ROOT and root not in after["roots"]:
+            continue  # the bookkeeping root may be removed whole; its content is unrecorded
         if before["roots"][root] != after["roots"].get(root):
             raise _refuse(f".git/{root} changed during the run", check="guard", entry=root)
     for label, digest in (("before", before), ("after", after)):

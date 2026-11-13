@@ -433,5 +433,46 @@ class LauncherTest(LaunchFixture):
         self.assertNotIn(harness.WORKER, harness.CODEX.roles)
 
 
+
+class WorkflowMetadataLaunchTest(LaunchFixture):
+    """``workflow-controller-h4f`` D4b at the launcher: the guard of a run that writes the Workflow's checkpoint
+    bookkeeping during the run."""
+
+    def bookkeeping(self) -> list[str]:
+        base = self.worktree / ".git" / "ai-workflow"
+        return [str(base / "checkpoint-claims" / "abc.json"), str(base / "checkpoint-claims" / "x" / "y.json"),
+                str(base / "abc.guardlock")]
+
+    def test_the_bookkeeping_written_during_the_run_is_clean_with_the_flag(self) -> None:
+        self.script(message="done", write_outside=self.bookkeeping())
+        outcome = self.launch(workflow_metadata=True)
+        self.assertEqual((outcome.outcome, outcome.stream_diagnosis["breach"]), (worker.SUCCESS, []))
+
+    def test_the_same_run_is_a_breach_by_default(self) -> None:
+        self.script(message="done", write_outside=self.bookkeeping())
+        outcome = self.launch()
+        self.assertEqual((outcome.outcome, outcome.subtype), (worker.FAILURE, cw.SUBTYPE_BREACH))
+        self.assertTrue(any("guard" in entry for entry in outcome.stream_diagnosis["breach"]))
+
+    def test_a_hook_is_still_a_breach_with_the_flag(self) -> None:
+        self.script(message="done", write_outside=[*self.bookkeeping(), str(self.worktree / ".git" / "hooks" / "pre-commit")])
+        outcome = self.launch(workflow_metadata=True)
+        self.assertEqual((outcome.outcome, outcome.subtype), (worker.FAILURE, cw.SUBTYPE_BREACH))
+        self.assertTrue(any("guard" in entry for entry in outcome.stream_diagnosis["breach"]))
+
+    def test_the_baseline_is_taken_with_the_flag(self) -> None:
+        seen = []
+        real = ws.guard_digest
+
+        def spy(path, **kw):
+            seen.append(kw.get("workflow_metadata", False))
+            return real(path, **kw)
+
+        self.script(message="done")
+        with mock.patch.object(ws, "guard_digest", spy):
+            self.launch(workflow_metadata=True)
+        self.assertEqual(seen, [True, True])
+
+
 if __name__ == "__main__":
     unittest.main()

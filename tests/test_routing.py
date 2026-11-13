@@ -322,7 +322,7 @@ class HarnessFieldTest(unittest.TestCase):
         accepted = {name: sorted(role for role in routing.ROLES
                                  if routing.ADAPTER_ROLE[role] in adapter.roles)
                     for name, adapter in harness.ADAPTERS.items()}
-        self.assertEqual(accepted, {"claude-code": sorted(routing.ROLES), "codex": sorted(["functional-tester", *routing.LOCAL_REVIEW_ROLES, *routing.LOCAL_APPLY_ROLES])})
+        self.assertEqual(accepted, {"claude-code": sorted(routing.ROLES), "codex": sorted(["functional-tester", *routing.LOCAL_REVIEW_ROLES, *routing.LOCAL_APPLY_ROLES, *routing.IMPLEMENT_ROLES])})
         for role in routing.ROLES:
             self.assertEqual(routing.check_role_harness(role, "claude-code"), "claude-code")
 
@@ -341,7 +341,7 @@ class HarnessFieldTest(unittest.TestCase):
             {"harness": "codex"})
 
     def test_the_other_roles_still_refuse_codex(self) -> None:
-        for role in ("milestone-plan", "milestone-implement"):
+        for role in ("milestone-plan", "milestone-implement-self-review"):
             with self.subTest(role=role), self.assertRaises(ValueError):
                 routing.parse_role_harness(f"{role}=codex")
 
@@ -354,20 +354,25 @@ class HarnessFieldTest(unittest.TestCase):
         for role in routing.LOCAL_APPLY_ROLES:
             self.assertEqual(routing.ADAPTER_ROLE[role], harness.LOCAL_APPLIER)
         self.assertEqual(set(routing.LOCAL_APPLY_ROLES), {"apply-plan-review", "apply-implementation-review"})
-        for role in routing.ROLES - {"functional-tester", *routing.LOCAL_REVIEW_ROLES, *routing.LOCAL_APPLY_ROLES}:
+        # h4f, D1: exactly the checkpoint role runs as the implementer; the wrap-up role stays a worker.
+        self.assertEqual(routing.IMPLEMENT_ROLES, ("milestone-implement",))
+        for role in routing.IMPLEMENT_ROLES:
+            self.assertEqual(routing.ADAPTER_ROLE[role], harness.IMPLEMENTER)
+        self.assertEqual(routing.ADAPTER_ROLE["milestone-implement-self-review"], harness.WORKER)
+        for role in routing.ROLES - {"functional-tester", *routing.LOCAL_REVIEW_ROLES, *routing.LOCAL_APPLY_ROLES, *routing.IMPLEMENT_ROLES}:
             self.assertEqual(routing.ADAPTER_ROLE[role], harness.WORKER)
         for adapter_role in routing.ADAPTER_ROLE.values():
             self.assertIn(adapter_role, harness.CLAUDE_CODE.roles)
 
     def test_codex_is_refused_in_a_default_and_in_each_kind_of_role(self) -> None:
-        for role in ("milestone-implement", "milestone-plan", "satisfy-gate"):
+        for role in ("milestone-implement-self-review", "milestone-plan", "satisfy-gate"):
             with self.subTest(role=role), self.assertRaises(RoutingConfigError) as ctx:
                 _config(roles={role: {"harness": "codex"}})
             self.assertIn(f"role {role!r} runs as a {routing.ADAPTER_ROLE[role]!r} and harness 'codex' "
-                          f"declares only ['local-reviewer', 'local-applier', 'reviewer', 'functional-tester']", ctx.exception.message)
+                          f"declares only ['implementer', 'local-reviewer', 'local-applier', 'reviewer', 'functional-tester']", ctx.exception.message)
             self.assertEqual({k: ctx.exception.evidence[k] for k in ("role", "adapter_role", "harness", "declared_roles")},
                              {"role": role, "adapter_role": routing.ADAPTER_ROLE[role], "harness": "codex",
-                              "declared_roles": ["local-reviewer", "local-applier", "reviewer", "functional-tester"]})
+                              "declared_roles": ["implementer", "local-reviewer", "local-applier", "reviewer", "functional-tester"]})
         with self.assertRaises(RoutingConfigError) as ctx:
             _config(default={"harness": "codex"})
         self.assertIn("role 'apply-functional-review'", ctx.exception.message)
@@ -613,7 +618,7 @@ class RoutingOptionsHarnessCheckTest(unittest.TestCase):
         self.assertEqual(dict(routing.NO_OVERRIDES.harness_models), {})
 
     def test_a_route_to_a_harness_without_the_builtin_model_names_the_default(self) -> None:
-        worker_codex = dataclasses.replace(harness.CODEX, roles=(harness.WORKER, harness.LOCAL_REVIEWER, harness.REVIEWER))
+        worker_codex = dataclasses.replace(harness.CODEX, roles=(harness.WORKER, harness.IMPLEMENTER, harness.LOCAL_REVIEWER, harness.REVIEWER))
         patched = {**harness.ADAPTERS, "codex": worker_codex}
         with unittest.mock.patch.object(harness, "ADAPTERS", patched):
             config = _config(roles={"milestone-implement": {"harness": "codex"}})

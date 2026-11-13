@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -969,6 +970,408 @@ class DecideTest(Fixture):
         self.commit()
         record = self.record()
         self.assertEqual(landing.recover(self.managed, record), landing.decide(self.managed, record))
+
+
+WI = "wi-1"
+
+
+def state_text(**changes) -> str:
+    """A small Workflow state file; ``changes`` overrides this item's entry fields (``None`` deletes the field)."""
+    entry = {"work_item_id": WI, "phase": "IMPLEMENTING", "plan_approval": {"status": "CURRENT", "sha": "a"},
+             "checkpoints": {"CP1": {"status": "COMPLETE", "start_commit": "a" * 40}}, "current_checkpoint_id": None,
+             "last_completed_checkpoint_id": "CP1", "state_revision": 3, "last_transition": "2026-01-01T00:00:00Z",
+             "gate_policy_adoption": {"x": 1}, "technical_approval": None}
+    for key, value in changes.items():
+        if value is None:
+            entry.pop(key, None)
+        else:
+            entry[key] = value
+    state = {"schema_version": 2, "active_work_item_id": WI, "gate_policy_floor": {"plan": "automatic"},
+             "work_items": {WI: entry, "other": {"work_item_id": "other", "phase": "ACCEPTED"}}}
+    return json.dumps(state, indent=2, sort_keys=True) + "\n"
+
+
+class SurfaceFixture(Fixture):
+    """A managed repository that carries a Workflow state file and the execution surface, and the implementer landing."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        for name, text in {"scripts/a.py": "a = 1\n", ".workflow-manager/installation.json": "{}\n",
+                           ".claude/settings.json": "{}\n", ".codex/config.toml": "x = 1\n", ".mcp.json": "{}\n",
+                           "docs/ai-workflow/WORKFLOW_STATE.json": state_text(), "notes/page.md": "p\n",
+                           "run.sh": "#!/bin/sh\n"}.items():
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text)
+        git(self.root, "add", "-A")
+        git(self.root, "commit", "-q", "-m", "surface")
+        self.base = out(self.root, "rev-parse", "HEAD")
+        shutil.rmtree(self.clone)
+        self.prepared = tree.prepare(self.managed, self.layout, self.base, workflow_metadata=True)
+        self.clone = self.prepared.path
+
+    def land(self, *, breach: bool = False, on_intent=None, prepared=None, surface=landing.LandingSurface.IMPLEMENTER,
+             work_item_id=WI) -> landing.Landing:
+        return landing.land(self.managed, prepared or self.prepared, self.runtime, JOB, worker_breach=breach,
+                            on_intent=on_intent or self.intents.append, surface=surface, work_item_id=work_item_id)
+
+    def remove(self, name: str, message: str = "remove") -> str:
+        git(self.clone, "rm", "-q", name)
+        git(self.clone, "commit", "-q", "-m", message)
+        return out(self.clone, "rev-parse", "HEAD")
+
+    def refuses(self, cause: str, **kw) -> landing.Landing:
+        result = super().refuses(cause, **kw)
+        self.assertTrue(self.clone.is_dir(), "the clone is kept")
+        return result
+
+
+class SurfaceLandsTest(SurfaceFixture):
+    def test_a_clean_checkpoint_lands_with_its_state_fields(self) -> None:
+        self.commit("src.txt", "two\n", "work")
+        self.commit("docs/ai-workflow/WORKFLOW_STATE.json", state_text(
+            checkpoints={"CP1": {"status": "COMPLETE", "start_commit": "a" * 40},
+                         "CP2": {"status": "COMPLETE", "start_commit": "b" * 40}},
+            last_completed_checkpoint_id="CP2", state_revision=5, last_transition="2026-01-02T00:00:00Z",
+            phase="SELF_REVIEWING_IMPLEMENTATION", current_checkpoint_id="CP2"), "state")
+        result = self.land()
+        self.assertEqual((result.outcome, result.cause), ("landed", None), result.message)
+
+    def test_both_passes_of_the_range_check_carry_the_surface(self) -> None:
+        self.commit("src.txt", "two\n")
+        real = landing._check_range
+        seen = []
+
+        def spy(repo, *args, **kw):
+            seen.append((Path(repo), kw.get("surface")))
+            return real(repo, *args, **kw)
+
+        with mock.patch.object(landing, "_check_range", spy):
+            self.assertEqual(self.land().outcome, "landed")
+        self.assertEqual(seen, [(self.clone, landing.LandingSurface.IMPLEMENTER),
+                                (self.root, landing.LandingSurface.IMPLEMENTER)])
+
+    def test_without_a_surface_nothing_is_judged(self) -> None:
+        self.commit("scripts/evil.py", "x\n")
+        self.commit("docs/ai-workflow/WORKFLOW_STATE.json", state_text(plan_approval={"status": "FORGED"}))
+        self.assertEqual(self.land(surface=None, work_item_id=None).outcome, "landed")
+
+    def test_a_surface_without_a_work_item_is_a_caller_error(self) -> None:
+        with self.assertRaises(ValueError):
+            self.land(work_item_id=None)
+
+    def test_a_path_added_and_removed_in_the_range_is_not_judged(self) -> None:
+        self.commit("scripts/tmp.py", "x\n", "add")
+        self.remove("scripts/tmp.py")
+        self.commit("src.txt", "two\n")
+        self.assertEqual(self.land().outcome, "landed")
+
+    def test_a_new_executable_outside_the_surface_is_not_refused(self) -> None:
+        (self.clone / "tool.sh").write_text("#!/bin/sh\n")
+        (self.clone / "tool.sh").chmod(0o755)
+        git(self.clone, "add", "tool.sh")
+        git(self.clone, "commit", "-q", "-m", "tool")
+        self.assertEqual(self.land().outcome, "landed")
+
+    def test_an_edit_of_the_instruction_files_is_not_refused(self) -> None:
+        self.commit("AGENTS.md", "steer\n")
+        self.commit("CLAUDE.md", "steer\n")
+        self.assertEqual(self.land().outcome, "landed")
+
+
+class SurfaceRefusalTest(SurfaceFixture):
+    def test_every_status_under_every_surface_directory_is_refused(self) -> None:
+        for directory, existing in (("scripts", "scripts/a.py"), (".workflow-manager", ".workflow-manager/installation.json"),
+                                    (".claude", ".claude/settings.json"), (".codex", ".codex/config.toml")):
+            for status in "AMD":
+                with self.subTest(directory=directory, status=status):
+                    self.setUp()
+                    if status == "A":
+                        self.commit(f"{directory}/new.txt", "n\n")
+                    elif status == "M":
+                        self.commit(existing, "changed\n")
+                    else:
+                        self.remove(existing)
+                    result = self.refuses("surface_touched")
+                    self.assertIn(f"{status} ", result.message)
+
+    def test_the_root_mcp_configuration_is_refused_for_every_status(self) -> None:
+        # The fixture's base carries ``.mcp.json``, so the range can modify or delete it; an added one (the base
+        # without it) is the safety plant ``a_root_mcp_configuration_added``, and the path match is status-blind.
+        self.assertTrue(landing._on_surface(".mcp.json"))
+        for status in "MD":
+            with self.subTest(status=status):
+                self.setUp()
+                if status == "M":
+                    self.commit(".mcp.json", "{\"mcpServers\": {\"x\": {}}}\n")
+                else:
+                    self.remove(".mcp.json")
+                result = self.refuses("surface_touched")
+                self.assertIn(f"{status} .mcp.json", result.message)
+
+    def test_a_nested_mcp_json_is_not_the_root_configuration(self) -> None:
+        self.commit("notes/.mcp.json", "{}\n")
+        self.assertEqual(self.land().outcome, "landed")
+
+    def test_deep_paths_and_commands_are_refused(self) -> None:
+        self.commit(".claude/commands/milestone-implement.md", "steer\n")
+        self.refuses("surface_touched")
+
+    def test_a_link_is_refused_wherever_it_is(self) -> None:
+        (self.clone / "docs" / "lnk").symlink_to("../src.txt")
+        git(self.clone, "add", "docs/lnk")
+        git(self.clone, "commit", "-q", "-m", "link")
+        self.refuses("surface_touched")
+
+    def test_a_file_replaced_by_a_link_is_refused(self) -> None:
+        (self.clone / "notes" / "page.md").unlink()
+        (self.clone / "notes" / "page.md").symlink_to("../src.txt")
+        git(self.clone, "add", "notes/page.md")
+        git(self.clone, "commit", "-q", "-m", "type change")
+        self.refuses("surface_touched")
+
+    def test_an_executable_bit_change_is_refused(self) -> None:
+        (self.clone / "run.sh").chmod(0o755)
+        git(self.clone, "add", "run.sh")
+        git(self.clone, "commit", "-q", "-m", "mode")
+        self.refuses("surface_touched")
+
+    def test_an_unreadable_diff_is_refused(self) -> None:
+        self.commit("src.txt", "two\n")
+        with mock.patch.object(gitrepo, "diff_raw", side_effect=GitOperationError("boom", evidence={})):
+            self.refuses("surface_touched")
+
+    def test_one_clean_and_one_touching_commit_is_refused_whole(self) -> None:
+        self.commit("src.txt", "two\n", "clean")
+        self.commit("scripts/evil.py", "x\n", "touching")
+        self.refuses("surface_touched")
+        self.assertEqual(out(self.root, "rev-parse", "HEAD"), self.base)
+
+    def test_the_managed_side_pass_decides(self) -> None:
+        self.commit("scripts/evil.py", "x\n")
+        real = landing._check_range
+        calls = []
+
+        def clone_pass_blind(repo, base, tip, runner, **kw):
+            calls.append(Path(repo))
+            return real(repo, base, tip, runner, **({**kw, "surface": None} if Path(repo) == self.clone else kw))
+
+        with mock.patch.object(landing, "_check_range", clone_pass_blind):
+            self.refuses("surface_touched")
+        self.assertEqual(calls, [self.clone, self.root])
+        self.assertEqual(len(self.intents), 1)
+
+
+class StateRefusalTest(SurfaceFixture):
+    def state_commit(self, text: str) -> None:
+        self.commit("docs/ai-workflow/WORKFLOW_STATE.json", text, "state")
+
+    def test_each_class_of_state_change_is_refused(self) -> None:
+        def another_entry() -> str:
+            state = json.loads(state_text())
+            state["work_items"]["other"]["phase"] = "IMPLEMENTING"
+            return json.dumps(state)
+
+        def top_level_key() -> str:
+            return json.dumps({**json.loads(state_text()), "active_work_item_id": "other"})
+
+        def new_top_level_key() -> str:
+            return json.dumps({**json.loads(state_text()), "extra": 1})
+
+        def new_entry() -> str:
+            state = json.loads(state_text())
+            state["work_items"]["new"] = {"phase": "IMPLEMENTING"}
+            return json.dumps(state)
+
+        def dropped_entry() -> str:
+            state = json.loads(state_text())
+            del state["work_items"][WI]
+            return json.dumps(state)
+
+        def gate_floor() -> str:
+            return json.dumps({**json.loads(state_text()), "gate_policy_floor": {"plan": "none"}})
+
+        cases = {
+            "plan_approval": lambda: state_text(plan_approval={"status": "FORGED"}),
+            "technical_approval": lambda: state_text(technical_approval={"status": "CURRENT"}),
+            "gate_policy_adoption": lambda: state_text(gate_policy_adoption={"x": 2}),
+            "a new field": lambda: state_text(governing_workflow_version="2.2"),
+            "a dropped field": lambda: state_text(plan_approval=None),
+            "another entry": another_entry, "top-level key": top_level_key, "new top-level key": new_top_level_key,
+            "gate policy floor": gate_floor, "a new entry": new_entry, "this entry dropped": dropped_entry,
+            "unparseable": lambda: "{not json", "not an object": lambda: "[1]", "no table": lambda: "{}",
+            "not utf-8": lambda: "\udcff",
+        }
+        for name, make in cases.items():
+            with self.subTest(name=name):
+                self.setUp()
+                text = make()
+                path = self.clone / "docs/ai-workflow/WORKFLOW_STATE.json"
+                path.write_bytes(text.encode("utf-8", "surrogateescape"))
+                git(self.clone, "add", "docs/ai-workflow/WORKFLOW_STATE.json")
+                git(self.clone, "commit", "-q", "-m", "state")
+                self.refuses("state_touched")
+
+    def test_a_deleted_state_file_is_refused(self) -> None:
+        self.remove("docs/ai-workflow/WORKFLOW_STATE.json")
+        self.refuses("state_touched")
+
+    def test_an_oversized_state_file_is_refused(self) -> None:
+        with mock.patch.object(landing, "MAX_STATE_BYTES", 10):
+            self.state_commit(state_text(state_revision=4))
+            self.refuses("state_touched")
+
+    def test_only_the_checkpoint_fields_may_change(self) -> None:
+        for field, value in {"checkpoints": {}, "current_checkpoint_id": "CP9", "last_completed_checkpoint_id": "CP9",
+                             "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW", "state_revision": 99,
+                             "last_transition": "x"}.items():
+            with self.subTest(field=field):
+                self.setUp()
+                self.state_commit(state_text(**{field: value}))
+                self.assertEqual(self.land().outcome, "landed")
+
+
+class CheckpointWrittenFieldsTest(unittest.TestCase):
+    """D4: the constant is what the Workflow's own state writers change, derived by running them."""
+
+    SCRIPT = r"""
+import copy, json, pathlib, sys
+sys.path.insert(0, sys.argv[1])
+import workflow_state as ws
+wid = "wi"
+reg = {"schema_version": 1, "work_item_id": wid, "plan_revision": 1,
+       "checkpoints": [{"id": f"CP{i}", "name": "n", "depends_on": [], "complexity": 1, "session_target": 1}
+                       for i in (1, 2, 3)]}
+entry = json.loads(sys.argv[2])
+root = pathlib.Path(".").resolve()
+path = root / "docs/ai-workflow/WORKFLOW_STATE.json"
+path.parent.mkdir(parents=True)
+path.write_text(json.dumps({"schema_version": 2, "active_work_item_id": wid, "work_items": {wid: entry}}))
+def snap():
+    return json.loads(path.read_text())
+def diff(a, b):
+    fields = {"TOP:" + k for k in set(a) | set(b) if k != "work_items" and a.get(k) != b.get(k)}
+    ea, eb = a["work_items"][wid], b["work_items"][wid]
+    return fields | {k for k in set(ea) | set(eb) if ea.get(k) != eb.get(k)}
+steps = []
+tick = 0
+for cp in ("CP1", "CP2", "CP3"):
+    for kind in ("start", "done"):
+        tick += 1
+        now = f"2026-11-12T20:00:{tick:02d}Z"
+        before = snap()
+        if kind == "start":
+            ws.state_transaction(root, lambda st: ws.transition_checkpoint_in_progress(
+                st, wid, cp, start_commit="a" * 40, now=now))
+        else:
+            ws.state_transaction(root, lambda st: ws.complete_checkpoint(st, wid, cp, reg, now=now, repo_root=root))
+        after = snap()
+        steps.append({"cp": cp, "kind": kind, "changed": sorted(diff(before, after)),
+                      "phase": after["work_items"][wid]["phase"]})
+print(json.dumps(steps))
+"""
+
+    def test_the_constant_equals_the_fields_the_writers_change(self) -> None:
+        entry = {"work_item_id": "wi", "phase": "IMPLEMENTING", "plan_revision": 1, "checkpoints": {},
+                 "current_checkpoint_id": None, "last_completed_checkpoint_id": None, "state_revision": 1,
+                 "last_transition": "2026-11-12T19:00:00Z", "plan_approval": {"status": "CURRENT"}}
+        with tempfile.TemporaryDirectory() as tmp:
+            fixtures.git_init(tmp)
+            result = subprocess.run([sys.executable, "-B", "-c", self.SCRIPT, str(REPO_ROOT / "scripts"),
+                                     json.dumps(entry)], cwd=tmp, capture_output=True, text=True, timeout=120)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        steps = json.loads(result.stdout)
+        changed = set().union(*(set(step["changed"]) for step in steps))
+        self.assertEqual(changed, set(landing.CHECKPOINT_WRITTEN_FIELDS))
+        for step in steps:
+            if step["kind"] == "done":
+                self.assertIn("last_completed_checkpoint_id", step["changed"], step)
+            self.assertEqual("phase" in step["changed"], step["cp"] == "CP3" and step["kind"] == "done", step)
+        self.assertEqual(steps[-1]["phase"], "SELF_REVIEWING_IMPLEMENTATION")
+
+    def test_the_claim_and_witness_writers_are_not_state_writers(self) -> None:
+        self.assertFalse({"amendment_history", "plan_approval"} & landing.CHECKPOINT_WRITTEN_FIELDS)
+
+
+class UnfinishedWorkTest(Fixture):
+    """``workflow-controller-h4f`` D6b: whether a clone holds work no commit carries."""
+
+    def probe(self):
+        return landing.unfinished_work(self.clone, self.runtime, JOB)
+
+    def test_a_clean_clone_and_a_clone_with_only_commits_hold_none(self) -> None:
+        self.assertIsNone(self.probe())
+        (self.clone / "new.txt").write_text("n\n")
+        git(self.clone, "add", "new.txt")
+        git(self.clone, "commit", "-q", "-m", "work")
+        self.assertIsNone(self.probe())
+
+    def test_an_ignored_file_is_not_unfinished_work(self) -> None:
+        (self.clone / "ign").mkdir()
+        (self.clone / "ign" / "z.txt").write_text("z\n")
+        self.assertIsNone(self.probe())
+
+    def test_a_tracked_change_a_staged_change_and_an_untracked_file_each_count(self) -> None:
+        (self.clone / "src.txt").write_text("changed\n")
+        self.assertEqual(self.probe(), {"path": str(self.clone), "tracked": 1, "untracked": 0})
+        git(self.clone, "checkout", "--", "src.txt")
+        (self.clone / "staged.txt").write_text("s\n")
+        git(self.clone, "add", "staged.txt")
+        self.assertEqual(self.probe(), {"path": str(self.clone), "tracked": 1, "untracked": 0})
+        git(self.clone, "reset", "-q", "--", "staged.txt")
+        self.assertEqual(self.probe(), {"path": str(self.clone), "tracked": 0, "untracked": 1})
+
+    def test_a_partial_commit_leaves_the_rest_as_unfinished_work(self) -> None:
+        (self.clone / "done.txt").write_text("d\n")
+        git(self.clone, "add", "done.txt")
+        git(self.clone, "commit", "-q", "-m", "partial")
+        (self.clone / "rest.txt").write_text("r\n")
+        self.assertEqual(self.probe(), {"path": str(self.clone), "tracked": 0, "untracked": 1})
+
+    def test_the_counts_never_carry_file_contents(self) -> None:
+        (self.clone / "secret.txt").write_text("-----BEGIN PRIVATE KEY-----\n")
+        self.assertNotIn("PRIVATE", json.dumps(self.probe()))
+
+    def test_no_clone_at_the_path_holds_nothing_to_keep(self) -> None:
+        self.assertIsNone(landing.unfinished_work(self.tmp / "gone", self.runtime, JOB))
+
+    def test_a_clone_path_that_is_a_link_is_unreadable_unfinished_work(self) -> None:
+        link = self.tmp / "link"
+        link.symlink_to(self.clone)
+        found = landing.unfinished_work(link, self.runtime, JOB)
+        self.assertEqual((found["tracked"], found["untracked"]), (None, None))
+        self.assertIn("link", found["unreadable"])
+
+    def test_a_directory_git_cannot_read_is_unfinished_work_with_the_reason(self) -> None:
+        git(self.clone, "config", "--local", "core.repositoryformatversion", "99")
+        found = self.probe()
+        self.assertEqual((found["tracked"], found["untracked"]), (None, None))
+        self.assertTrue(found["unreadable"])
+
+    def test_a_clean_filter_in_the_clone_config_does_not_run_and_the_managed_tree_is_untouched(self) -> None:
+        marker = self.tmp / "ran"
+        (self.clone / ".gitattributes").write_text("src.txt filter=plant\n")
+        git(self.clone, "add", ".gitattributes")
+        git(self.clone, "commit", "-q", "-m", "attrs")
+        git(self.clone, "config", "--local", "filter.plant.clean", f"sh -c 'touch {marker}; cat'")
+        (self.clone / "src.txt").write_text("one\n")
+        os.utime(self.clone / "src.txt", (1, 1))  # racy stat data: Git would look at the content and run the filter
+        before = out(self.root, "status", "--porcelain", "--untracked-files=all"), out(self.root, "for-each-ref")
+        self.assertIsNone(self.probe())
+        self.assertFalse(marker.exists())
+        self.assertEqual((out(self.root, "status", "--porcelain", "--untracked-files=all"),
+                          out(self.root, "for-each-ref")), before)
+
+    def test_a_hook_in_the_clone_does_not_run(self) -> None:
+        marker = self.tmp / "hook-ran"
+        hooks = self.clone / ".git" / "hooks"
+        hooks.mkdir(exist_ok=True)
+        (hooks / "post-index-change").write_text(f"#!/bin/sh\ntouch {marker}\n")
+        (hooks / "post-index-change").chmod(0o755)
+        git(self.clone, "config", "--local", "core.hooksPath", str(hooks))
+        (self.clone / "src.txt").write_text("changed\n")
+        self.assertEqual(self.probe()["tracked"], 1)
+        self.assertFalse(marker.exists())
 
 
 if __name__ == "__main__":

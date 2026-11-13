@@ -45,8 +45,10 @@ class CodexReviewLauncher(codex_worker.CodexLauncher):
 #: only (the applier's launcher is the real ``CodexLauncher``, h4e3 D1), so a worker role still cannot be routed to it.
 LAUNCHERS: Mapping[tuple[str, str], WorkerLauncher] = {
     (harness.CLAUDE_CODE.name, harness.WORKER): ClaudeCodeLauncher(),
+    (harness.CLAUDE_CODE.name, harness.IMPLEMENTER): ClaudeCodeLauncher(),
     (harness.CLAUDE_CODE.name, harness.LOCAL_REVIEWER): ClaudeCodeLauncher(),
     (harness.CLAUDE_CODE.name, harness.LOCAL_APPLIER): ClaudeCodeLauncher(),
+    (harness.CODEX.name, harness.IMPLEMENTER): codex_worker.CodexLauncher(),
     (harness.CODEX.name, harness.LOCAL_REVIEWER): CodexReviewLauncher(),
     (harness.CODEX.name, harness.LOCAL_APPLIER): codex_worker.CodexLauncher(),
 }

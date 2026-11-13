@@ -482,7 +482,7 @@ items:
     detail: docs/items/workflow-controller-h4e3b.md
   - id: workflow-controller-h4f
     title: "Codex worker, step 6"
-    status: next
+    status: done
     order: 83
     depends_on: [workflow-controller-h4e3b]
     detail: docs/items/workflow-controller-h4f.md

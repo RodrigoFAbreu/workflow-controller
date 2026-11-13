@@ -17,12 +17,18 @@ from . import usage, usage_record, worker
 
 
 def launch_options(*, runtime_root: Path, job_id: str, operator_home: Path, cwd: Path, timeout: float | None,
-                   on_spawn: Callable[[int, int], None], route: Any) -> dict[str, Any]:
+                   on_spawn: Callable[[int, int], None], route: Any,
+                   workflow_metadata: bool = False) -> dict[str, Any]:
     """The eight options of the launch (D4) and no other: the Claude-only ones (stream files, binary, inherited
     descriptors, anchor, drain and state callbacks, tool and permission settings) are never passed to the Codex
-    launcher, which refuses each of them. ``model`` and ``effort`` are the route's, as routed."""
-    return {"runtime_root": runtime_root, "job_id": job_id, "operator_home": operator_home, "cwd": cwd,
-            "timeout": timeout, "on_spawn": on_spawn, "model": route.model, "effort": route.effort}
+    launcher, which refuses each of them. ``model`` and ``effort`` are the route's, as routed. A ninth option,
+    ``workflow_metadata`` (``workflow-controller-h4f`` D4b), is present only when true, which the job makes it for the
+    implementer route alone, so every other route passes exactly the eight."""
+    options = {"runtime_root": runtime_root, "job_id": job_id, "operator_home": operator_home, "cwd": cwd,
+               "timeout": timeout, "on_spawn": on_spawn, "model": route.model, "effort": route.effort}
+    if workflow_metadata:
+        options["workflow_metadata"] = True
+    return options
 
 
 def stream_texts(result: worker.WorkerResult) -> tuple[str, str]:

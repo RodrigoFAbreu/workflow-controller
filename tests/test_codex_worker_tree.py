@@ -8,6 +8,7 @@ repository unchanged after it.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -287,6 +288,19 @@ class RefusalTest(Fixture):
         self.assertEqual(set(tree.CAUSES), {
             "detached_head", "managed_branch_moved", "managed_tree_not_clean", "runtime_inside_managed",
             "managed_hooks_configured", "clone_failed"})
+
+
+
+class WorkflowMetadataPrepareTest(Fixture):
+    """``workflow-controller-h4f`` D4b: the recorded guard carries the setting the job passes."""
+
+    def test_the_default_guard_is_unflagged_and_the_flag_is_recorded(self) -> None:
+        plain = self.prepare()
+        self.assertNotIn("workflow_metadata", plain.guard)
+        shutil.rmtree(plain.path)
+        flagged = tree.prepare(self.managed, self.layout, self.base, workflow_metadata=True)
+        self.assertIs(flagged.guard["workflow_metadata"], True)
+        ws.check_guard(flagged.guard, ws.guard_digest_like(flagged.path, flagged.guard))
 
 
 if __name__ == "__main__":

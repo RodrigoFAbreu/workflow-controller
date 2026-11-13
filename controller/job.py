@@ -108,7 +108,7 @@ from typing import Any, Callable
 
 from controller import harness as adapters
 from controller import (
-    codex_carry, codex_review_role, codex_tester, codex_worker, codex_worker_job, codex_worker_landing, codex_worker_sandbox, codex_worker_tree, evidence, functional_review, generator_run, gitrepo, identity, lock, milestone_branch, notify, pr_report, protocol, protocol_decision, review, review_mode, review_rounds,
+    checkpoint_claims, codex_carry, codex_review_role, codex_tester, codex_worker, codex_worker_job, codex_worker_landing, codex_worker_sandbox, codex_worker_tree, evidence, functional_review, generator_run, gitrepo, identity, lock, milestone_branch, notify, pr_report, protocol, protocol_decision, review, review_mode, review_rounds,
     route_select, routing, runtime, target_state, telemetry, usage, usage_record, worker, worker_launch, worker_stream, workflow_contract,
 )
 from controller.decision import (
@@ -8973,9 +8973,9 @@ def _supervisor_lock(runtime_root: Path, job_id: str, *, record: Mapping | None 
 
 #: The tree a Codex worker runs in (H4c1, D5; H4e, D1): ``(managed_repo, layout, base) -> Prepared``, the layout's
 #: worktree prepared as a private clone of the managed branch at ``base``, the commit the Controller captured before the
-#: job. ``None`` by default -- no real role routes a Codex worker until H4e2, so with no preparer the branch refuses
-#: before the launch. ``codex_worker_tree.prepare`` is the real preparer.
-CODEX_WORKTREE_PREPARER: Callable[[Any, codex_worker_sandbox.WorkerLayout, str], codex_worker_tree.Prepared] | None = None
+#: job. ``codex_worker_tree.prepare`` is the default (``workflow-controller-h4f``, D5); ``None`` still refuses before the
+#: launch with ``WorkerLaunchError``. The implementer route also passes ``workflow_metadata=True`` (D4b).
+CODEX_WORKTREE_PREPARER: Callable[..., codex_worker_tree.Prepared] | None = codex_worker_tree.prepare
 
 #: ``worker_streams.format`` of a Codex job: its stdout is plain text, not stream-json.
 CODEX_STREAM_FORMAT = "text"
@@ -8996,6 +8996,13 @@ def _is_codex_review_route(route: routing.ResolvedRoute) -> bool:
     route's role and harness, never on the launcher's type alone. Such a route takes the review branch
     (:func:`_run_codex_review`), never the Codex worker's."""
     return (route.role in routing.LOCAL_REVIEW_ROLES
+            and adapters.get(route.harness).name == adapters.CODEX.name)
+
+
+def _is_codex_implement_route(route: routing.ResolvedRoute) -> bool:
+    """Whether ``route`` is the checkpoint role routed to Codex (``workflow-controller-h4f``, D5, D6): keyed on the
+    route's role and harness. Such a route takes the plain Codex worker body with the implementer's landing policy."""
+    return (route.role in routing.IMPLEMENT_ROLES
             and adapters.get(route.harness).name == adapters.CODEX.name)
 
 
@@ -9074,13 +9081,48 @@ def _land_codex_worker(managed_repo: Any, *, runtime_root: Path, job_id: str, re
     if breach is None:
         breach = result is not None and result.subtype == codex_worker.SUBTYPE_BREACH
     try:
+        # The implementer route's landing also judges the content of the range (workflow-controller-h4f, D3, D6): the
+        # surface and the state fields a checkpoint may change. No other route passes either argument.
+        policy = ({"surface": codex_worker_landing.LandingSurface.IMPLEMENTER,
+                   "work_item_id": str(record["work_item_id"])} if _is_implementer_record(record) else {})
         landing = CODEX_LANDER(managed_repo, prepared, runtime_root, job_id, worker_breach=breach,
-                               on_intent=on_intent)
+                               on_intent=on_intent, **policy)
     except Exception as exc:  # noqa: BLE001 -- the seam is the caller's; a refusal like the lander's own
         landing = codex_worker_landing.Landing(
             "refused", "landing_error", prepared.base, None, prepared.branch,
             message=f"the landing failed unexpectedly: {type(exc).__name__}: {exc}")
     return current["record"], landing
+
+
+def _is_implementer_record(record: Mapping) -> bool:
+    """Whether a Codex worker record is the implementer route's (``workflow-controller-h4f``): the marker
+    ``_run_codex_worker`` writes with the ``codex_worker`` block, which no other route's record carries."""
+    block = record.get("codex_worker")
+    return isinstance(block, Mapping) and block.get("implementer") is True
+
+
+def _remove_landed_clone(runtime_root: Path, job_id: str, record: Mapping, block: Mapping,
+                         clone: str | None) -> dict:
+    """The removal of the clone of a ``landed`` or ``nothing`` landing, the uninterrupted ending's and the recovery's
+    twin alike (D6b). For the implementer route a clone that holds work no commit carries (a tracked or staged change,
+    an untracked file, or a read that cannot be made; :func:`codex_worker_landing.unfinished_work`) is kept: everything
+    of the job directory but the tree goes, and the landing block records ``tree_left = {reason: "unfinished_work",
+    path, tracked, untracked}`` (counts, never contents). Nothing is carried to the managed tree. Every other clone is
+    removed exactly as before, and a removal that failed is ``tree_left`` with its reason. Returns the block."""
+    result = dict(block)
+    probe = clone or (_standing_clone_path(record, runtime_root) if _is_implementer_record(record) else None)
+    if _is_implementer_record(record) and probe is not None:
+        found = codex_worker_landing.unfinished_work(probe, runtime_root, job_id)
+        if found is not None:
+            _settle_codex_worker_dir(runtime_root, job_id, keep_tree=True)
+            result["clone_kept"] = True
+            result["tree_left"] = {"reason": "unfinished_work", **found}
+            return result
+    left = _settle_codex_worker_dir(runtime_root, job_id, keep_tree=False)
+    if left is not None:
+        result["clone_kept"] = True
+        result["tree_left"] = {"reason": left, "path": clone}
+    return result
 
 
 def _delete_landing_ref(managed_repo: Any, runtime_root: Path, job_id: str) -> bool:
@@ -9114,10 +9156,7 @@ def _apply_codex_landing(record: JobRecord, *, managed_repo: Any, runtime_root: 
         block["ref_left"] = True
         block["ref"] = f"{gitrepo.LANDING_REF_PREFIX}{job_id}"
     if recovery.remove_tree:
-        left = _settle_codex_worker_dir(runtime_root, job_id, keep_tree=False)
-        if left is not None:
-            block["tree_left"] = {"reason": left, "path": recovery.clone}
-            block["clone_kept"] = True
+        block = _remove_landed_clone(runtime_root, job_id, record, block, recovery.clone)
     else:
         # A kept clone keeps `tree` and the sessions alone (D7), as the live refusal does; the credentials were
         # settled by the caller before this call, so the copy-back has already run.
@@ -9148,6 +9187,26 @@ def _carry_progress(block: Mapping, root: Path) -> dict:
     with contextlib.suppress(Exception):
         return {"stage": block.get("stage"), "not_written": codex_carry.not_written(block, Path(root))}
     return {"stage": block.get("stage"), "not_written": None}
+
+
+def _prepare_implementer_tree(preparer: Callable[..., codex_worker_tree.Prepared], managed_repo: Any,
+                              layout: codex_worker_sandbox.WorkerLayout, base: str, record: Mapping,
+                              runtime_root: Path) -> codex_worker_tree.Prepared:
+    """D5: the implementer route's clone. The managed common directory is read first, for a claim or an amendment the
+    clone's own empty one cannot show (:func:`checkpoint_claims.check`), then the tree is made with the Workflow's
+    checkpoint bookkeeping left unrecorded by the guard (D4b); an uncommitted managed tree, which the preparer refuses
+    as ``managed_tree_not_clean``, is refused with that cause named and its remedy. Every refusal is a
+    :class:`ControllerError`, so the job ends ``WorkerNotStarted`` with no clone left."""
+    checkpoint_claims.check(managed_repo, str(record["work_item_id"]),
+                            codex_worker_tree.scrubbed_runner(layout.base, no_optional_locks=True))
+    try:
+        return preparer(managed_repo, layout, base, workflow_metadata=True)
+    except codex_worker_tree.CodexTreeError as exc:
+        if exc.cause != "managed_tree_not_clean":
+            raise
+        raise checkpoint_claims.ManagedStateRefused(
+            "managed_tree_not_clean", "the managed repository has uncommitted changes, which a clone cannot receive "
+            "and a landing could not return", evidence=dict(exc.evidence)) from exc
 
 
 def _run_codex_worker(
@@ -9183,11 +9242,14 @@ def _run_codex_worker(
 
     try:
         operator_home = CODEX_HOME_RESOLVER()
+        implementer = carry is None and _is_codex_implement_route(route)
         record = _persist(runtime_root, job_id, {
             **record, "codex_worker": {
                 "operator_home": str(operator_home),
                 "captured_digest": review._sha256_file(Path(operator_home) / review.CODEX.credential_file),
-                "lock_inherited": False},
+                "lock_inherited": False,
+                # The implementer route's marker (workflow-controller-h4f, D6b): the recoveries read it from the record.
+                **({"implementer": True} if implementer else {})},
             "updated_at": _now()}, event="codex_worker_prepared")
         layout = codex_worker_sandbox.WorkerLayout(runtime_root, job_id)
         if carry is not None:
@@ -9199,14 +9261,17 @@ def _run_codex_worker(
                     "no worktree is prepared for a Codex worker: how the tree is made and how its commits return to "
                     "the managed repository is not decided yet",
                     evidence={"job_id": job_id, "harness": route.harness})
-            prepared = preparer(managed_repo, layout, base)
+            if implementer:
+                prepared = _prepare_implementer_tree(preparer, managed_repo, layout, base, record, runtime_root)
+            else:
+                prepared = preparer(managed_repo, layout, base)
         record = _persist(runtime_root, job_id, {
             **record, "codex_worker": {**record["codex_worker"], "clone": prepared.to_dict()},
             "updated_at": _now()}, event="codex_worker_clone")
         cwd = Path(prepared.path)
         options = codex_worker_job.launch_options(
             runtime_root=runtime_root, job_id=job_id, operator_home=operator_home, cwd=cwd, timeout=timeout,
-            on_spawn=on_spawn, route=route)
+            on_spawn=on_spawn, route=route, workflow_metadata=implementer)
         result = launcher.launch(worker_task(decision.action), **options)
         stdout_text, stderr_text = codex_worker_job.stream_texts(result)
         runtime.fill_log_file(runtime_root, f"jobs/{job_id}/worker.stdout", stdout_text.encode("utf-8"))
@@ -10363,10 +10428,9 @@ def _launch_job(
             **record, "codex_worker": {**record["codex_worker"], "landing": block}, "updated_at": _now()},
             event="codex_landed" if landing.outcome == "landed" else "codex_nothing_to_land",
             details={"commits": len(landing.commits)})
-        left = _settle_codex_worker_dir(runtime, job_id, keep_tree=False)
-        if left is not None:
-            record = {**record, "codex_worker": {**record["codex_worker"], "landing": {
-                **block, "clone_kept": True, "tree_left": {"reason": left, "path": clone_path}}}}
+        settled = _remove_landed_clone(runtime, job_id, record, block, clone_path)
+        if settled != block:
+            record = {**record, "codex_worker": {**record["codex_worker"], "landing": settled}}
 
     if decision.protocol is not None:
         # Orchestration-protocol-v1 E.1: the Workflow's own `reconcile`

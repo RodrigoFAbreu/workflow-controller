@@ -69,6 +69,8 @@ Updating a milestone's own branch in place is proven only at these phases:
 - `AWAITING_LOCAL_PLAN_REVIEW`, `REVISING_PLAN` and `AWAITING_PLAN_APPROVAL`, including a bundle a 2.5.1 withdrawal left behind (the Controller stops at a gate whose steps regenerate it);
 - `IMPLEMENTING`, between checkpoints.
 
+This repository's own move to Workflow 2.29.3 ([W1](items/workflow-controller-w1.md)) ran at the second of those phases, with the lane stopped by `workflow-controller step` before the first checkpoint's worker started, and needed no change to the steps above.
+
 At any other phase an in-flight update is untested. After a 2.5.1 to 2.6.0 move, `/milestone-plan` at `IMPLEMENTING` no longer re-plans: 2.6.0 routes a plan change to `/request-plan-amendment`, which only a human runs.
 
 If you update the trunk while a milestone branch stays on the old release, the branch keeps its release and readiness still ends at `integration_required`. After the manual merge the close-out completes, and the same step then refuses once with `WORKFLOW_RELEASE_CHANGED` (the close-out is recorded); the next invocation admits the trunk's release. Workflow 2.6.0's lifecycle lock reads the `installation.json` committed at `HEAD` of every registered worktree, so a linked worktree whose branch predates the update counts as lagging. The Controller itself creates no linked worktrees.

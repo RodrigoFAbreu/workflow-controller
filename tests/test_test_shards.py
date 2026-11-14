@@ -2416,6 +2416,81 @@ class LeakScanTest(unittest.TestCase):
         self.assertEqual(shards.scan_marked_processes(marker), [])
 
 
+class NamespaceLauncherTest(unittest.TestCase):
+    """NS1 CP1: the argv builder, the probe, and the leak scan across a PID namespace."""
+
+    def fake_launcher(self, body: str) -> str:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        path = Path(tmp.name) / "unshare"
+        path.write_text("#!/bin/sh\n" + body)
+        path.chmod(0o755)
+        return str(path)
+
+    def test_the_argv_carries_every_flag_then_the_command_unchanged(self) -> None:
+        command = ["/usr/bin/python3", "tools/run_tests.py", "exec-shard", "--shard", "0"]
+        argv = shards.namespace_command(command, launcher="/x/unshare")
+        self.assertEqual(argv[0], "/x/unshare")
+        flags = argv[1:len(shards.UNSHARE_FLAGS) + 1]
+        self.assertEqual(flags, list(shards.UNSHARE_FLAGS))
+        for flag in ("--user", "--map-current-user", "--pid", "--fork", "--kill-child",
+                     "--mount-proc"):
+            self.assertIn(flag, flags)
+        self.assertEqual(argv[len(shards.UNSHARE_FLAGS) + 1:], command)
+
+    def test_the_probe_runs_the_builders_own_argv(self) -> None:
+        log = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, log, True)
+        launcher = self.fake_launcher(f'echo "$@" > {log}/argv\nexit 0\n')
+        prefix, reason = shards.probe_namespace(launcher=launcher)
+        self.assertEqual((prefix, reason), (shards.namespace_command([], launcher=launcher), ""))
+        self.assertEqual((log / "argv").read_text().split(),
+                         [*shards.UNSHARE_FLAGS, "true"])
+
+    def test_a_launcher_that_rejects_one_flag_fails_the_probe(self) -> None:
+        launcher = self.fake_launcher(
+            'for a in "$@"; do if [ "$a" = --map-current-user ]; then\n'
+            'echo "unshare: unrecognized option $a" >&2; exit 1; fi; done\nexit 0\n')
+        prefix, reason = shards.probe_namespace(launcher=launcher)
+        self.assertIsNone(prefix)
+        self.assertIn("--map-current-user", reason)
+
+    def test_a_missing_or_hung_launcher_fails_the_probe_with_a_reason(self) -> None:
+        prefix, reason = shards.probe_namespace(launcher="/nonexistent/unshare")
+        self.assertIsNone(prefix)
+        self.assertIn("could not start", reason)
+        hung = self.fake_launcher("exec sleep 30\n")
+        with unittest.mock.patch.object(shards, "NAMESPACE_PROBE_SECONDS", 0.3):
+            prefix, reason = shards.probe_namespace(launcher=hung)
+        self.assertIsNone(prefix)
+        self.assertIn("did not finish", reason)
+        with unittest.mock.patch.object(shards.shutil, "which", return_value=None):
+            self.assertEqual(shards.probe_namespace()[0], None)
+
+    def test_the_scan_finds_a_marked_process_inside_a_namespace_while_the_shard_runs(self) -> None:
+        # D7: the host's /proc reads the environ of a process in a child user
+        # namespace of the same user; after the init exits the kernel has
+        # already killed it, so only a scan during the run can find it.
+        prefix, reason = shards.probe_namespace()
+        if prefix is None:
+            self.skipTest(f"no PID namespace on this host: {reason}")
+        marker = f"ns-scan-{uuid.uuid4().hex}/0"
+        process = subprocess.Popen(
+            [*prefix, "sh", "-c", "sleep 300 & wait"],
+            env={**os.environ, shards.SHARD_MARKER_ENV: marker},
+            stdin=subprocess.DEVNULL, start_new_session=True)
+        self.addCleanup(lambda: process.poll() is None and os.killpg(process.pid, signal.SIGKILL))
+        deadline = time.monotonic() + 10
+        found = []
+        while not any(leak["argv"] == ["sleep", "300"] for leak in found) \
+                and time.monotonic() < deadline:
+            time.sleep(0.05)
+            found = shards.scan_marked_processes(marker)
+        self.assertIn(["sleep", "300"], [leak["argv"] for leak in found])
+        os.killpg(process.pid, signal.SIGKILL)
+        process.wait(timeout=10)
+
+
 #: No class atom of more than one test may exceed this many seconds in the committed
 #: CI timings (CI1b, D5). A class past it is split along its test methods so that the
 #: planner can balance the halves; a single-test atom cannot be split by class and is

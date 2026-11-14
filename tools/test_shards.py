@@ -80,6 +80,7 @@ import math
 import os
 import re
 import select
+import shutil
 import signal
 import subprocess
 import sys
@@ -1990,6 +1991,51 @@ def execute_shard(plan: Mapping, index: int, results_dir: Path, repo_root: Path 
     validate_shard_result(record)
     write_json_atomic(result_path(results_dir, index), record)
     return record, status
+
+
+# -- the PID namespace a local shard runs in -------------------------------------------------
+
+
+#: ``--namespace`` values; ``auto`` wraps when the probe succeeds, ``require``
+#: refuses a run when it fails, ``off`` never wraps.
+NAMESPACE_MODES = ("auto", "require", "off")
+NAMESPACE_ENV = "CONTROLLER_TEST_NAMESPACE"
+#: ``--map-current-user`` keeps the invoking uid (a root-in-namespace write to
+#: an unwritable test root would otherwise succeed), ``--kill-child`` ends the
+#: executor with its launcher, ``--mount-proc`` gives the namespace its own
+#: ``/proc``. They need util-linux 2.32 and 2.38.
+UNSHARE_FLAGS = ("--user", "--map-current-user", "--pid", "--fork", "--kill-child",
+                 "--mount-proc")
+NAMESPACE_PROBE_SECONDS = 10.0
+
+
+def namespace_command(command: Iterable[str], *, launcher: str = "unshare") -> list[str]:
+    """``command`` behind the namespace launcher: the one place the argv is built."""
+    return [launcher, *UNSHARE_FLAGS, *command]
+
+
+def probe_namespace(*, launcher: str | None = None) -> tuple[list[str] | None, str]:
+    """Whether this host lets the runner start a shard in a PID namespace:
+    ``(launcher_prefix, "")`` when ``namespace_command``'s own argv runs a
+    trivial command, else ``(None, reason)``. The probe runs the builder's
+    argv, so an ``unshare`` lacking one flag fails here, never a shard."""
+    path = launcher or shutil.which("unshare")
+    if not path:
+        return None, "unshare was not found on PATH"
+    prefix = namespace_command([], launcher=path)
+    try:
+        completed = subprocess.run([*prefix, "true"], stdin=subprocess.DEVNULL,
+                                   capture_output=True, text=True,
+                                   timeout=NAMESPACE_PROBE_SECONDS)
+    except subprocess.TimeoutExpired:
+        return None, f"the probe did not finish in {NAMESPACE_PROBE_SECONDS:g} s"
+    except OSError as exc:
+        return None, f"the probe could not start: {exc}"
+    if completed.returncode != 0:
+        lines = (completed.stderr or "").strip().splitlines()
+        detail = lines[-1] if lines else f"exit {completed.returncode}"
+        return None, f"the probe failed: {detail}"
+    return prefix, ""
 
 
 # -- leaked processes -----------------------------------------------------------------------

@@ -648,56 +648,55 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-w1` (W1), implementation revision 1, plan `docs/ai-workflow/CONTROLLER_W1_PLAN.md` (revision 4), base
-commit `956b14f`. The item moves this repository from Workflow 2.27.0 to 2.29.3 (CP1: the Manager-written files, one `MENTIONS` entry in
-`tools/ci_changes.py`; CP2: `docs/compatibility.md`, `docs/items/workflow-controller-w1.md`, `docs/update.md`). No Controller code changes. Every
-flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and
-the system directories, and no write inside the read-only product clone. Run from the product clone with `python3 -B` and no
-`PYTHONPATH=.`; flows write only to the scratch `TMPDIR`. No flow needs a pull request or a forge call, and none runs `workflow-manager update`
-(it needs the network and writes the clone); `verify` reads only the clone.
+Item `workflow-controller-ns1` (NS1), implementation revision 1, plan `docs/ai-workflow/CONTROLLER_NS1_PLAN.md` (revision 3), base commit
+`1ffbde2`. Three checkpoints: CP1 (the launcher, `--namespace`, Ctrl-C), CP2 (the kill proof, the unsafe-module list, unwrapped shards), CP3 (docs).
+Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and
+the system directories, and no write inside the read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; flows
+write only to the scratch `TMPDIR`. No flow needs a pull request or a forge call. The flows use narrow selections only: a full run is unwrapped
+until the follow-up (D9) and takes many minutes.
 
-Setup: `export TMPDIR=$(mktemp -d)`. No data to seed.
+Setup: `export TMPDIR=$(mktemp -d)`. No data to seed. Flows 1 to 4 need `unshare` with user and PID namespaces; if the sandbox forbids them, flows 1
+and 3 will show `namespace: none (<reason>)` or exit 2, which is the designed fallback and refusal: say so and mark flow 2 as skipped.
 
-**Flow 1: The installation record names 2.29.3.**
-Run `python3 -B -c "import json;d=json.load(open('.workflow-manager/installation.json'));print(d['workflow_version'])"` and
-`grep -n "WORKFLOW_RELEASE =" scripts/workflow_protocol.py`.
-Expected: the record and `scripts/workflow_protocol.py` both name 2.29.3, none names 2.27.0.
+**Flow 1: Default (`auto`) wraps a namespace-safe selection.**
+Run `python3 -B tools/run_tests.py tests.test_test_shards.NamespaceLauncherTest; echo rc=$?`.
+Expected: header line `namespace: isolated`, `# Test run: PASS`, `rc=0`.
 
-**Flow 2: The Manager's own check (CP1).**
-Run `workflow-manager verify .; echo rc=$?` (reads the clone only; it may print that it has no pin for 2.29.3 and discovered the release from its
-local record, which is not a failure).
-Expected: `installation matches workflow 2.29.3` and `rc=0`. If the Manager needs the network to answer, skip this flow and say so.
+**Flow 2: `kill(-1)` stays inside the namespace.**
+Run `python3 -B tools/run_tests.py --namespace require tests.test_run_tests.NamespaceKillProofTest; echo rc=$?`.
+Expected: `namespace: isolated`, PASS, `rc=0`; your own shell and session are still alive afterwards.
 
-**Flow 3: The Controller admits the moved release (CP1).**
-Run `python3 -B -m controller inspect . ; echo rc=$?` from the product clone.
-Expected: the work item `workflow-controller-w1` and the release print with no refusal; `rc=0`.
+**Flow 3: `off` never wraps and never probes.**
+Run `python3 -B tools/run_tests.py --namespace off tests.test_test_shards.NamespaceLauncherTest` and again with
+`CONTROLLER_TEST_NAMESPACE=off` and no flag.
+Expected: both print `namespace: none (off)` and pass. An invalid value (`--namespace bogus`) is a usage error, exit 2.
 
-**Flow 4: The change set is what the plan allows (CP1).**
-Run `git diff --stat 956b14f HEAD -- .claude .workflow-manager scripts tools`.
-Expected: the paths are `.claude/commands/{accept-milestone,apply-pr-review,satisfy-gate}.md`, `.workflow-manager/installation.json`,
-`scripts/workflow_{gate_policy_test,integration_test,protocol,protocol_test,state}.py` and `tools/ci_changes.py`; no `controller/` or `tests/` path.
-`git diff 956b14f HEAD -- tools/ci_changes.py` adds exactly one `MENTIONS` entry for `scripts/workflow_gate_policy_test.py` (three entries in all).
+**Flow 4: `require` refuses a selection that holds an unsafe module (D9).**
+Pick a module from `NAMESPACE_UNSAFE_MODULES` (`sed -n 2016,2036p tools/test_shards.py`) and run
+`python3 -B tools/run_tests.py --namespace require <that module>; echo rc=$?`; then run it with the default `auto`.
+Expected: `require` exits 2 naming the module and its reason, running nothing; `auto` runs the shard bare, the header reads `namespace: none` or
+`isolated for N of M shards (unwrapped: ...)`, with a notice.
 
-**Flow 5: The CI selection test (CP1).**
-Run `python3 -B -m unittest tests.test_ci_changes 2>&1 | tail -4`.
-Expected: `OK`.
+**Flow 5: `--plan-only` never probes.**
+Run `python3 -B tools/run_tests.py --namespace require --plan-only | head -5; echo rc=$?`.
+Expected: the plan prints (about 6600 tests, 8 shards) with no refusal, rc 0.
 
-**Flow 6: Docs (CP2).**
-Run `python3 -B tools/check_docs.py; echo rc=$?`. Read `docs/compatibility.md` (header line; the sentence listing releases that keep protocol 1.5;
-the paragraph "This repository itself runs Workflow 2.29.3"), `docs/items/workflow-controller-w1.md` and the "In the middle of a milestone"
-subsection of `docs/update.md`.
-Expected: `rc=0`. 2.28.0 to 2.29.3 are listed with what each adds (protocol 1.5 kept); the item page has status, plan link and verification; `update.md`
-has the one sentence about the move at `IMPLEMENTING`.
+**Flow 6: The launcher and tests pass both ways.**
+Run `python3 -B tools/run_tests.py --namespace require tests.test_run_tests.NamespaceModeTest tests.test_run_tests.NamespaceUnsafeShardTest tests.test_run_tests.NamespaceUnsafeListTest tests.test_test_shards`
+then the same with `--namespace off`.
+Expected: both `Test run: PASS`.
 
-**Flow 7: The Workflow's own tests on the moved scripts.**
-Run `python3 -B -m unittest scripts.workflow_protocol_test 2>&1 | tail -4`.
-Expected: `OK`.
+**Flow 7: Docs (CP3).**
+Run `python3 -B tools/check_docs.py; echo rc=$?`. Read `docs/guide/development.md` ("The test runner", "Namespace"), `docs/items/workflow-controller-ns1.md`
+and the test-running paragraph of `CLAUDE.md`.
+Expected: `rc=0`; the pages state the three settings, that a full or `--serial` local run is unwrapped until the follow-up, D6 to D9, and that O1 and O2
+are open owner decisions.
 
-**Known limitations / out of scope.** No Controller code, no new Controller command and no protocol change; the Controller's own steps do not adopt the
-new 2.28.0 to 2.29.3 commands. The full suite (`python3 tools/run_tests.py`) is not a flow: three `tests.test_fake_codex_contract` tests fail where
-`~/.codex` config is read (environmental), and `tests.test_job_codex_apply.ImplRecoveryTest` cases can fail from a shared `job1` tag collision in another
-shard (they pass alone). The Workflow's gate-policy test (`scripts/workflow_gate_policy_test.py`) is large and slow; it is not a flow here.
+**Known limitations / out of scope.** A full or `--serial` local run wraps no shard (the unsafe-module list spans every shard) until the follow-up
+item; CI is unwrapped. The worker-side refusal of a bare `python3 -m unittest` and the guard harness (O2) are not built. Signalling inside the
+Controller itself was done in PR #328. The full suite is not a flow: three `tests.test_fake_codex_contract` tests fail where `~/.codex` config is read
+(environmental), and `ImplRecoveryTest` cases can fail from a shared `job1` tag collision in another shard (they pass alone).
 
 ## Next action
 
-The functional review of `workflow-controller-w1`: test the checklist above and place findings at `.ai-review/workflow-controller-w1/feedback/FUNCTIONAL_REVIEW.md`; when testing is clean, `/accept-milestone`.
+The functional review of `workflow-controller-ns1`: test the checklist above and place findings at `.ai-review/workflow-controller-ns1/feedback/FUNCTIONAL_REVIEW.md`; when testing is clean, `/accept-milestone`.

@@ -654,9 +654,11 @@ self-protection entry (`OPUS-R25-006`/`OPUS-R26-004`) exists to prevent.
 2. **After the plan approval, `plan_stage` half.** The approval is stale
    the moment the edit is committed, and `implementing_entry_reachable`
    and `/accept-milestone`'s own registry-coverage check both refuse. Run
-   the plan revision through its real gate: `/apply-plan-review` (or
-   `/milestone-plan` again) to publish a new `plan_revision`, then the
-   two-stage plan review, then `/approve-review plan`. Do **not**
+   the plan revision through its real gate: `/request-plan-amendment` (admitted
+   only at `IMPLEMENTING` or `SELF_REVIEWING_IMPLEMENTATION`) and then
+   `/milestone-plan` to publish a new `plan_revision`, then the
+   two-stage plan review, then `/approve-review plan` (or `/satisfy-gate`
+   when the plan gate is automatic). Do **not**
    hand-edit `plan_approval`, and do not report the item as `CURRENT` on
    the strength of the stored `status` field — that field is a cache, and
    recomputation is the authority.

@@ -2,7 +2,9 @@
 
 Item id: `workflow-controller-w1`.
 
-Not yet planned. Move this repository from Workflow 2.27.0 to 2.29.3. Owner request (2026-11-13): "upgrade the workflow when possible". Complexity: low (a chore).
+Status: implementing (2026-11-14); CP1 is complete and CP2 records the move. Plan: [CONTROLLER_W1_PLAN.md](../ai-workflow/CONTROLLER_W1_PLAN.md). Move this repository from Workflow 2.27.0 to 2.29.3. Owner request (2026-11-13): "upgrade the workflow when possible". Complexity: low (a chore).
+
+The move ran through the Workflow Manager (`update`, `verify`, `inspect`) at `IMPLEMENTING`, between checkpoints, with the lane stopped by `workflow-controller step`, and CP1's checkpoint commit landed it. Verification at CP1: `workflow-manager verify .` reports the installation matches 2.29.3; the installed `workflow-controller inspect .` and `python3 -m controller inspect .` print the item with no refusal; `python3 tools/check_docs.py` passes; `python3 tools/run_tests.py` ran 6605 tests and failed four, all known environmental or cross-shard causes (the three `tests.test_fake_codex_contract` cases, and one codex-apply test that collided on a shared fake `codex exec` tag and passes alone).
 
 ## Scope
 
@@ -15,7 +17,3 @@ One mechanism: the Workflow move, following [Compatibility](../compatibility.md)
 ## Out of scope
 
 Adopting the new commands in the Controller's own steps (a separate item if wanted) and any protocol change.
-
-## Not yet planned
-
-Not yet planned. The rules that apply (the sizing rule: at most one new mechanism, releasable alone) are on [Planning rules](../planning-rules.md#next-in-order-and-the-sizing-rules).

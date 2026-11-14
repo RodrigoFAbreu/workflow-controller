@@ -91,6 +91,8 @@ MENTIONS: tuple[tuple[str, str, str], ...] = (
      "hashes every file of a pinned snapshot or a temporary tree (compute_tree_digest); never the checkout's documentation"),
     ("scripts/workflow_state_test.py", "**/*",
      "lists a temporary repository's files; the scan reaches a parameter by name, so the name `root` is conflated"),
+    ("scripts/workflow_gate_policy_test.py", "**/*",
+     "lists a temporary repository's files; the scan reaches a parameter by name, so the name `root` is conflated"),
 )
 
 #: Roots that are temporary repositories a module builds itself: a module and

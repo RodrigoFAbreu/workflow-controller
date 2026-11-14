@@ -1116,7 +1116,11 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     # user-only /resume-implementation for a 2.1/2.2 item and drops the wrong
     # "legacy promotion" origin -- intentional content change, outside every
     # "1"-inert span.
-    "accept-milestone.md": "8eb653d3352bb4dba6efc4fb637a12b8d16ad71b857a33a366f13b7851e8f8f7",
+    # accept-milestone.md further updated, workflow-2.28.0 (acceptance-findings-floor, CP1):
+    # step 5a names `python3 scripts/workflow_state.py --write-findings-record <id>` first and
+    # keeps the Python call as the specification -- intentional content change.
+    # workflow-2.29.3 (wording-pass-plain-commands, CP1): wording only -- intentional content change.
+    "accept-milestone.md": "3a1112a618b7659bb13250f2963becdce0fe52614f053a8b3295d90cf6cbfe88",
     # prepare-functional-review.md further updated, baseline-portability
     # correctness fix (OPUS-R129-001): step 3a's checklist-evidence
     # provenance commit instruction now states the same "trailers must be
@@ -1448,7 +1452,8 @@ _GOLDEN_COMMAND_FILE_SHA256 = {
     "apply-functional-review.md": "fb014dca648d03a1593005f85b06185a6ae7974773f1310eb9850cf5ecabdf28",
     # workflow-2.10.0 (retire-21-for-new-work, CP3): first recorded hash; the broad
     # fix's refusal under a "2.1" default and the re-run from `already_reopened`.
-    "apply-pr-review.md": "a3a29923ca6333090cd54ea819f73964eeb73c58980cee08f6bddb3305347a18",
+    # workflow-2.29.3 (wording-pass-plain-commands, CP1): wording only -- intentional content change.
+    "apply-pr-review.md": "030135d2162246142b31c97270c8cd446b9068a52dc8e00cc79b1a04e62c1c23",
     # workflow-2.18.0 (harness-neutral-commands, CP2): the command bodies name the model "the agent"
     # and restate the six user-only guards (D-Guard); `apply-pr-review.md` and `prepare-review.md` gain
     # `$ARGUMENTS` (D-Args); the five rows below are first recorded hashes -- intentional content changes.

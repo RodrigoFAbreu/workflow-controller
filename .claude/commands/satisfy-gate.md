@@ -181,6 +181,11 @@ still runs step 1, which queries GitHub and decides; `not_checked` names what th
 report does not claim. The report is **read-only** (no lock, no write, no GitHub
 call). Run it as written, not under `python3 -I`.
 
+A state file or registry that is malformed is answered with one JSON object (for the
+registry, a `registry_unresolvable` blocker in the report), never a traceback; an
+absent state file is `StateMissing` and one holding `null` is `StateMalformed`. The
+same is true of `--finding-dispositions`.
+
 Step 0's `python3 scripts/workflow_backlog.py preflight-accept <work-item-id>`
 runs **first**, before the completion command below: the flag does not run it, and
 `ready: true` does not stand in for it (the report names it in `not_checked`). A
@@ -192,11 +197,16 @@ Then, once step 0 passed, complete with one plain command (workflow-2.27.0):
 python3 scripts/workflow_state.py --satisfy-acceptance <work-item-id>
 ```
 
-It makes `/accept-milestone` step 2a's phase and registry check first (the library
-does not; the same code the report uses for `work_item_terminal`,
-`registry_unresolvable` and `phase_not_reachable`), then runs steps 1 to 3's one
-transaction (`workflow_state.satisfy_acceptance_gate`: the query, the trust
-record and the order unchanged) in one process, and prints exactly `{"record",
+It runs steps 1 to 3's one transaction (`workflow_state.satisfy_acceptance_gate`:
+the query, the trust record and the order unchanged) in one process, and
+`/accept-milestone` step 2a's phase and registry check is that transaction's first
+act, made inside the transaction, under the state lock, on the state just re-read and
+before anything is queried (the same code the report uses for `work_item_terminal`,
+`registry_unresolvable` and `phase_not_reachable`), so a writer that lands before the
+lock cannot make it complete from a phase it must refuse; a phase refusal therefore
+takes the lock (it creates the lock file on first use) and writes nothing else.
+`workflow_state.complete_work_item` refuses the same phases (`CompletionPhaseNotReachableError`,
+the same codes) for every other caller. It prints exactly `{"record",
 "trailer"}` with exit 0; `trailer` is the value for step 4's
 `Workflow-Gate-Satisfied-By`. A refusal exits 1 with one object `{"error",
 "message", "state_changed"}` (plus `"code"` when the exception has one:
@@ -206,11 +216,63 @@ record and the order unchanged) in one process, and prints exactly `{"record",
 reopening, named in the message) was stored, as step 2 says. Any other
 `state_changed: true` means another writer changed the state: stop and re-read it. A refusal is never
 worked around by hand-writing the completion. The command does not commit, does
-not edit documents, does not write the findings record and does not record the
-floor: steps 4 and 5 below stay the worker's own edits, `git commit` and the two
-Python calls (the findings record and the floor) until their own plain commands
-exist. Run it as written, not under `python3 -I`. The Python descriptions in this
-section stay the specification.
+not edit documents, does not write the findings record (the next paragraph does)
+and does not record the floor: steps 4 and 5 below stay the worker's own edits,
+`git commit` and, for the floor, the plain command below. Run it as written, not under
+`python3 -I`. The Python descriptions in this section stay the specification.
+
+Once the completion command has printed its answer, step 4's findings record is one
+plain command too (workflow-2.28.0):
+
+```
+python3 scripts/workflow_state.py --write-findings-record <work-item-id>
+```
+
+It is `/accept-milestone` step 5a's call (`write_finding_dispositions_record`) on the
+stored state, which the completion command just wrote, and prints exactly `{"paths":
+[...]}` with exit 0: the paths the completion commit stages. It refuses an item that
+is not `MILESTONE_COMPLETE` (`work_item_not_complete`) and takes no lock; it commits
+nothing and writes no file but the record. A refusal exits 1 with one object
+`{"error", "message", "record_changed", "state_changed"}` (plus `"code"`): with both
+`false` the content of both files is unchanged, so stop and fix the cause; `record_changed: true` means
+the record moved and the write then failed, so do not stage or commit it, fix the
+cause and run it again (a successful run rewrites the whole file);
+`state_changed: true` means another writer changed the state: stop and re-read it.
+Run it as written, not under `python3 -I`.
+
+The floor (step 5) is one plain command too (workflow-2.29.0), run after step 4's
+completion commit and only when the evaluation observed a setting stricter than
+`gate_policy_floor` (a run that finds nothing prints `commit: null`, harmless):
+
+```
+python3 scripts/workflow_state.py --commit-gate-policy-floor <work-item-id>
+```
+
+It calls `commit_gate_policy_floor` and, when that finds nothing to record, commits a
+floor already waiting in the state file (a run that stopped after writing it), and
+prints exactly `{"commit": <sha>|null, "recovered": <bool>}` with exit 0: `null`
+means no stricter setting is waiting, `recovered: true` means this run committed a
+floor an earlier run had left. It refuses before anything is written unless the item
+is `MILESTONE_COMPLETE` (`work_item_not_complete`) and `HEAD` holds its completed copy
+(`completion_not_committed`). A refusal exits 1 with one object `{"error", "message",
+"commit", "state_changed"}` (plus `"code"`). With `commit: null` nothing was committed:
+fix the cause the message names (for example unstage a foreign path) and run it
+again; a floor already waiting in the state file is committed by that re-run
+(`recovered: true`), so never commit the file by hand. `state_changed: true` with
+`commit: null` means the state file's content changed during the call: this call wrote
+the floor into the file before it stopped, or another writer changed it. After a
+`DirtyIndexBeforeStagingError` that follows an interrupted staging, run
+`git restore --staged docs/ai-workflow/WORKFLOW_STATE.json` and the same command again.
+The refusals of a waiting floor (`FloorRecoveryRefusedError`, code
+`floor_provenance_failed`, `floor_record_invalid`, `floor_not_virtual` or
+`floor_looser_than_head`) are not worked around by hand either: restore only the
+`gate_policy_floor` key of the state file from `HEAD` (remove the key when `HEAD` has none;
+never restore the whole file, which would discard another item's uncommitted edits), or
+repair a failed provenance with a new `/adopt-gate-policy` commit. With `commit` set, the floor commit exists and a later check refused it: the
+approval stands and the floor stays virtual, so report the commit and the error and
+do not run it again to repair it. Run it as written, not under `python3 -I`. The
+acceptance stage has no inline Python call; the plan-stage and implementation-stage
+floors keep the Python description (`commit_gate_policy_floor`).
 
 0. **Backlog pre-flight, before the first step** (workflow-2.17.0, `D-Accept`).
    Step 1 below stores the pull-request fact, so run `python3
@@ -294,7 +356,9 @@ section stay the specification.
 5. **Record the floor, after the satisfying commit**, exactly as step 5 of "The
    policy evaluation, then the stage's transaction" says (`LPR-R23-003`:
    evaluate against the virtual floor, perform the satisfying commit, and only
-   afterwards record a stricter observed setting in its own floor commit).
+   afterwards record a stricter observed setting in its own floor commit); the
+   acceptance stage runs `python3 scripts/workflow_state.py --commit-gate-policy-floor <work-item-id>`
+   (see "Plain commands first"), not the Python call.
 6. **Report** that the milestone was accepted **by policy**, not by a person:
    the policy digest and source, each requirement and its detail, the functional
    evidence's `log_digest`, `reporter` and `run_ref`, the pull-request fact's

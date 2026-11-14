@@ -35,7 +35,8 @@
       "settings.gradle.kts": "product build configuration and product documentation -- implementation-stage content owned by whichever product work item declares it, never plan-stage design content for this item (salvage audit I8)",
       "docs/backlog.yaml": "the repository's declared backlog file or its generated roadmap page -- repository territory that acceptance edits (workflow-2.17.0 D-Classify), never this item's own deliverable",
       "docs/compatibility.md": "the Controller's compatibility and update pages -- documentation this item edits; classified so the checkpoint's Files are not unclassified",
-      "docs/update.md": "the Controller's compatibility and update pages -- documentation this item edits; classified so the checkpoint's Files are not unclassified"
+      "docs/update.md": "the Controller's compatibility and update pages -- documentation this item edits; classified so the checkpoint's Files are not unclassified",
+      "tools/ci_changes.py": "the Controller's CI change-detection tool -- implementation this item edits (one MENTIONS entry); classified so the checkpoint's Files are not unclassified"
     },
     "excluded_prefixes": {
       ".claude/commands/": "workflow command files this milestone creates (the bootstrap command, /approve-review, /accept-milestone) or modifies (the eight existing v1 commands, per D-States/D-Self-Governance) -- implementation of the approved design, not the design itself",
@@ -68,7 +69,8 @@
       "docs/DOMAIN_GLOSSARY.md": "the application's own domain terminology and business rules -- product design content a product technical review binds (salvage audit I8)",
       "docs/UX_FLOWS.md": "the application's own navigation/UI/interaction flows -- product design content a product technical review binds (salvage audit I8)",
       "docs/compatibility.md": "the Controller's compatibility page -- product documentation this item edits, protected so any change is reviewed",
-      "docs/update.md": "the Controller's update page -- product documentation this item edits, protected so any change is reviewed"
+      "docs/update.md": "the Controller's update page -- product documentation this item edits, protected so any change is reviewed",
+      "tools/ci_changes.py": "the Controller's CI change-detection tool -- product source this item edits, protected so any change is reviewed"
     },
     "protected_prefixes": {
       "app/": "application source and its own tests -- product deliverable",

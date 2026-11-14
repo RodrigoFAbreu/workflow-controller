@@ -500,7 +500,7 @@ items:
     detail: docs/items/workflow-controller-fx1.md
   - id: workflow-controller-w1
     title: "Move this repository to Workflow 2.29.3"
-    status: next
+    status: done
     order: 86
     depends_on: []
     detail: docs/items/workflow-controller-w1.md

@@ -1,0 +1,38 @@
+{
+  "dispositions": {
+    "F-1c384fd9b6e2": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/351"
+    },
+    "F-42ac7e627a04": {
+      "disposition": "fixed",
+      "note": "Plan revision 4 D2 cites the subsection 'In the middle of a milestone' and CP2 added the one-sentence record to docs/update.md (line 72)."
+    },
+    "F-663cda40c95e": {
+      "disposition": "fixed",
+      "note": "Plan revision 4 CP2 names the docs/compatibility.md locations (lines 3, 34-36, 57) and the edit landed there."
+    },
+    "F-6c20abc3c52f": {
+      "disposition": "fixed",
+      "note": "Plan revision 4 D2 step 1 names the installed Controller 1.29.0 (latest tag v1.31.1) and checks that it admits 2.29.3 before the move."
+    },
+    "F-9a7b8257fe4d": {
+      "disposition": "fixed",
+      "note": "Plan revision 4 D2 step 1 states the pre-move check from docs/compatibility.md and keeps inspect after the move as confirmation with a checkout rollback."
+    },
+    "F-9fd99627bb49": {
+      "disposition": "fixed",
+      "note": "Plan revision 4 D1 says a refusal stops the operator's sequence, and CP2 rewords the 'chore: update pull request' phrasing of docs/compatibility.md line 57."
+    },
+    "F-a48a81e7397a": {
+      "disposition": "fixed",
+      "note": "Plan revision 4 CP1 allows docs/ACTIVE_MILESTONE.md in the dirty set and states that its step 1f checkpoint commit carries the Manager-written paths."
+    },
+    "F-dbaf72f8a83a": {
+      "disposition": "fixed",
+      "note": "Plan revision 4 adds D4: CP1 needs an in-place implementer and routing is kept on Claude for this item."
+    }
+  },
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-w1"
+}

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-ns1",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -73625,6 +73625,219 @@
         },
         "evaluated_at": "2026-11-14T02:56:49Z",
         "workflow_release": "2.29.3"
+      }
+    },
+    "workflow-controller-ns1": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-ns1",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_NS1_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-ns1-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ns1-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 2,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "1ffbde28b8309130033a0258f33f1c3034de5c37",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "9cfe48ec8ea20367816d3d08cd23dac7b6dda4235b8f50e95cc4a5d385dd7f5d",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "9cfe48ec8ea20367816d3d08cd23dac7b6dda4235b8f50e95cc4a5d385dd7f5d",
+        "approved_review_content_id": "54459786b1181c95ce15124fe4b9e6e555942abc64b41c56928e91eb37dcc27e",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_NS1_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1511677a873c3f69a9819be64561c75d174ae262"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-ns1-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "be63b81540edfa70b0a327e0904289d24ab544e9"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-ns1-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5db191ffae63d9bfb52ae3f36bbf51fad0209f7d"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-14T11:57:56Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "54459786b1181c95ce15124fe4b9e6e555942abc64b41c56928e91eb37dcc27e",
+            "ledger": {
+              "local": {
+                "bundle_id": "9cfe48ec8ea20367816d3d08cd23dac7b6dda4235b8f50e95cc4a5d385dd7f5d",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "68e6e30a76ec884d67a7f95eefc80f63bbc6e449e10411cd56a7839738647ef8",
+                "ledger_entry_sha256": "614cb4db89568a3c7d419f0cf812ce5ca93dbb6ed0bd9af23f19d31d87bc1c6f",
+                "run_ref": "session:local .ai-review/workflow-controller-ns1/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "9cfe48ec8ea20367816d3d08cd23dac7b6dda4235b8f50e95cc4a5d385dd7f5d",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "61df190f2a3ad436822d22513407258f7fba9f36e21a727515f84567614ac8f5",
+                "ledger_entry_sha256": "e11d7c143d78deaf6bea52b48b9f6bd46625ce286666b61302a19651fabee9a5",
+                "run_ref": "codex:20261114T115229Z-e0fa9550",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-14T11:57:56Z",
+          "workflow_release": "2.29.3"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "54459786b1181c95ce15124fe4b9e6e555942abc64b41c56928e91eb37dcc27e",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "9cfe48ec8ea20367816d3d08cd23dac7b6dda4235b8f50e95cc4a5d385dd7f5d",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-14T11:52:10Z",
+          "verdict_sha256": "68e6e30a76ec884d67a7f95eefc80f63bbc6e449e10411cd56a7839738647ef8",
+          "run_ref": "session:local .ai-review/workflow-controller-ns1/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "9cfe48ec8ea20367816d3d08cd23dac7b6dda4235b8f50e95cc4a5d385dd7f5d",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-14T11:55:00Z",
+          "verdict_sha256": "61df190f2a3ad436822d22513407258f7fba9f36e21a727515f84567614ac8f5",
+          "run_ref": "codex:20261114T115229Z-e0fa9550",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 2,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 9,
+      "last_transition": "2026-11-14T11:57:56Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-14T11:49:35Z",
+        "consumed": {
+          "review_content_id": "1e8db38f3d055e58ae3d98a4b1a492564fed8774570afbf0daa1d53731cb0957",
+          "plan_revision": 1,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "54459786b1181c95ce15124fe4b9e6e555942abc64b41c56928e91eb37dcc27e",
+          "plan_revision": 2
+        },
+        "bound": {
+          "review_content_id": "54459786b1181c95ce15124fe4b9e6e555942abc64b41c56928e91eb37dcc27e",
+          "bundle_id": "9cfe48ec8ea20367816d3d08cd23dac7b6dda4235b8f50e95cc4a5d385dd7f5d",
+          "plan_revision": 2
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "1e8db38f3d055e58ae3d98a4b1a492564fed8774570afbf0daa1d53731cb0957"
+      ],
+      "optional_findings": {
+        "F-5c48ac81f2b7": {
+          "digest": "5c48ac81f2b7d4728aefabc9c6ba7bc9f961e8d90589c0ff2b7658d325563058",
+          "text": "**O1.** D1 describes the probe as `unshare ... true`. Make CP1 state that the probe runs the builder's own argv (every D1 flag, including `--kill-child` and `--map-current-user`, which need util-linux 2.32 and 2.38), so an older `unshare` that lacks one flag fails the probe and does not fail the shard.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "1e8db38f3d055e58ae3d98a4b1a492564fed8774570afbf0daa1d53731cb0957",
+              "verdict": "REVISE",
+              "at": "2026-11-14T11:45:59Z"
+            }
+          ]
+        },
+        "F-38dc0010b7cd": {
+          "digest": "38dc0010b7cd391c4fbe43bd64bfcc8dea1dd46e51dcc50756fe40051ad0b540",
+          "text": "**O1.** CP2's reading of the wrapped run should look for PID-1 effects beyond D8, so that a pass is not mistaken for coverage. Verified on this host: inside the wrapper, `os.getpgrp()` in the executor returns `0`, because the group leader `unshare` is outside the namespace. So `kill_processes`'s own-group comparison (`tools/test_shards.py:2040`) and the own-group cases of `tests/test_unsafe_process_group.py` (lines 24, 42, 52, 72) run with `0`. Fake records that use pid 1 (`tests/test_job.py:3469`, `tests/test_usage_gate.py:692`) now name the live executor rather than the host's init. `_stop_lane_on_signals`'s SIG_DFL self-kill (`tools/test_shards.py:1846-1848`) is dropped for a namespace init (not reached under D6, but its docstring's \"terminates this process\" no longer holds). Recording these in the item page's CP2 findings is enough unless one fails.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "54459786b1181c95ce15124fe4b9e6e555942abc64b41c56928e91eb37dcc27e",
+              "verdict": "APPROVE",
+              "at": "2026-11-14T11:52:10Z"
+            }
+          ]
+        },
+        "F-5fa169760b96": {
+          "digest": "5fa169760b9634e3bb8dce417f83373a777e3dbacdea2c36feed7e00f46c1bcf",
+          "text": "CP2 should use `python3 tools/run_tests.py --namespace require` for its wrapped full-run verification. The documented default, `auto`, permits fallback; `require` makes the verification command enforce isolation.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "54459786b1181c95ce15124fe4b9e6e555942abc64b41c56928e91eb37dcc27e",
+              "verdict": "APPROVE",
+              "at": "2026-11-14T11:55:00Z"
+            }
+          ]
+        }
       }
     }
   }

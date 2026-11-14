@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ns1",
+  "requirements": {
+    "R1": {
+      "description": "Every shard of a local run starts inside an isolated PID namespace, with a setting for the strictness and a noticed fallback (#329)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "A stray kill(-1) in a test is shown to reach only the namespace, the interrupt and leak-scan behaviour is pinned (D6, D7), and the namespace's artifacts (D8 included) are fixed from a wrapped full run",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "The pages and the item record the setting, the limits (D6-D8, the coverage shift) and the two open owner decisions",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    }
+  }
+}

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -640,6 +641,162 @@ class NamespaceModeTest(unittest.TestCase):
             "tests.test_orphan", extra=("--namespace", "off"), env={"ORPHAN_TOKEN": token})
         self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
         self.assertTrue(_pids_with_argument(token))
+
+
+class NamespaceKillProofTest(unittest.TestCase):
+    """NS1 CP2 (R2): a ``kill(-1, SIGKILL)`` sent from inside the wrapper reaches
+    only the namespace, never a process started outside it."""
+
+    def setUp(self):
+        reason = _have_namespace()
+        if reason:
+            self.skipTest(f"no PID namespace on this host: {reason}")
+
+    def test_kill_all_inside_the_wrapper_spares_a_sleeper_outside(self):
+        ts = _import_run_tests().ts
+        prefix, _ = ts.probe_namespace()
+        token = f"ns1-proof-{os.getpid()}-{time.monotonic_ns()}"
+        outside = subprocess.Popen(["sh", "-c", "exec sleep 60", token + "-outside"])
+        self.addCleanup(outside.wait)
+        self.addCleanup(outside.kill)
+        script = textwrap.dedent("""
+            import os, signal, subprocess, sys, time
+            inner = subprocess.Popen(["sh", "-c", "exec sleep 60", sys.argv[1] + "-inside"])
+            time.sleep(0.2)
+            os.kill(-1, signal.SIGKILL)
+            code = inner.wait(timeout=10)
+            print("inner-status", code)
+            print("my-pid", os.getpid())
+        """)
+        completed = subprocess.run(
+            [*prefix, sys.executable, "-c", script, token],
+            capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        self.assertIn("inner-status -9", completed.stdout)
+        self.assertIn("my-pid 1\n", completed.stdout)  # the child was the namespace's init
+        self.assertIsNone(outside.poll(), "the sleeper outside the namespace was killed")
+        self.assertTrue(_alive(outside.pid))
+        self.assertEqual(_pids_with_argument(token + "-inside"), [])
+
+
+class NamespaceUnsafeShardTest(unittest.TestCase):
+    """NS1 CP2 (D9): a shard that holds a listed namespace-unsafe module runs bare."""
+
+    UNSAFE = (("tests.test_pass.MorePassTest", "a test reason"),)
+
+    def setUp(self) -> None:
+        self.repo = SyntheticRepo(self)
+        self.run_tests = _import_run_tests()
+
+    DRIVER = textwrap.dedent("""
+        import json, os, sys
+        sys.path.insert(0, os.environ["NS1_TOOLS"])
+        import run_tests
+        run_tests.ts.NAMESPACE_UNSAFE_MODULES = tuple(map(tuple, json.loads(os.environ["NS1_UNSAFE"])))
+        if os.environ.get("NS1_NO_INVENTORY"):
+            def refuse(*args, **kwargs):
+                raise run_tests.ts.InventoryError("no inventory in this test")
+            run_tests.ts.build_inventory = refuse
+        sys.exit(run_tests.main(sys.argv[1:]))
+    """)
+
+    def run_in_process(self, mode: str, directory: Path, *extra: str, replay: bool = False):
+        """The runner with ``self.UNSAFE`` patched in (a child, so tests discovery
+        is the one the runner itself does) and a fake ``unshare`` on PATH."""
+        results = self.repo.results()
+        if replay:
+            argv = ["--replay", str(extra[0]), "--namespace", mode, "--results-dir",
+                    str(results), "--repo-root", str(self.repo.root)]
+        else:
+            argv = ["tests.test_pass", "--shards", "2", "--namespace", mode,
+                    "--results-dir", str(results), "--repo-root", str(self.repo.root), *extra]
+        self.last_results = results
+        env = {**self.repo.env, "PATH": f"{directory}{os.pathsep}{os.environ['PATH']}",
+               "NS1_TOOLS": str(RUN_TESTS.parent), "NS1_UNSAFE": json.dumps(self.UNSAFE)}
+        if replay:
+            env["NS1_NO_INVENTORY"] = "1"
+        completed = subprocess.run([sys.executable, "-c", self.DRIVER, *argv], env=env,
+                                   capture_output=True, text=True, timeout=120)
+        return completed.returncode, completed.stdout, completed.stderr
+
+    def test_the_unsafe_shard_runs_bare_and_the_others_run_wrapped(self) -> None:
+        directory = _fake_unshare(self)
+        status, out, err = self.run_in_process("auto", directory)
+        self.assertEqual(status, 0, out + err)
+        self.assertIn("namespace: isolated for 1 of 2 shards "
+                      "(unwrapped: tests.test_pass.MorePassTest)", out)
+        self.assertIn("1 of 2 shards run without a PID namespace", err)
+        calls = (directory / "unshare.log").read_text().splitlines()
+        self.assertEqual(len(calls), 2, calls)  # the probe and the one safe shard
+        self.assertEqual(sum("exec-shard" in call for call in calls), 1)
+
+    def test_require_refuses_a_selection_with_an_unsafe_module_and_names_it(self) -> None:
+        status, out, err = self.run_in_process("require", _fake_unshare(self))
+        self.assertEqual(status, 2, out + err)
+        self.assertIn("tests.test_pass.MorePassTest", err)
+        self.assertNotIn("selected tests", out)
+
+    def test_off_and_a_fully_safe_selection_are_unchanged(self) -> None:
+        directory = _fake_unshare(self)
+        status, out, _ = self.run_in_process("off", directory)
+        self.assertEqual(status, 0, out)
+        self.assertIn("namespace: none (off)", out)
+        self.assertFalse((directory / "unshare.log").exists())
+        self.UNSAFE = (("tests.test_nothing", "not selected"),)
+        status, out, err = self.run_in_process("require", directory)
+        self.assertEqual(status, 0, out + err)
+        self.assertIn("namespace: isolated\n", out)
+
+    def test_a_replayed_plan_resolves_modules_without_an_inventory(self) -> None:
+        directory = _fake_unshare(self)
+        status, out, err = self.run_in_process("auto", directory)
+        self.assertEqual(status, 0, out + err)
+        plan = self.last_results / "plan.json"
+        status, out, err = self.run_in_process("auto", directory, plan, replay=True)
+        self.assertEqual(status, 0, out + err)
+        self.assertIn("isolated for 1 of 2 shards", out)
+
+
+class NamespaceUnsafeListTest(unittest.TestCase):
+    """NS1 CP2 (D9, I1, I2): the list is a bounded, checked debt."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.ts = _import_run_tests().ts
+        cls.inventory = cls.ts.build_inventory()
+
+    def test_every_listed_module_exists_in_the_inventory_with_a_reason(self) -> None:
+        modules = {atom.module for atom in self.inventory.atoms}
+        for module, reason in self.ts.NAMESPACE_UNSAFE_MODULES:
+            self.assertIn(module, modules, f"{module} is a stale entry")
+            self.assertTrue(reason.strip())
+
+    def test_every_module_with_an_init_namespace_skip_is_listed(self) -> None:
+        listed = {module for module, _ in self.ts.NAMESPACE_UNSAFE_MODULES}
+        tests_dir = Path(__file__).resolve().parent
+        for path in sorted(tests_dir.glob("test_*.py")):
+            text = path.read_text()
+            if re.search(r"skip" + r"(Unless|If)\(\s*(not\s+)?_INIT_NS", text):
+                self.assertIn(f"tests.{path.stem}", listed, f"{path.name} skips outside init")
+
+    def test_a_full_default_local_run_wraps_no_shard(self) -> None:
+        # The documented consequence (D9(d)): the planner spreads the unsafe modules over every shard.
+        run_tests = _import_run_tests()
+        plan, _, _ = run_tests.compute_plan(fixtures.REPO_ROOT, self.ts.LOCAL, [],
+                                            shards=8, conformance_lane=True)
+        unsafe = {shard["index"]: found for shard in plan["shards"]
+                  if (found := self.ts.namespace_unsafe_modules(shard))}
+        with unittest.mock.patch.object(self.ts, "probe_namespace", return_value=(["u"], "")), \
+                unittest.mock.patch.object(run_tests, "_warn"):
+            _, header = run_tests.resolve_namespace("auto", unsafe=unsafe,
+                                                    shard_count=plan["shard_count"])
+        self.assertTrue(header.startswith("namespace: isolated for 0 of 8 shards (unwrapped:"),
+                        header)
+
+    def test_a_single_safe_module_selection_is_fully_wrapped(self) -> None:
+        selection = self.inventory.select(["tests.test_run_tests"])
+        shard = {"atoms": [atom.key for atom in selection.atoms]}
+        self.assertEqual(self.ts.namespace_unsafe_modules(shard), [])
 
 
 class NestedRunTest(unittest.TestCase):

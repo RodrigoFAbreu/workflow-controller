@@ -461,15 +461,17 @@ LEFTOVER_INVENTORY = (
      "_LOST_CONTROLLER's hang() loop ends with the guarded child (D9, D11)"),
     ("test_run_tests.py", "start:run", 3, "short",
      "tools/run_tests.py on a synthetic tree (plan, run, selection): it exits by itself and each call is waited with a timeout"),
-    ("test_run_tests.py", "start:Popen", 2, "bounded",
-     "a 300 s sleeper and a shard runner whose hanging test sleeps 600 s (the runner kills its shards)"),
+    ("test_run_tests.py", "start:Popen", 4, "bounded",
+     "a 300 s sleeper, a shard runner whose hanging test sleeps 600 s (the runner kills its shards), "
+     "and the namespace kill proof's 60 s sleeper outside and the Ctrl-C runner (both ended by the test)"),
     ("test_settings.py", "start:Popen", 1, "short", "a python -c snippet that exits"),
     ("test_settings.py", "start:run:controller", 1, "short",
      "a unittest child (matched by its _child_env name, not a Controller) that runs one test and exits"),
-    ("test_test_shards.py", "start:Popen", 4, "bounded",
+    ("test_test_shards.py", "start:Popen", 5, "bounded",
      "300 s sleepers, ended by exact pid, and a shard executor on a synthetic tree whose 600 s "
      "suites its lane guard ends with the executor (the test kills the executor otherwise), and the "
-     "same executor under a subreaper wrapper that never reaps (60 s wait, then killed)"),
+     "same executor under a subreaper wrapper that never reaps (60 s wait, then killed), "
+     "and a marked sleeper the namespace test finds from inside (ended by exact pid)"),
     ("test_test_shards.py", "wait", 2, "deadline", "the executor started by run_directly (30 s) and the 10 s wait on a killed child"),
     ("test_test_shards.py", "start:run", 1, "short", "a python -c probe the test waits for"),
     ("test_trunk_orchestration_e2e.py", "start:run", 1, "short", "a bash command the test waits for"),

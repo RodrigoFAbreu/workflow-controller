@@ -15,8 +15,11 @@ Local runs:
   else ``auto``): start each shard in its own PID namespace (``unshare
   --user --map-current-user --pid --fork --kill-child --mount-proc``), so a
   test's ``kill(-1)`` reaches only the run; ``auto`` runs unwrapped, with a
-  notice, where the host refuses, ``require`` refuses then; CI runs
-  ``exec-shard`` directly and is never wrapped;
+  notice, where the host refuses, ``require`` refuses then; a shard that
+  holds a module of ``test_shards.NAMESPACE_UNSAFE_MODULES`` (tests the
+  namespace makes fail or skip) runs bare, with a notice, and ``require``
+  refuses a selection that holds one; CI runs ``exec-shard`` directly and is
+  never wrapped;
 - ``--serial``: the same selection as one shard, in canonical order, through
   the same executor and environment shaping (the reference run);
 - ``--plan-only``: print the plan and exit;
@@ -64,7 +67,7 @@ import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Mapping
+from typing import Iterable, Mapping
 
 import test_shards as ts
 
@@ -88,12 +91,16 @@ def _warn(message: str) -> None:
     print(f"run_tests: warning: {message}", file=sys.stderr)
 
 
-def resolve_namespace(mode: str | None, *, launcher: str | None = None) -> tuple[list[str], str]:
-    """The launcher prefix to put before every shard command (empty: run
-    unwrapped) and the run header's ``namespace:`` text, for ``--namespace``
-    ``mode`` (else ``$CONTROLLER_TEST_NAMESPACE``, else ``auto``). ``off``
-    never probes; ``auto`` falls back, with one notice naming the probe's
-    reason; ``require`` refuses."""
+def resolve_namespace(mode: str | None, *, launcher: str | None = None,
+                      unsafe: Mapping[int, list[str]] | None = None,
+                      shard_count: int | None = None) -> tuple[list[str], str]:
+    """The launcher prefix to start a shard behind (``[]`` for unwrapped) and
+    the run header's ``namespace:`` text, for ``--namespace`` ``mode`` (else
+    ``$CONTROLLER_TEST_NAMESPACE``, else ``auto``). ``off`` never probes;
+    ``auto`` runs unwrapped, with one notice, when the probe fails; ``require``
+    is a usage error then. ``unsafe`` maps each shard to run to the listed
+    namespace-unsafe modules it holds (D9): such a shard runs bare, with one
+    notice, and ``require`` refuses the run, naming them."""
     mode = mode or os.environ.get(ts.NAMESPACE_ENV) or "auto"
     if mode not in ts.NAMESPACE_MODES:
         raise UsageError(f"{ts.NAMESPACE_ENV}={mode!r} is not one of "
@@ -101,12 +108,22 @@ def resolve_namespace(mode: str | None, *, launcher: str | None = None) -> tuple
     if mode == "off":
         return [], "namespace: none (off)"
     prefix, reason = ts.probe_namespace(launcher=launcher)
-    if prefix is not None:
+    if not prefix:
+        if mode == "require":
+            raise UsageError(f"--namespace require: no PID namespace here: {reason}")
+        _warn(f"running the shards without a PID namespace: {reason}")
+        return [], f"namespace: none ({reason})"
+    if not unsafe:
         return prefix, "namespace: isolated"
+    modules = sorted({module for found in unsafe.values() for module in found})
     if mode == "require":
-        raise UsageError(f"--namespace require: no PID namespace here: {reason}")
-    _warn(f"running the shards without a PID namespace: {reason}")
-    return [], f"namespace: none ({reason})"
+        raise UsageError("--namespace require: the selection holds modules that are not "
+                         "namespace-safe yet and cannot run wrapped: " + ", ".join(modules))
+    total = shard_count if shard_count is not None else len(unsafe)
+    _warn(f"{len(unsafe)} of {total} shards run without a PID namespace (they hold "
+          f"namespace-unsafe modules: {', '.join(modules)})")
+    return prefix, (f"namespace: isolated for {total - len(unsafe)} of {total} shards "
+                    f"(unwrapped: {', '.join(modules)})")
 
 
 def _add_planning_options(parser: argparse.ArgumentParser) -> None:
@@ -422,19 +439,21 @@ def _record_leaks(results_dir: Path, index: int, leaks: list[dict]) -> None:
 
 def run_shards(plan: dict, plan_path: Path, results_dir: Path, repo_root: Path, *,
                indexes: list[int], jobs: int, run_id: str, isolated_pip_cache: bool,
-               verbose: bool, launcher: list[str] = ()) -> tuple[set[int], dict[int, list[dict]], float]:
+               verbose: bool, launcher: list[str] = (),
+               unwrapped: Iterable[int] = ()) -> tuple[set[int], dict[int, list[dict]], float]:
     """Run ``indexes`` of ``plan`` as ``exec-shard`` children, at most
     ``jobs`` at once, each in its own session; the exclusive shard starts
     only once no other shard is running, and nothing starts beside it.
     Returns the interrupted shards, the leaks the parent found after each
     shard exited (already killed), and the wall time. A non-empty
     ``launcher`` (``resolve_namespace``) starts each shard behind it, in its
-    own PID namespace. Ctrl-C (or SIGTERM) sends SIGTERM, then SIGKILL after
+    own PID namespace, except the shards in ``unwrapped``. Ctrl-C (or SIGTERM) sends SIGTERM, then SIGKILL after
     ``INTERRUPT_GRACE_SECONDS``, to every running shard's group, and marks
     the running and queued shards interrupted. A wrapped shard gets SIGKILL
     at once: its executor is the namespace's init, which drops a signal from
     outside unless it has a handler, so SIGTERM would only wait out the
     grace; SIGKILL ends the launcher and the kernel ends the namespace."""
+    skip = set(unwrapped)
     interrupt = _Interrupt()
     previous = {sig: signal.signal(sig, interrupt) for sig in (signal.SIGINT, signal.SIGTERM)}
     queue = sorted(indexes, key=lambda i: (ts.is_exclusive(plan["shards"][i]), i))
@@ -470,11 +489,12 @@ def run_shards(plan: dict, plan_path: Path, results_dir: Path, repo_root: Path, 
                     command = [sys.executable, str(RUN_TESTS_PY), "exec-shard", "--plan",
                                str(plan_path), "--shard", str(index), "--results-dir",
                                str(results_dir), "--repo-root", str(repo_root)]
+                    wrap = bool(launcher) and index not in skip
                     process = subprocess.Popen(
-                        [*launcher, *command],
+                        [*(launcher if wrap else ()), *command],
                         cwd=repo_root, env=env, stdin=subprocess.DEVNULL, stdout=log,
                         stderr=subprocess.STDOUT, start_new_session=True)
-                running[index] = _Shard(index, process, time.monotonic(), bool(launcher))
+                running[index] = _Shard(index, process, time.monotonic(), wrap)
             for index, shard in list(running.items()):
                 if verbose:
                     _stream_log(shard, results_dir)
@@ -567,7 +587,9 @@ def cmd_run(args) -> int:
     if min(jobs, len(indexes)) > cpus:
         _warn(f"running {min(jobs, len(indexes))} shards at once on {cpus} CPUs; the "
               f"measured-safe default is one shard per CPU")
-    launcher, namespace_header = resolve_namespace(args.namespace)
+    unsafe = {i: found for i in indexes if (found := ts.namespace_unsafe_modules(plan["shards"][i]))}
+    launcher, namespace_header = resolve_namespace(args.namespace, unsafe=unsafe,
+                                                   shard_count=len(indexes))
     run_id = _run_id()
     results_dir = _results_dir(args.results_dir, run_id)
     plan_path = results_dir / "plan.json"
@@ -577,7 +599,8 @@ def cmd_run(args) -> int:
     print(namespace_header, flush=True)
     interrupted, leaks, wall = run_shards(
         plan, plan_path, results_dir, repo_root, indexes=indexes, jobs=jobs, run_id=run_id,
-        isolated_pip_cache=args.isolated_pip_cache, verbose=args.verbose, launcher=launcher)
+        isolated_pip_cache=args.isolated_pip_cache, verbose=args.verbose, launcher=launcher,
+        unwrapped=unsafe)
     records, notes = ts.load_results(plan, results_dir, indexes)
     for index, found in leaks.items():
         if records.get(index) is None:

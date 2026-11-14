@@ -2009,6 +2009,37 @@ UNSHARE_FLAGS = ("--user", "--map-current-user", "--pid", "--fork", "--kill-chil
 NAMESPACE_PROBE_SECONDS = 10.0
 
 
+#: Test modules a PID namespace makes fail or skip (NS1 D9): the shard that holds
+#: one runs bare. Read from one wrapped and one unwrapped full run; the
+#: namespace-clean follow-up removes an entry with its fix. A failure the
+#: namespace does not cause is never listed.
+NAMESPACE_UNSAFE_MODULES = (
+    ("tests.test_catalogue_determinism", "runs the scenario catalogue, whose kill points read a lock as unknown"),
+    ("tests.test_cli", "init-namespace lock tests skip outside the init PID namespace"),
+    ("tests.test_fake_claude_contract", "reads a child's pid file through /proc, which the namespace remaps"),
+    ("tests.test_lifecycle_orchestration", "the lock probe answers unknown outside the init PID namespace"),
+    ("tests.test_lock", "the lock probe answers unknown outside the init PID namespace"),
+    ("tests.test_observe", "init-namespace lock tests skip outside the init PID namespace"),
+    ("tests.test_protocol_lifecycle", "a golden regenerates the scenario catalogue, which the namespace breaks"),
+    ("tests.test_resume", "supervisor and orphan probes read the lock and /proc outside the init namespace"),
+    ("tests.test_review", "a killed worker's descendants stay zombies: the namespace's init does not reap"),
+    ("tests.test_run_scenarios", "runs the scenario catalogue, whose kill points read a lock as unknown"),
+    ("tests.test_scenario_kit", "a kill point expects the lock probe to answer free"),
+    ("tests.test_scenarios", "the kill-and-resume scenarios expect the lock probe to answer free"),
+    ("tests.test_trunk_preflight", "a golden regenerates the scenario catalogue, which the namespace breaks"),
+    ("tests.test_worker", "liveness and ownership probes read /proc outside the init namespace"),
+)
+
+
+def namespace_unsafe_modules(shard: Mapping) -> list[str]:
+    """The listed modules ``shard`` holds, resolved from its atom keys (a key
+    is the module or ``module.Class``) without an inventory, so ``--replay``
+    needs none."""
+    found = {module for module, _ in NAMESPACE_UNSAFE_MODULES
+             for atom in shard["atoms"] if atom == module or atom.startswith(module + ".")}
+    return sorted(found)
+
+
 def namespace_command(command: Iterable[str], *, launcher: str = "unshare") -> list[str]:
     """``command`` behind the namespace launcher: the one place the argv is built."""
     return [launcher, *UNSHARE_FLAGS, *command]

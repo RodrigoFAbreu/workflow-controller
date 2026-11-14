@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "work_item_id": "workflow-controller-ns1",
-  "plan_revision": 2,
+  "plan_revision": 3,
   "checkpoints": [
     {
       "id": "CP1",
@@ -12,7 +12,7 @@
     },
     {
       "id": "CP2",
-      "name": "A live proof and the namespace artifacts",
+      "name": "A live proof and the namespace-safe wrapping",
       "depends_on": [
         "CP1"
       ],

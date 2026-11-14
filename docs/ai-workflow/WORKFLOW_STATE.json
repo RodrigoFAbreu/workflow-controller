@@ -72840,7 +72840,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-w1-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-w1-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 4,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -72949,7 +72949,102 @@
           "workflow_release": "2.29.3"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "385de9e20807d40738f16b1f1eb67c4aa47d39afd319589bab5725580113a74c",
+        "approved_review_content_id": "5f596155b2eb9c1eebd5c55eefa1bcf8a82ad5d75af1ad0d4479905c69156576",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-w1-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fffd34149a2b553990e1e7b2fc62184ecf728648"
+          },
+          {
+            "path": "docs/compatibility.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ce35b4de75e52615c67bd37cedeb3ab2f3a2ce29"
+          },
+          {
+            "path": "docs/update.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e82b3661fbedc9786a1426cdd4a751daf8389686"
+          },
+          {
+            "path": "tools/ci_changes.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "78b3bca201d49d3f3dd184322dff134053fc2283"
+          }
+        ],
+        "reviewed_content_commit": "b6da2ea57800efd0f4692fad11c4c8359fc864b4",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-14T02:14:02Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "5f596155b2eb9c1eebd5c55eefa1bcf8a82ad5d75af1ad0d4479905c69156576",
+            "ledger": {
+              "local": {
+                "bundle_id": "385de9e20807d40738f16b1f1eb67c4aa47d39afd319589bab5725580113a74c",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "9200e0eeb78b9fd582b4d03b57000bd597c392100f7219dcbd75c7a1de13b8c9",
+                "ledger_entry_sha256": "e16bbb98db1630f310f19e3f6a162acab685cf0bf57e3304fab785974a2f84d5",
+                "run_ref": "session:local .ai-review/workflow-controller-w1/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "385de9e20807d40738f16b1f1eb67c4aa47d39afd319589bab5725580113a74c",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "f519e3d1c96dd40cfd1664dc41f00127180668c5afaa453a9dd482f5ea909a5d",
+                "ledger_entry_sha256": "efb5282f5eee554d58775a0494499e5e20622cbc80233d0d9f16614ded643d7a",
+                "run_ref": "codex:20261114T020935Z-e6c9f7fe",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-14T02:14:02Z",
+          "workflow_release": "2.29.3"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "0dd1da9f38f1045e519fde446c3adbf2888ddcf7313b07b66075772dac2bf72e",
@@ -72980,12 +73075,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 26,
-      "last_transition": "2026-11-14T01:43:18Z",
+      "state_revision": 29,
+      "last_transition": "2026-11-14T02:14:02Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -73108,6 +73203,20 @@
               "at": "2026-11-13T19:43:26Z"
             }
           ]
+        },
+        "F-1c384fd9b6e2": {
+          "digest": "1c384fd9b6e2af75681f0fd0963b41e612a41c1971d486eb2db731b605631e25",
+          "text": "**O1.** `docs/compatibility.md` describes 2.29.3 as \"a wording pass over the plain commands\". The 2.29.2 to 2.29.3 release diff (cached archives under `~/.cache/workflow-manager/releases/`) changes wording in `/accept-milestone`, `/apply-pr-review` and `/satisfy-gate`, corrects `REVIEW_PROTOCOL.md`'s plan-change route (now `/request-plan-amendment` then `/milestone-plan`), annotates the defect ledger's `O13` row, and in `workflow_state.py` changes only one refusal message (the acceptance stage's `phase_not_reachable` now names `AWAITING_USER_ACCEPTANCE` as well). \"A wording pass over the command documents, the review protocol and one refusal message\" would be more exact. It is not wrong about the protocol, so this is not a blocker.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "5f596155b2eb9c1eebd5c55eefa1bcf8a82ad5d75af1ad0d4479905c69156576",
+              "verdict": "APPROVE",
+              "at": "2026-11-14T02:09:10Z"
+            }
+          ]
         }
       },
       "amendment_history": [
@@ -73217,7 +73326,28 @@
           "resolved_review_content_id": "0dd1da9f38f1045e519fde446c3adbf2888ddcf7313b07b66075772dac2bf72e"
         }
       ],
-      "amendment_base_commit": "5f099707d89d17e95216136c284468fc0fea0f82"
+      "amendment_base_commit": "5f099707d89d17e95216136c284468fc0fea0f82",
+      "implementation_review_stages": {
+        "review_content_id": "5f596155b2eb9c1eebd5c55eefa1bcf8a82ad5d75af1ad0d4479905c69156576",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "385de9e20807d40738f16b1f1eb67c4aa47d39afd319589bab5725580113a74c",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-14T02:09:10Z",
+          "verdict_sha256": "9200e0eeb78b9fd582b4d03b57000bd597c392100f7219dcbd75c7a1de13b8c9",
+          "run_ref": "session:local .ai-review/workflow-controller-w1/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "385de9e20807d40738f16b1f1eb67c4aa47d39afd319589bab5725580113a74c",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-14T02:12:42Z",
+          "verdict_sha256": "f519e3d1c96dd40cfd1664dc41f00127180668c5afaa453a9dd482f5ea909a5d",
+          "run_ref": "codex:20261114T020935Z-e6c9f7fe",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      }
     }
   }
 }

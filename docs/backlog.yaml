@@ -665,3 +665,9 @@ items:
     order: 112
     depends_on: [workflow-controller-o2, workflow-controller-o6]
     detail: docs/items/workflow-controller-o7.md
+  - id: workflow-controller-ra1
+    title: "Scheduled retention alert: the Controller runs `workflow-manager doctor --retention <repo> --json` after each finished work item and sends SignalHub info events"
+    status: next
+    order: 113
+    depends_on: []
+    detail: docs/items/workflow-controller-ra1.md

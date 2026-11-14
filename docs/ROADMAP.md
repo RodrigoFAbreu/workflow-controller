@@ -116,3 +116,4 @@
 | 110 | [Upgrades: install the Controller's own new releases safely](items/workflow-controller-o5.md) `workflow-controller-o5` | Idea | - | workflow-controller-o3 |
 | 111 | [Many repositories](items/workflow-controller-o6.md) `workflow-controller-o6` | Idea | - | workflow-controller-o5 |
 | 112 | [The control room](items/workflow-controller-o7.md) `workflow-controller-o7` | Idea | - | workflow-controller-o2, workflow-controller-o6 |
+| 113 | [Scheduled retention alert: the Controller runs \`workflow-manager doctor --retention \<repo\> --json\` after each finished work item and sends SignalHub info events](items/workflow-controller-ra1.md) `workflow-controller-ra1` | Next | - | - |

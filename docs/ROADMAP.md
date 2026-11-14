@@ -116,3 +116,4 @@
 | 110 | [Upgrades: install the Controller's own new releases safely](items/workflow-controller-o5.md) `workflow-controller-o5` | Idea | - | workflow-controller-o3 |
 | 111 | [Many repositories](items/workflow-controller-o6.md) `workflow-controller-o6` | Idea | - | workflow-controller-o5 |
 | 112 | [The control room](items/workflow-controller-o7.md) `workflow-controller-o7` | Idea | - | workflow-controller-o2, workflow-controller-o6 |
+| 113 | [Make the full test suite pass inside the PID namespace (follow-up of ns1)](items/workflow-controller-ns2.md) `workflow-controller-ns2` | Next | - | workflow-controller-ns1 |

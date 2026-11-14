@@ -665,3 +665,9 @@ items:
     order: 112
     depends_on: [workflow-controller-o2, workflow-controller-o6]
     detail: docs/items/workflow-controller-o7.md
+  - id: workflow-controller-ns2
+    title: "Make the full test suite pass inside the PID namespace (follow-up of ns1)"
+    status: next
+    order: 113
+    depends_on: [workflow-controller-ns1]
+    detail: docs/items/workflow-controller-ns2.md

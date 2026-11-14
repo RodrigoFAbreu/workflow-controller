@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -19,6 +20,7 @@ import tempfile
 import textwrap
 import time
 import unittest
+import unittest.mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -93,6 +95,33 @@ MODULES = {
                     handle.write(f"{os.getpid()} {stubborn.pid}")
                 time.sleep(600)
     """,
+    "test_hang_term": """
+        import os
+        import signal
+        import subprocess
+        import time
+        import unittest
+
+        class HangTermTest(unittest.TestCase):
+            def test_ignores_sigterm(self):
+                signal.signal(signal.SIGTERM, signal.SIG_IGN)
+                token = os.environ["HANG_TOKEN"]
+                subprocess.Popen(["sh", "-c", f"trap '' TERM; exec sleep {token}"])
+                with open(os.path.join(os.environ["SHARD_PROBE_DIR"], "hang.ready"), "w") as h:
+                    h.write("ready")
+                time.sleep(600)
+    """,
+    "test_orphan": """
+        import os
+        import subprocess
+        import unittest
+
+        class OrphanTest(unittest.TestCase):
+            def test_leaves_an_unmarked_process(self):
+                # A cleared environment hides it from every marker scan.
+                subprocess.Popen(["sleep", os.environ["ORPHAN_TOKEN"]], env={},
+                                 start_new_session=True)
+    """,
     "test_timed": """
         import os
         import time
@@ -146,6 +175,30 @@ def _alive(pid: int) -> bool:
     return stat[stat.rindex(")") + 2] != "Z"
 
 
+def _pids_with_argument(token: str) -> list[int]:
+    """Host pids whose command line carries ``token`` (a process inside a PID
+    namespace is found by what it runs, its own pid being the namespace's)."""
+    found = []
+    for name in os.listdir("/proc"):
+        if not name.isdigit() or int(name) == os.getpid():
+            continue
+        try:
+            argv = Path(f"/proc/{name}/cmdline").read_bytes().split(b"\0")
+        except OSError:
+            continue
+        if token.encode() in argv and _alive(int(name)):
+            found.append(int(name))
+    return found
+
+
+def _kill_with_argument(token: str) -> None:
+    for pid in _pids_with_argument(token):
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+
+
 def _wait_dead(pid: int, seconds: float = 10.0) -> bool:
     deadline = time.monotonic() + seconds
     while _alive(pid) and time.monotonic() < deadline:
@@ -175,8 +228,11 @@ class SyntheticRepo:
         self.cache = Path(tmp.name) / "cache"
         self.results_parent = Path(tmp.name) / "results"
         self.runs = 0
+        # The runner's own tests run it unwrapped unless a test asks (NS1); a
+        # wrapped run inside a wrapped shard is the namespace tests' own case.
         self.env = {**os.environ, "XDG_CACHE_HOME": str(self.cache),
-                    "SHARD_PROBE_DIR": str(self.probe)}
+                    "SHARD_PROBE_DIR": str(self.probe),
+                    "CONTROLLER_TEST_NAMESPACE": "off"}
         self.env.pop("PIP_CACHE_DIR", None)
         self.env.pop("GITHUB_STEP_SUMMARY", None)
 
@@ -397,6 +453,350 @@ class ProcessHygieneTest(unittest.TestCase):
         self.assertIn("tests.test_hang.HangTest.test_hangs", output)
         for pid in pids:
             self.assertTrue(_wait_dead(pid), f"shard process {pid} survived Ctrl-C")
+
+
+def _fake_unshare(test_case: unittest.TestCase, *, reject: str = "", status: int = 0) -> Path:
+    """A directory with an ``unshare`` that logs its argv to ``unshare.log``,
+    exits ``status`` when it sees the flag ``reject`` (or always, for a bare
+    ``status``), and otherwise runs the command after the flags."""
+    tmp = tempfile.TemporaryDirectory()
+    test_case.addCleanup(tmp.cleanup)
+    directory = Path(tmp.name)
+    (directory / "unshare").write_text(
+        "#!/bin/sh\n"
+        'echo "$@" >> "$(dirname "$0")/unshare.log"\n'
+        f'if [ {status} -ne 0 ]; then echo "unshare: refused" >&2; exit {status}; fi\n'
+        'for a in "$@"; do if [ -n "' + reject + '" ] && [ "$a" = "' + reject + '" ]; then\n'
+        '  echo "unshare: unrecognized option $a" >&2; exit 1; fi; done\n'
+        'while [ "${1#--}" != "$1" ]; do shift; done\n'
+        'exec "$@"\n')
+    (directory / "unshare").chmod(0o755)
+    return directory
+
+
+def _have_namespace() -> str:
+    """The probe's reason when this host cannot start a PID namespace, else ''."""
+    return _import_run_tests().ts.probe_namespace()[1]
+
+
+class NamespaceModeTest(unittest.TestCase):
+    """NS1 CP1: ``--namespace`` / ``CONTROLLER_TEST_NAMESPACE`` and the wrapper path."""
+
+    def setUp(self) -> None:
+        self.repo = SyntheticRepo(self)
+
+    def with_launcher(self, directory: Path) -> dict:
+        return {"PATH": f"{directory}{os.pathsep}{os.environ['PATH']}"}
+
+    def launched(self, directory: Path) -> list[str]:
+        log = directory / "unshare.log"
+        return log.read_text().splitlines() if log.exists() else []
+
+    def test_the_modes_resolve_as_documented(self) -> None:
+        run_tests = _import_run_tests()
+        failing = _fake_unshare(self, status=1) / "unshare"
+        working = _fake_unshare(self) / "unshare"
+        self.assertEqual(run_tests.resolve_namespace("off", launcher=str(failing)),
+                         ([], "namespace: none (off)"))
+        self.assertEqual(self.launched(failing.parent), [], "off must not probe")
+        prefix, header = run_tests.resolve_namespace("require", launcher=str(working))
+        self.assertEqual((prefix[0], header), (str(working), "namespace: isolated"))
+        with unittest.mock.patch.object(run_tests, "_warn") as warn:
+            prefix, header = run_tests.resolve_namespace("auto", launcher=str(failing))
+        self.assertEqual(prefix, [])
+        self.assertIn("the probe failed: unshare: refused", header)
+        warn.assert_called_once()
+        self.assertIn("unshare: refused", warn.call_args.args[0])
+        with self.assertRaises(run_tests.UsageError) as raised:
+            run_tests.resolve_namespace("require", launcher=str(failing))
+        self.assertIn("unshare: refused", str(raised.exception))
+
+    def test_the_environment_sets_the_default_and_a_bad_value_is_refused(self) -> None:
+        run_tests = _import_run_tests()
+        with unittest.mock.patch.dict(os.environ, {"CONTROLLER_TEST_NAMESPACE": "off"}):
+            self.assertEqual(run_tests.resolve_namespace(None)[0], [])
+            self.assertEqual(run_tests.resolve_namespace(None)[1], "namespace: none (off)")
+        with unittest.mock.patch.dict(os.environ, {"CONTROLLER_TEST_NAMESPACE": "maybe"}):
+            with self.assertRaises(run_tests.UsageError):
+                run_tests.resolve_namespace(None)
+
+    def test_every_shard_runs_behind_the_launcher_with_its_command_unchanged(self) -> None:
+        directory = _fake_unshare(self)
+        completed, results = self.repo.run_selection(
+            "tests.test_pass", extra=("--shards", "1", "--namespace", "auto"),
+            env=self.with_launcher(directory))
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        self.assertIn("namespace: isolated", completed.stdout)
+        calls = self.launched(directory)
+        self.assertEqual(len(calls), 2, calls)  # the probe, then the one shard
+        self.assertEqual(calls[0].split(), [*_import_run_tests().ts.UNSHARE_FLAGS, "true"])
+        shard = calls[1].split()
+        self.assertEqual(shard[:len(_import_run_tests().ts.UNSHARE_FLAGS)],
+                         list(_import_run_tests().ts.UNSHARE_FLAGS))
+        self.assertEqual(shard[len(_import_run_tests().ts.UNSHARE_FLAGS):][1:3],
+                         [str(RUN_TESTS), "exec-shard"])
+
+    def test_serial_and_replay_take_the_same_path(self) -> None:
+        directory = _fake_unshare(self)
+        env = self.with_launcher(directory)
+        completed, results = self.repo.run_selection(
+            "tests.test_pass", extra=("--serial", "--namespace", "require"), env=env)
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        self.assertEqual(len(self.launched(directory)), 2)
+        replay = self.repo.run("--replay", str(results / "plan.json"), "--namespace", "require",
+                               "--results-dir", str(self.repo.results()), env=env)
+        self.assertEqual(replay.returncode, 0, replay.stdout + replay.stderr)
+        calls = self.launched(directory)
+        self.assertEqual(len(calls), 4, calls)
+        self.assertIn("exec-shard", calls[3])
+
+    def test_a_launcher_that_rejects_a_flag_falls_back_in_auto_and_refuses_in_require(self) -> None:
+        directory = _fake_unshare(self, reject="--map-current-user")
+        env = self.with_launcher(directory)
+        completed, _ = self.repo.run_selection("tests.test_pass", extra=("--namespace", "auto"),
+                                               env=env)
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        self.assertIn("namespace: none (the probe failed:", completed.stdout)
+        self.assertIn("--map-current-user", completed.stderr)
+        self.assertEqual(len(self.launched(directory)), 1, "only the probe ran, never a shard")
+        refused, _ = self.repo.run_selection("tests.test_pass",
+                                             extra=("--namespace", "require"), env=env)
+        self.assertEqual(refused.returncode, 2, refused.stdout + refused.stderr)
+        self.assertIn("--namespace require", refused.stderr)
+        self.assertIn("--map-current-user", refused.stderr)
+        self.assertNotIn("selected tests", refused.stdout)
+
+    def test_off_never_probes_and_plan_only_never_probes(self) -> None:
+        directory = _fake_unshare(self)
+        env = self.with_launcher(directory)
+        completed, _ = self.repo.run_selection("tests.test_pass", extra=("--namespace", "off"),
+                                               env=env)
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        self.assertIn("namespace: none (off)", completed.stdout)
+        planned = self.repo.run("tests.test_pass", "--plan-only", "--namespace", "require",
+                                env=env)
+        self.assertEqual(planned.returncode, 0, planned.stderr)
+        self.assertEqual(self.launched(directory), [])
+
+    def ctrl_c(self, namespace: str) -> float:
+        """SIGINT to a runner whose test ignores SIGTERM; the seconds it took to end."""
+        token = f"600.{time.monotonic_ns()}"  # a unique, valid sleep duration
+        self.addCleanup(_kill_with_argument, token)
+        results = self.repo.results()
+        runner = subprocess.Popen(
+            self.repo.command("tests.test_hang_term", "--namespace", namespace,
+                              "--results-dir", str(results)),
+            env={**self.repo.env, "HANG_TOKEN": token}, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, text=True, start_new_session=True)
+        self.addCleanup(lambda: runner.poll() is None and os.killpg(runner.pid, signal.SIGKILL))
+        ready = self.repo.probe / "hang.ready"
+        deadline = time.monotonic() + 60
+        while not ready.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        time.sleep(0.2)
+        self.assertTrue(_pids_with_argument(token), "the stubborn process never started")
+        started = time.monotonic()
+        os.kill(runner.pid, signal.SIGINT)
+        output, _ = runner.communicate(timeout=60)
+        elapsed = time.monotonic() - started
+        self.assertEqual(runner.returncode, 130, output)
+        self.assertIn("INTERRUPTED", output)
+        deadline = time.monotonic() + 10
+        while _pids_with_argument(token) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        self.assertEqual(_pids_with_argument(token), [], "a process survived Ctrl-C")
+        return elapsed
+
+    def test_ctrl_c_on_an_unwrapped_shard_still_ends_everything(self) -> None:
+        self.ctrl_c("off")
+
+    def test_ctrl_c_on_a_wrapped_shard_ends_at_once_without_the_grace_wait(self) -> None:
+        # D6: the executor is the namespace's init and drops SIGTERM from
+        # outside, so a wrapped shard is killed directly.
+        reason = _have_namespace()
+        if reason:
+            self.skipTest(f"no PID namespace on this host: {reason}")
+        elapsed = self.ctrl_c("require")
+        self.assertLess(elapsed, _import_run_tests().INTERRUPT_GRACE_SECONDS)
+
+    def test_a_process_left_in_a_wrapped_shard_is_gone_after_it_exits(self) -> None:
+        # D7: the kernel ends the namespace with its init, so the post-exit
+        # scan finds nothing; a process hidden from every scan is still gone.
+        reason = _have_namespace()
+        if reason:
+            self.skipTest(f"no PID namespace on this host: {reason}")
+        token = f"600.{time.monotonic_ns()}"  # a unique, valid sleep duration
+        self.addCleanup(_kill_with_argument, token)
+        completed, results = self.repo.run_selection(
+            "tests.test_orphan", extra=("--namespace", "require"), env={"ORPHAN_TOKEN": token})
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        self.assertEqual(self.repo.record(results, 0)["leaked_processes"], [])
+        self.assertEqual(_pids_with_argument(token), [])
+
+    def test_the_same_orphan_survives_an_unwrapped_shard(self) -> None:
+        # The control for the test above: it is the namespace that removes it.
+        token = f"600.{time.monotonic_ns()}"  # a unique, valid sleep duration
+        self.addCleanup(_kill_with_argument, token)
+        completed, _ = self.repo.run_selection(
+            "tests.test_orphan", extra=("--namespace", "off"), env={"ORPHAN_TOKEN": token})
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        self.assertTrue(_pids_with_argument(token))
+
+
+class NamespaceKillProofTest(unittest.TestCase):
+    """NS1 CP2 (R2): a ``kill(-1, SIGKILL)`` sent from inside the wrapper reaches
+    only the namespace, never a process started outside it."""
+
+    def setUp(self):
+        reason = _have_namespace()
+        if reason:
+            self.skipTest(f"no PID namespace on this host: {reason}")
+
+    def test_kill_all_inside_the_wrapper_spares_a_sleeper_outside(self):
+        ts = _import_run_tests().ts
+        prefix, _ = ts.probe_namespace()
+        token = f"ns1-proof-{os.getpid()}-{time.monotonic_ns()}"
+        outside = subprocess.Popen(["sh", "-c", "exec sleep 60", token + "-outside"])
+        self.addCleanup(outside.wait)
+        self.addCleanup(outside.kill)
+        script = textwrap.dedent("""
+            import os, signal, subprocess, sys, time
+            inner = subprocess.Popen(["sh", "-c", "exec sleep 60", sys.argv[1] + "-inside"])
+            time.sleep(0.2)
+            os.kill(-1, signal.SIGKILL)
+            code = inner.wait(timeout=10)
+            print("inner-status", code)
+            print("my-pid", os.getpid())
+        """)
+        completed = subprocess.run(
+            [*prefix, sys.executable, "-c", script, token],
+            capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        self.assertIn("inner-status -9", completed.stdout)
+        self.assertIn("my-pid 1\n", completed.stdout)  # the child was the namespace's init
+        self.assertIsNone(outside.poll(), "the sleeper outside the namespace was killed")
+        self.assertTrue(_alive(outside.pid))
+        self.assertEqual(_pids_with_argument(token + "-inside"), [])
+
+
+class NamespaceUnsafeShardTest(unittest.TestCase):
+    """NS1 CP2 (D9): a shard that holds a listed namespace-unsafe module runs bare."""
+
+    UNSAFE = (("tests.test_pass.MorePassTest", "a test reason"),)
+
+    def setUp(self) -> None:
+        self.repo = SyntheticRepo(self)
+        self.run_tests = _import_run_tests()
+
+    DRIVER = textwrap.dedent("""
+        import json, os, sys
+        sys.path.insert(0, os.environ["NS1_TOOLS"])
+        import run_tests
+        run_tests.ts.NAMESPACE_UNSAFE_MODULES = tuple(map(tuple, json.loads(os.environ["NS1_UNSAFE"])))
+        if os.environ.get("NS1_NO_INVENTORY"):
+            def refuse(*args, **kwargs):
+                raise run_tests.ts.InventoryError("no inventory in this test")
+            run_tests.ts.build_inventory = refuse
+        sys.exit(run_tests.main(sys.argv[1:]))
+    """)
+
+    def run_in_process(self, mode: str, directory: Path, *extra: str, replay: bool = False):
+        """The runner with ``self.UNSAFE`` patched in (a child, so tests discovery
+        is the one the runner itself does) and a fake ``unshare`` on PATH."""
+        results = self.repo.results()
+        if replay:
+            argv = ["--replay", str(extra[0]), "--namespace", mode, "--results-dir",
+                    str(results), "--repo-root", str(self.repo.root)]
+        else:
+            argv = ["tests.test_pass", "--shards", "2", "--namespace", mode,
+                    "--results-dir", str(results), "--repo-root", str(self.repo.root), *extra]
+        self.last_results = results
+        env = {**self.repo.env, "PATH": f"{directory}{os.pathsep}{os.environ['PATH']}",
+               "NS1_TOOLS": str(RUN_TESTS.parent), "NS1_UNSAFE": json.dumps(self.UNSAFE)}
+        if replay:
+            env["NS1_NO_INVENTORY"] = "1"
+        completed = subprocess.run([sys.executable, "-c", self.DRIVER, *argv], env=env,
+                                   capture_output=True, text=True, timeout=120)
+        return completed.returncode, completed.stdout, completed.stderr
+
+    def test_the_unsafe_shard_runs_bare_and_the_others_run_wrapped(self) -> None:
+        directory = _fake_unshare(self)
+        status, out, err = self.run_in_process("auto", directory)
+        self.assertEqual(status, 0, out + err)
+        self.assertIn("namespace: isolated for 1 of 2 shards "
+                      "(unwrapped: tests.test_pass.MorePassTest)", out)
+        self.assertIn("1 of 2 shards run without a PID namespace", err)
+        calls = (directory / "unshare.log").read_text().splitlines()
+        self.assertEqual(len(calls), 2, calls)  # the probe and the one safe shard
+        self.assertEqual(sum("exec-shard" in call for call in calls), 1)
+
+    def test_require_refuses_a_selection_with_an_unsafe_module_and_names_it(self) -> None:
+        status, out, err = self.run_in_process("require", _fake_unshare(self))
+        self.assertEqual(status, 2, out + err)
+        self.assertIn("tests.test_pass.MorePassTest", err)
+        self.assertNotIn("selected tests", out)
+
+    def test_off_and_a_fully_safe_selection_are_unchanged(self) -> None:
+        directory = _fake_unshare(self)
+        status, out, _ = self.run_in_process("off", directory)
+        self.assertEqual(status, 0, out)
+        self.assertIn("namespace: none (off)", out)
+        self.assertFalse((directory / "unshare.log").exists())
+        self.UNSAFE = (("tests.test_nothing", "not selected"),)
+        status, out, err = self.run_in_process("require", directory)
+        self.assertEqual(status, 0, out + err)
+        self.assertIn("namespace: isolated\n", out)
+
+    def test_a_replayed_plan_resolves_modules_without_an_inventory(self) -> None:
+        directory = _fake_unshare(self)
+        status, out, err = self.run_in_process("auto", directory)
+        self.assertEqual(status, 0, out + err)
+        plan = self.last_results / "plan.json"
+        status, out, err = self.run_in_process("auto", directory, plan, replay=True)
+        self.assertEqual(status, 0, out + err)
+        self.assertIn("isolated for 1 of 2 shards", out)
+
+
+class NamespaceUnsafeListTest(unittest.TestCase):
+    """NS1 CP2 (D9, I1, I2): the list is a bounded, checked debt."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.ts = _import_run_tests().ts
+        cls.inventory = cls.ts.build_inventory()
+
+    def test_every_listed_module_exists_in_the_inventory_with_a_reason(self) -> None:
+        modules = {atom.module for atom in self.inventory.atoms}
+        for module, reason in self.ts.NAMESPACE_UNSAFE_MODULES:
+            self.assertIn(module, modules, f"{module} is a stale entry")
+            self.assertTrue(reason.strip())
+
+    def test_every_module_with_an_init_namespace_skip_is_listed(self) -> None:
+        listed = {module for module, _ in self.ts.NAMESPACE_UNSAFE_MODULES}
+        tests_dir = Path(__file__).resolve().parent
+        for path in sorted(tests_dir.glob("test_*.py")):
+            text = path.read_text()
+            if re.search(r"skip" + r"(Unless|If)\(\s*(not\s+)?_INIT_NS", text):
+                self.assertIn(f"tests.{path.stem}", listed, f"{path.name} skips outside init")
+
+    def test_a_full_default_local_run_wraps_no_shard(self) -> None:
+        # The documented consequence (D9(d)): the planner spreads the unsafe modules over every shard.
+        run_tests = _import_run_tests()
+        plan, _, _ = run_tests.compute_plan(fixtures.REPO_ROOT, self.ts.LOCAL, [],
+                                            shards=8, conformance_lane=True)
+        unsafe = {shard["index"]: found for shard in plan["shards"]
+                  if (found := self.ts.namespace_unsafe_modules(shard))}
+        with unittest.mock.patch.object(self.ts, "probe_namespace", return_value=(["u"], "")), \
+                unittest.mock.patch.object(run_tests, "_warn"):
+            _, header = run_tests.resolve_namespace("auto", unsafe=unsafe,
+                                                    shard_count=plan["shard_count"])
+        self.assertTrue(header.startswith("namespace: isolated for 0 of 8 shards (unwrapped:"),
+                        header)
+
+    def test_a_single_safe_module_selection_is_fully_wrapped(self) -> None:
+        selection = self.inventory.select(["tests.test_run_tests"])
+        shard = {"atoms": [atom.key for atom in selection.atoms]}
+        self.assertEqual(self.ts.namespace_unsafe_modules(shard), [])
 
 
 class NestedRunTest(unittest.TestCase):

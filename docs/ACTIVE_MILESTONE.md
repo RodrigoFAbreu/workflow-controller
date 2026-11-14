@@ -640,47 +640,56 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-fx1` (FX1), implementation revision 2, plan `docs/ai-workflow/CONTROLLER_FX1_PLAN.md` (revision 2), base
-commit `a2e1cc1`. The item changes tests and docs only: `OrphanWatchdogTest` reads pid files and the monitor's sleeper `argv[0]` through
-readiness helpers (#246), and the two Ctrl-C tests share one failure message that names which end happened (#342). Every flow runs
-offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and
+Item `workflow-controller-w1` (W1), implementation revision 1, plan `docs/ai-workflow/CONTROLLER_W1_PLAN.md` (revision 4), base
+commit `956b14f`. The item moves this repository from Workflow 2.27.0 to 2.29.3 (CP1: the Manager-written files, one `MENTIONS` entry in
+`tools/ci_changes.py`; CP2: `docs/compatibility.md`, `docs/items/workflow-controller-w1.md`, `docs/update.md`). No Controller code changes. Every
+flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and
 the system directories, and no write inside the read-only product clone. Run from the product clone with `python3 -B` and no
-`PYTHONPATH=.`; flows write only to the scratch `TMPDIR`. No flow needs a pull request or a forge call.
+`PYTHONPATH=.`; flows write only to the scratch `TMPDIR`. No flow needs a pull request or a forge call, and none runs `workflow-manager update`
+(it needs the network and writes the clone); `verify` reads only the clone.
 
 Setup: `export TMPDIR=$(mktemp -d)`. No data to seed.
 
-**Flow 1: The readiness helpers and the orphan watchdog (CP1, #246).**
-Run `python3 -B -m unittest tests.test_fake_claude_contract 2>&1 | tail -4`.
-Expected: `OK` (103 tests). `PidReadinessHelperTest` shows `read_pid_when_ready` never returns an empty or half-written read and
-times out naming the file; `OrphanWatchdogTest` passes.
+**Flow 1: The installation record names 2.29.3.**
+Run `python3 -B -c "import json;d=json.load(open('.workflow-manager/installation.json'));print(d['workflow_version'])"` and
+`grep -n "WORKFLOW_RELEASE =" scripts/workflow_protocol.py`.
+Expected: the record and `scripts/workflow_protocol.py` both name 2.29.3, none names 2.27.0.
 
-**Flow 2: No raw pid read is left in `OrphanWatchdogTest` (CP1).**
-Read the class `OrphanWatchdogTest` in `tests/test_fake_claude_contract.py`, or run `grep -n "read_text" tests/test_fake_claude_contract.py` and check none falls inside it.
-Expected: no `read_text()` of a pid path in the class; pids come from `read_pid_when_ready` and the sleeper's program from
-`read_argv0_when`.
+**Flow 2: The Manager's own check (CP1).**
+Run `workflow-manager verify .; echo rc=$?` (reads the clone only; it may print that it has no pin for 2.29.3 and discovered the release from its
+local record, which is not a failure).
+Expected: `installation matches workflow 2.29.3` and `rc=0`. If the Manager needs the network to answer, skip this flow and say so.
 
-**Flow 3: The orphan watchdog under CPU pressure (CP1).**
-Run, in three terminals at once, `taskset -c 0,1 python3 -B -m unittest tests.test_fake_claude_contract.OrphanWatchdogTest 2>&1 | tail -3`.
-Expected: `OK` in each copy, repeated a few times.
+**Flow 3: The Controller admits the moved release (CP1).**
+Run `python3 -B -m controller inspect . ; echo rc=$?` from the product clone.
+Expected: the work item `workflow-controller-w1` and the release print with no refusal; `rc=0`.
 
-**Flow 4: The Ctrl-C tests and the shared failure message (CP2, #342).**
-Run `python3 -B -m unittest tests.test_job_codex_apply 2>&1 | tail -4`.
-Expected: `OK`. Both Ctrl-C tests (`PlanGuardedRunTest`, `ImplGuardedRunTest`) call `GuardedRunMixin.interrupted_or_explained`, whose
-failure message records the `run_in_place` call count, the generator result, and the `regeneration` `cause`, `detail` and `stage`.
-(If two `ImplRecoveryTest` cases fail in a loaded run, rerun the class alone; see the limitations.)
-Functional review round 1 found `test_a_generator_that_survives_a_kill_is_ended_before_resume_runs_it_again` failing once (empty
-`/proc/<pid>/environ` right after `Popen`); fixed by a bounded poll for the ownership tag (re-test: run it, and the class, a few times).
+**Flow 4: The change set is what the plan allows (CP1).**
+Run `git diff --stat 956b14f HEAD -- .claude .workflow-manager scripts tools`.
+Expected: the paths are `.claude/commands/{accept-milestone,apply-pr-review,satisfy-gate}.md`, `.workflow-manager/installation.json`,
+`scripts/workflow_{gate_policy_test,integration_test,protocol,protocol_test,state}.py` and `tools/ci_changes.py`; no `controller/` or `tests/` path.
+`git diff 956b14f HEAD -- tools/ci_changes.py` adds exactly one `MENTIONS` entry for `scripts/workflow_gate_policy_test.py` (three entries in all).
 
-**Flow 5: Docs.**
-Run `python3 -B tools/check_docs.py; echo rc=$?`. Read `docs/guide/development.md` (the entry "The Ctrl-C test under load (#342)")
-and `docs/items/workflow-controller-fx1.md`.
-Expected: `rc=0`. The pages say #342 did not reproduce and what the shared message now records.
+**Flow 5: The CI selection test (CP1).**
+Run `python3 -B -m unittest tests.test_ci_changes 2>&1 | tail -4`.
+Expected: `OK`.
 
-**Known limitations / out of scope.** #342 did not reproduce, so the Ctrl-C tests keep their behaviour: only the failure message
-changes, and the issue stays open for the next occurrence. No production code changes. The full suite (`python3 tools/run_tests.py`)
-is not a flow: three `tests.test_fake_codex_contract` tests fail where `~/.codex` config is read (environmental), and two
-`tests.test_job_codex_apply.ImplRecoveryTest` cases can fail from a shared `job1` tag collision in another shard (they pass alone).
+**Flow 6: Docs (CP2).**
+Run `python3 -B tools/check_docs.py; echo rc=$?`. Read `docs/compatibility.md` (header line; the sentence listing releases that keep protocol 1.5;
+the paragraph "This repository itself runs Workflow 2.29.3"), `docs/items/workflow-controller-w1.md` and the "In the middle of a milestone"
+subsection of `docs/update.md`.
+Expected: `rc=0`. 2.28.0 to 2.29.3 are listed with what each adds (protocol 1.5 kept); the item page has status, plan link and verification; `update.md`
+has the one sentence about the move at `IMPLEMENTING`.
+
+**Flow 7: The Workflow's own tests on the moved scripts.**
+Run `python3 -B -m unittest scripts.workflow_protocol_test 2>&1 | tail -4`.
+Expected: `OK`.
+
+**Known limitations / out of scope.** No Controller code, no new Controller command and no protocol change; the Controller's own steps do not adopt the
+new 2.28.0 to 2.29.3 commands. The full suite (`python3 tools/run_tests.py`) is not a flow: three `tests.test_fake_codex_contract` tests fail where
+`~/.codex` config is read (environmental), and `tests.test_job_codex_apply.ImplRecoveryTest` cases can fail from a shared `job1` tag collision in another
+shard (they pass alone). The Workflow's gate-policy test (`scripts/workflow_gate_policy_test.py`) is large and slow; it is not a flow here.
 
 ## Next action
 
-`/milestone-plan` for `workflow-controller-n1` (Controller ACTION_REQUIRED events: SignalHub answers format with choices, one event per gate), the item `python3 scripts/workflow_backlog.py next` returns, ready for `PLANNING`.
+The functional review of `workflow-controller-w1`: test the checklist above and place findings at `.ai-review/workflow-controller-w1/feedback/FUNCTIONAL_REVIEW.md`; when testing is clean, `/accept-milestone`.

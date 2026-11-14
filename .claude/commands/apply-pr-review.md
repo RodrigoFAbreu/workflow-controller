@@ -163,7 +163,7 @@ functional validation, then the pull request facts again (`OD-W2-7`). After a
 reopen, full functional validation is required once any code changed
 (`OD-W2-8`). The item completes again through the same gate, automatic
 (`/satisfy-gate acceptance`) or human (`/accept-milestone`); `complete_work_item`
-is unchanged, and a re-acceptance updates, never duplicates, the archive copy and
+takes no separate path for it, and a re-acceptance updates, never duplicates, the archive copy and
 the roadmap row. A reopen does not undo the completion side effects: the roadmap
 row stays complete and `docs/ACTIVE_MILESTONE.md` stays cleared until the item is
 accepted again.

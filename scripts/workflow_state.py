@@ -13679,6 +13679,17 @@ def _incomplete_own_checkpoints_route(work_item: dict) -> str:
     )
 
 
+class CompletionPhaseNotReachableError(Exception):
+    """`complete_work_item` refused: the item is not at a phase the acceptance
+    gate reaches (workflow-2.29.1). `code` is `work_item_terminal` (already
+    `MILESTONE_COMPLETE`) or `phase_not_reachable`, the codes
+    `_acceptance_reachability_blocker` and the acceptance flag already use."""
+
+    def __init__(self, code: str, detail: str):
+        super().__init__(detail)
+        self.code = code
+
+
 def complete_work_item(state: dict, work_item_id: str, now: str, *, repo_root: Path) -> dict:
     """D1's completion/reset text: on `MILESTONE_COMPLETE` (or
     process-completion archival), the entry's phase becomes terminal and,
@@ -13703,8 +13714,13 @@ def complete_work_item(state: dict, work_item_id: str, now: str, *, repo_root: P
     naming the outstanding checkpoint, when the item's own registry has any
     checkpoint that is not `COMPLETE`.
 
+    The phase guard (workflow-2.29.1): after those two checks and before the
+    obligations, refuses with `CompletionPhaseNotReachableError` unless the
+    item is at `AWAITING_FUNCTIONAL_REVIEW` or `AWAITING_USER_ACCEPTANCE`
+    (`milestone_complete_gate_reachable`).
+
     `D-Completion-Obligations` (item 356(a)): independent of, and in
-    addition to, both checks above, every completion obligation the
+    addition to, the checks above, every completion obligation the
     item's own registry declares must derive `PASS` --
     `UnsatisfiedCompletionObligationError` otherwise, naming each
     outstanding obligation, its classification, and (for `FAIL`) the
@@ -13732,6 +13748,15 @@ def complete_work_item(state: dict, work_item_id: str, now: str, *, repo_root: P
             f"{outstanding_checkpoint_id!r} is not COMPLETE. "
             + _incomplete_own_checkpoints_route(work_item)
         )
+
+    # The phase guard (workflow-2.29.1): after the child and registry checks, so
+    # their released refusals keep their order, and before the obligations.
+    phase = work_item.get("phase")
+    if phase == "MILESTONE_COMPLETE":
+        raise CompletionPhaseNotReachableError("work_item_terminal", f"{work_item_id} is already MILESTONE_COMPLETE")
+    if not milestone_complete_gate_reachable(phase=phase, is_terminal=is_terminal):
+        raise CompletionPhaseNotReachableError(
+            "phase_not_reachable", f"the phase is {phase}; the acceptance stage needs AWAITING_FUNCTIONAL_REVIEW or AWAITING_USER_ACCEPTANCE")
 
     verdicts = resolve_completion_obligations(repo_root, work_item)
     outstanding = {oid: v for oid, v in verdicts.items() if v.classification != "PASS"}
@@ -20227,13 +20252,13 @@ def sweep_applying_review_feedback_version_claims(
 def _finding_dispositions_cli(repo_root: Path, work_item_id: str) -> int:
     """`--finding-dispositions`: print every recorded Optional finding with its
     disposition and a skeleton `dispositions` object for the ones without."""
-    state = _load_json(repo_root / DEFAULT_STATE_PATH)
-    if work_item_id not in state["work_items"]:
-        print(json.dumps({"error": "UnknownWorkItem", "message": work_item_id}, sort_keys=True))
-        return 1
     try:
+        state = _plain_command_state(repo_root, work_item_id)
         report = finding_dispositions_report(repo_root, state, work_item_id)
-    except InvalidFindingDispositionsError as exc:
+    except _AcceptanceCliRefusal as exc:
+        print(json.dumps({"error": exc.name, "message": str(exc)}, sort_keys=True))
+        return 1
+    except Exception as exc:  # the contract is JSON, never a traceback (InvalidFindingDispositionsError included)
         print(json.dumps({"error": type(exc).__name__, "message": str(exc)}, sort_keys=True))
         return 1
     print(json.dumps({
@@ -20269,6 +20294,9 @@ def _acceptance_reachability_blocker(repo_root: Path, work_item_id: str, work_it
         is_terminal, outstanding = resolve_own_registry_completion_status(repo_root, work_item)
     except (RegistryCoverageError, StalePlanApprovalRegistryReadError) as exc:
         return {"code": "registry_unresolvable", "detail": str(exc)}
+    except Exception as exc:  # a malformed registry shape or registry_path: the gate's own requirement refuses it the same way
+        return {"code": "registry_unresolvable",
+                "detail": f"the item's own registry cannot be resolved: {type(exc).__name__}: {exc}"}
     if not milestone_complete_gate_reachable(phase=phase, is_terminal=is_terminal):
         detail = f"the phase is {phase}; the acceptance stage needs AWAITING_FUNCTIONAL_REVIEW"
         if not is_terminal:
@@ -20335,13 +20363,16 @@ class _AcceptanceCliRefusal(Exception):
         self.name = name
 
 
-def _acceptance_cli_context(work_item_id: str) -> tuple[Path, dict]:
-    """The repository root and the validated state both acceptance flags start from;
-    `_AcceptanceCliRefusal` for a missing, malformed or unknown state, and any other
-    exception (`CorruptJsonError`, a run outside Git) for the callers' class-name fallback."""
-    repo_root = Path(_run(["git", "rev-parse", "--show-toplevel"], cwd=Path.cwd()).strip())
+def _plain_command_state(repo_root: Path, work_item_id: str) -> dict:
+    """The validated state the plain commands that read it start from (`_acceptance_cli_context`,
+    `--finding-dispositions`); `_AcceptanceCliRefusal` for a missing, malformed or unknown state, and any
+    other exception (`CorruptJsonError`, `OSError`) for the callers' class-name fallback."""
     state = _load_json(repo_root / DEFAULT_STATE_PATH)  # CorruptJsonError reaches the class-name fallback
     if state is None:
+        if (repo_root / DEFAULT_STATE_PATH).exists():  # _load_json answers None for JSON null as well as for an absent file
+            raise _AcceptanceCliRefusal(
+                "StateMalformed",
+                f"{DEFAULT_STATE_PATH} holds JSON null, not an object holding a work_items object; restore it from Git")
         raise _AcceptanceCliRefusal("StateMissing", f"{DEFAULT_STATE_PATH} does not exist")
     if not isinstance(state, dict) or not isinstance(state.get("work_items"), dict):
         raise _AcceptanceCliRefusal("StateMalformed", f"{DEFAULT_STATE_PATH} is not an object holding a work_items object")
@@ -20349,7 +20380,15 @@ def _acceptance_cli_context(work_item_id: str) -> tuple[Path, dict]:
         raise _AcceptanceCliRefusal("UnknownWorkItem", work_item_id)
     if not isinstance(state["work_items"][work_item_id], dict):
         raise _AcceptanceCliRefusal("StateMalformed", f"work_items[{work_item_id!r}] is not an object")
-    return repo_root, state
+    return state
+
+
+def _acceptance_cli_context(work_item_id: str) -> tuple[Path, dict]:
+    """The repository root and the validated state both acceptance flags start from;
+    `_AcceptanceCliRefusal` for a missing, malformed or unknown state, and any other
+    exception (`CorruptJsonError`, a run outside Git) for the callers' class-name fallback."""
+    repo_root = Path(_run(["git", "rev-parse", "--show-toplevel"], cwd=Path.cwd()).strip())
+    return repo_root, _plain_command_state(repo_root, work_item_id)
 
 
 def _acceptance_gate_cli(work_item_id: str) -> int:
@@ -20395,12 +20434,12 @@ def _state_file_digest(repo_root: Path) -> str | None:
 
 def _satisfy_acceptance_cli(work_item_id: str, *, now: Callable[[], str] | None = None, run=None, resolve=None) -> int:
     """`--satisfy-acceptance` (workflow-2.27.0): the act of `/satisfy-gate acceptance`
-    as one plain command. Makes step 2a's phase and registry check (the library does
-    not), then calls `satisfy_acceptance_gate` -- one `state_transaction`, nothing
-    else -- and prints `{record, trailer}` (exit 0), or one `{"error", "message",
-    "state_changed"[, "code"]}` object (exit 1). It takes no lock of its own, makes no
+    as one plain command. Calls `satisfy_acceptance_gate` -- one `state_transaction`
+    whose mutator makes step 2a's phase and registry check first, under the lock
+    (workflow-2.29.1) -- and prints `{record, trailer}` (exit 0), or one `{"error", "message",
+    "state_changed"[, "code"]}` object (exit 1). It takes no lock beyond the transaction's, makes no
     commit and writes no file besides the state file. `now`, `run` and `resolve` are
-    test seams. `state_changed` compares the state file's digest before the pre-flight
+    test seams. `state_changed` compares the state file's digest before the transaction
     with the one after the failure."""
     before: str | None = None
     repo_root: Path | None = None
@@ -20414,11 +20453,8 @@ def _satisfy_acceptance_cli(work_item_id: str, *, now: Callable[[], str] | None 
         return 1
 
     try:
-        repo_root, state = _acceptance_cli_context(work_item_id)
+        repo_root, _state = _acceptance_cli_context(work_item_id)
         before = _state_file_digest(repo_root)
-        blocker = _acceptance_reachability_blocker(repo_root, work_item_id, state["work_items"][work_item_id])
-        if blocker is not None:
-            raise AcceptancePreflightError(blocker["code"], blocker["detail"])
         stamp = now() if now is not None else _utc_now_stamp()
         result = satisfy_acceptance_gate(repo_root, work_item_id, now=stamp, run=run, resolve=resolve)
     except _AcceptanceCliRefusal as exc:
@@ -20430,15 +20466,158 @@ def _satisfy_acceptance_cli(work_item_id: str, *, now: Callable[[], str] | None 
     return 0
 
 
+class FindingsRecordPreflightError(Exception):
+    """`--write-findings-record` found the item not complete before anything was
+    read for the record; `code` is `work_item_not_complete`."""
+
+    def __init__(self, code: str, detail: str):
+        super().__init__(detail)
+        self.code = code
+
+
+def _path_marker(path: Path) -> str:
+    """A comparable marker of one path: the sha256 of a regular file's bytes, or a
+    distinct marker for an absent path, a directory or an unreadable one."""
+    try:
+        if path.is_dir():
+            return "directory"
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except FileNotFoundError:
+        return "absent"
+    except OSError:
+        return "unreadable"
+
+
+def _write_findings_record_cli(work_item_id: str) -> int:
+    """`--write-findings-record` (workflow-2.28.0): the findings record of
+    `/accept-milestone` step 5a as one plain command. Refuses unless the item's
+    stored phase is `MILESTONE_COMPLETE` (the library has no phase guard), then calls
+    `write_finding_dispositions_record` on the stored state and prints `{"paths"}`
+    (exit 0), or one `{"error", "message", "record_changed", "state_changed"[,
+    "code"]}` object (exit 1). It takes no lock, enters no `state_transaction`,
+    stages nothing and commits nothing; the one file it may write is the record.
+    `record_changed` and `state_changed` compare digests taken before the call with
+    ones taken after the failure."""
+    repo_root: Path | None = None
+    record_before: str | None = None
+    state_before: str | None = None
+
+    def fail(name: str, message: str, code: str | None = None) -> int:
+        record_changed = state_changed = False
+        if repo_root is not None:
+            record_changed = _path_marker(repo_root / finding_dispositions_record_path(work_item_id)) != record_before
+            state_changed = _state_file_digest(repo_root) != state_before
+        body = {"error": name, "message": message, "record_changed": record_changed, "state_changed": state_changed}
+        if code is not None:
+            body["code"] = code
+        print(json.dumps(body, sort_keys=True))
+        return 1
+
+    try:
+        repo_root, state = _acceptance_cli_context(work_item_id)
+        record_before = _path_marker(repo_root / finding_dispositions_record_path(work_item_id))
+        state_before = _state_file_digest(repo_root)
+        phase = state["work_items"][work_item_id].get("phase")
+        if phase != "MILESTONE_COMPLETE":
+            raise FindingsRecordPreflightError(
+                "work_item_not_complete",
+                f"{work_item_id} is at phase {phase!r}; the findings record is written on the completed state (MILESTONE_COMPLETE)",
+            )
+        paths = write_finding_dispositions_record(repo_root, state, work_item_id)
+    except _AcceptanceCliRefusal as exc:
+        return fail(exc.name, str(exc))
+    except Exception as exc:  # the contract is JSON, never a traceback
+        code = getattr(exc, "code", None)
+        return fail(type(exc).__name__, str(exc), code if isinstance(code, str) else None)
+    print(json.dumps({"paths": [Path(p).as_posix() for p in paths]}, sort_keys=True, indent=2))
+    return 0
+
+
+class FloorCommitPreflightError(Exception):
+    """`--commit-gate-policy-floor` found the acceptance order unmet before anything was
+    written; `code` is `work_item_not_complete` or `completion_not_committed`."""
+
+    def __init__(self, code: str, detail: str):
+        super().__init__(detail)
+        self.code = code
+
+
+def _head_sha_or_none(repo_root: Path | None) -> str | None:
+    if repo_root is None:
+        return None
+    try:
+        return _head_sha(repo_root)
+    except Exception:
+        return None
+
+
+def _commit_gate_policy_floor_cli(work_item_id: str, *, now: Callable[[], str] | None = None) -> int:
+    """`--commit-gate-policy-floor` (workflow-2.29.0): `/satisfy-gate acceptance` step 5
+    as one plain command. Refuses unless the item is `MILESTONE_COMPLETE` and `HEAD`
+    holds its completed copy, then calls `commit_gate_policy_floor` (unchanged) and,
+    when that answers `None`, `commit_pending_gate_policy_floor`; prints `{commit,
+    recovered}` (exit 0), or one `{"error", "message", "commit", "state_changed"[,
+    "code"]}` object (exit 1). `commit` is the new `HEAD` when it moved during the
+    call. It takes no lock of its own. `now` is a test seam."""
+    repo_root: Path | None = None
+    head_before: str | None = None
+    state_before: str | None = None
+
+    def fail(name: str, message: str, code: str | None = None) -> int:
+        head_after = _head_sha_or_none(repo_root)
+        moved = repo_root is not None and head_after is not None and head_after != head_before
+        changed = repo_root is not None and _state_file_digest(repo_root) != state_before
+        body = {"error": name, "message": message, "commit": head_after if moved else None,
+                "state_changed": changed}
+        if code is not None:
+            body["code"] = code
+        print(json.dumps(body, sort_keys=True))
+        return 1
+
+    try:
+        repo_root, state = _acceptance_cli_context(work_item_id)
+        head_before = _head_sha_or_none(repo_root)
+        state_before = _state_file_digest(repo_root)
+        item = state["work_items"][work_item_id]
+        phase = item.get("phase")
+        if phase != "MILESTONE_COMPLETE":
+            raise FloorCommitPreflightError(
+                "work_item_not_complete",
+                f"{work_item_id} is at phase {phase!r}; the floor is committed after the completion commit (MILESTONE_COMPLETE)")
+        head_item = None
+        if head_before is not None:
+            head_item = _read_json_at_commit_or_empty(
+                repo_root, "HEAD", DEFAULT_STATE_PATH.as_posix()).get("work_items", {}).get(work_item_id)
+        if head_item != item:
+            raise FloorCommitPreflightError(
+                "completion_not_committed",
+                f"HEAD does not hold {work_item_id}'s completed copy; commit the completion first (step 4)")
+        stamp = now() if now is not None else _utc_now_stamp()
+        commit = commit_gate_policy_floor(repo_root, now=stamp)
+        recovered = False
+        if commit is None:
+            commit = commit_pending_gate_policy_floor(repo_root)
+            recovered = commit is not None
+    except _AcceptanceCliRefusal as exc:
+        return fail(exc.name, str(exc))
+    except Exception as exc:  # the contract is JSON, never a traceback
+        code = getattr(exc, "code", None)
+        return fail(type(exc).__name__, str(exc), code if isinstance(code, str) else None)
+    print(json.dumps({"commit": commit, "recovered": recovered}, sort_keys=True, indent=2))
+    return 0
+
+
 def _plan_review_publication_status_cli(argv: list[str] | None = None) -> int:
-    """CLI (`D-Plan-Review-Bundle-Binding`, workflow-2.6.0), read-only except `--satisfy-acceptance`: print
+    """CLI (`D-Plan-Review-Bundle-Binding`, workflow-2.6.0), read-only except the last two options: print
     `plan_review_publication_status` for one work item as a single JSON
     object -- the contract Controller consumes instead of re-deriving the
     table. Rows 4d and 6 print `{"error": <name>, "message": ...}` and exit
     1. That option writes nothing. `--finding-dispositions` (workflow-2.14.0) is the second,
     equally read-only option, and `--acceptance-gate` (workflow-2.26.0) the third.
     `--satisfy-acceptance` (workflow-2.27.0) is the fourth and the first that writes:
-    through `state_transaction`, as `satisfy_acceptance_gate` does."""
+    through `state_transaction`, as `satisfy_acceptance_gate` does. `--write-findings-record`
+    (workflow-2.28.0) is the fifth: it writes only the findings record file, no state.
+    `--commit-gate-policy-floor` (workflow-2.29.0) is the sixth: it commits the gate-policy floor after the completion commit."""
     import argparse
 
     parser = argparse.ArgumentParser(description=_plan_review_publication_status_cli.__doc__)
@@ -20447,14 +20626,25 @@ def _plan_review_publication_status_cli(argv: list[str] | None = None) -> int:
     group.add_argument("--finding-dispositions", metavar="WORK_ITEM_ID")
     group.add_argument("--acceptance-gate", metavar="WORK_ITEM_ID")
     group.add_argument("--satisfy-acceptance", metavar="WORK_ITEM_ID")
+    group.add_argument("--write-findings-record", metavar="WORK_ITEM_ID")
+    group.add_argument("--commit-gate-policy-floor", metavar="WORK_ITEM_ID")
     args = parser.parse_args(argv)
+    if args.commit_gate_policy_floor is not None:  # before the shared `git rev-parse`; an empty id is not "absent"
+        return _commit_gate_policy_floor_cli(args.commit_gate_policy_floor)
+    if args.write_findings_record is not None:  # before the shared `git rev-parse`; an empty id is not "absent"
+        return _write_findings_record_cli(args.write_findings_record)
     if args.satisfy_acceptance is not None:  # before the shared `git rev-parse`, like the report
         return _satisfy_acceptance_cli(args.satisfy_acceptance)
     if args.acceptance_gate is not None:  # before the shared `git rev-parse`; an empty id is not "absent"
         return _acceptance_gate_cli(args.acceptance_gate)
+    if args.finding_dispositions is not None:  # an empty id is not "absent"; the root lookup answers JSON like the siblings
+        try:
+            dispositions_root = Path(_run(["git", "rev-parse", "--show-toplevel"], cwd=Path.cwd()).strip())
+        except Exception as exc:  # the contract is JSON, never a traceback
+            print(json.dumps({"error": type(exc).__name__, "message": str(exc)}, sort_keys=True))
+            return 1
+        return _finding_dispositions_cli(dispositions_root, args.finding_dispositions)
     repo_root = Path(_run(["git", "rev-parse", "--show-toplevel"], cwd=Path.cwd()).strip())
-    if args.finding_dispositions:
-        return _finding_dispositions_cli(repo_root, args.finding_dispositions)
     work_item_id = args.plan_review_publication_status
     state = _load_json(repo_root / DEFAULT_STATE_PATH)
     try:
@@ -20911,6 +21101,61 @@ def commit_gate_policy_floor(repo_root: Path, *, now: str) -> str | None:
     _stage_state_for_commit(repo_root, GATE_POLICY_FLOOR_SCOPE)
     if not _run(["git", "diff", "--cached", "--name-only"], cwd=repo_root).strip():
         return None  # a concurrent writer recorded the same floor first
+    _run(["git", "commit", "-q", "-m", f"chore: record gate policy floor {floor['digest'][:12]}",
+          "-m", f"{GATE_POLICY_FLOOR_TRAILER}: {floor['digest']}"], cwd=repo_root)
+    commit = _head_sha(repo_root)
+    validate_gate_policy_floor_commit(repo_root, commit)
+    gate_policy.clear_caches()
+    return commit
+
+
+class FloorRecoveryRefusedError(Exception):
+    """`commit_pending_gate_policy_floor` refused to commit the floor waiting in the
+    working state file; `code` is `floor_provenance_failed`, `floor_record_invalid`,
+    `floor_not_virtual` or `floor_looser_than_head`. Raised before anything is staged."""
+
+    def __init__(self, code: str, detail: str):
+        super().__init__(detail)
+        self.code = code
+
+
+def commit_pending_gate_policy_floor(repo_root: Path) -> str | None:
+    """workflow-2.29.0: commits a floor already waiting in the working state file,
+    which `commit_gate_policy_floor` cannot see (its own `record_gate_policy_floor`
+    answers the same object once the floor is the virtual one). It proves what it
+    commits before it stages anything, writing nothing: (1) a working
+    `gate_policy_floor` exists, else `None`; (2) provenance holds at `HEAD`; (3) the
+    record is valid; (4) its policy equals the recomputed virtual floor; (5) it is no
+    looser than `HEAD`'s effective floor; (6) its policy differs from `HEAD`'s committed
+    floor, else `None`. Then the index check, the top-level-scoped staging, the same
+    subject and trailer as the function, and the validator. Takes no lock and writes no
+    state. Returns the commit sha, or `None` when nothing new is waiting."""
+    working = _load_json(repo_root / DEFAULT_STATE_PATH)
+    floor = working.get(GATE_POLICY_FLOOR_KEY) if isinstance(working, dict) else None
+    if floor is None:
+        return None
+    if not gate_policy.verify_gate_policy_provenance(repo_root)["ok"]:
+        raise FloorRecoveryRefusedError(
+            "floor_provenance_failed",
+            "the gate-policy provenance fails at HEAD; a floor commit on a broken chain is not repaired by another commit")
+    errors = gate_policy.floor_record_errors(floor)
+    if errors:
+        raise FloorRecoveryRefusedError("floor_record_invalid", "; ".join(errors))
+    history = gate_policy._history(repo_root)
+    adoption, committed = gate_policy._committed_gp(history)
+    virtual, _observed = gate_policy._virtual_floor(repo_root, working, history, gate_policy._base_resolved(adoption))
+    if virtual != floor["policy"]:
+        raise FloorRecoveryRefusedError(
+            "floor_not_virtual", "the working gate_policy_floor is not the floor the Workflow computes")
+    if gate_policy.stricter(gate_policy._effective_floor_of(adoption, committed), floor["policy"]) != floor["policy"]:
+        raise FloorRecoveryRefusedError(
+            "floor_looser_than_head", "the working gate_policy_floor is looser than HEAD's effective floor")
+    if gate_policy._floor_resolved(committed) == floor["policy"]:
+        return None  # only recorded_at or observed differ: nothing new is waiting
+    _assert_index_clean_apart_from_state(repo_root)
+    _stage_state_for_commit(repo_root, GATE_POLICY_FLOOR_SCOPE)
+    if not _run(["git", "diff", "--cached", "--name-only"], cwd=repo_root).strip():
+        return None
     _run(["git", "commit", "-q", "-m", f"chore: record gate policy floor {floor['digest'][:12]}",
           "-m", f"{GATE_POLICY_FLOOR_TRAILER}: {floor['digest']}"], cwd=repo_root)
     commit = _head_sha(repo_root)
@@ -21412,6 +21657,11 @@ def satisfy_acceptance_gate(repo_root: Path, work_item_id: str, *, now: str, run
 
     def mutator(state: dict) -> dict:
         work_item = state["work_items"][work_item_id]
+        # Step 2a's phase and registry check, on the state re-read under the lock
+        # (workflow-2.29.1): the phase judged is the phase completed from.
+        blocker = _acceptance_reachability_blocker(repo_root, work_item_id, work_item)
+        if blocker is not None:
+            raise AcceptancePreflightError(blocker["code"], blocker["detail"])
         anchor = gate_policy.anchor_of(repo_root, work_item_id, work_item)
         if anchor is None:
             raise workflow_forge.ForgeUndecidableError(

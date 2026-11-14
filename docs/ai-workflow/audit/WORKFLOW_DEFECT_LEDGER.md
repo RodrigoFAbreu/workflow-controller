@@ -63,7 +63,7 @@ cross-read.
 | O10 | O-4 | OPTIONAL | PROVEN_STATIC_CLOSURE | FIXED | `workflow_state_completion_obligations_test.py` was not wired into CI |
 | O11 | O-1 | OPTIONAL | PROVEN_EXECUTION | ACCEPTED | a reverted protected interval cannot publish; diagnostic unchanged this round |
 | O12 | O-2 | OPTIONAL | PROVEN_EXECUTION | ACCEPTED | acceptance reads the cached approval `status` rather than recomputing |
-| O13 | O-3 | OPTIONAL | PROVEN_STATIC_CLOSURE | ACCEPTED | `complete_work_item` has no phase guard; the command-level path is proven safe |
+| O13 | O-3 | OPTIONAL | PROVEN_STATIC_CLOSURE | ACCEPTED | `complete_work_item` had no phase guard (2.29.1 added one); the command-level path is proven safe |
 | O14 | O-5 | OPTIONAL | PROVEN_STATIC_CLOSURE | ACCEPTED | `/review-implementation` and external review share `REVIEW_FEEDBACK.md` |
 
 `O11`-`O14` are the four Optional findings the review directed be left
@@ -1615,7 +1615,8 @@ change".
   it stays non-gating. This is the row `I9` and `F4` cross-reference for
   the cache-vs-recompute contract.
 - **`O13` (reviewer `O-3`, `complete_work_item` has no phase guard).**
-  Unchanged. The command-level path remains proven safe by
+  Unchanged in this round; Workflow 2.29.1 later gave `complete_work_item`
+  a phase guard (`CompletionPhaseNotReachableError`). The command-level path remains proven safe by
   `milestone_complete_gate_reachable` and `/accept-milestone`'s user-only
   guard, both exercised by rows `C1`, `C5` and `B14`.
 - **`O14` (reviewer `O-5`, `/review-implementation` and external review

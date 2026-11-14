@@ -41,7 +41,7 @@ Every existing command still works as before when a person runs it.
   for people.
 - `describe` reports the protocol version, the supported majors and the
   supported governing versions. The Workflow releases tested against v1 are
-  listed only here, never in a response: **Workflow 2.7.0** (protocol `1.0`), **Workflow 2.8.0** (protocol `1.1`), **Workflow 2.9.0**, **Workflow 2.9.1** and **Workflow 2.9.2** (all protocol `1.2`), **Workflow 2.10.0** and **Workflow 2.11.0** (both protocol `1.3`), **Workflow 2.12.0**, **Workflow 2.13.0** and **Workflow 2.14.0** (all protocol `1.4`), **Workflow 2.15.0**, **Workflow 2.16.0**, **Workflow 2.17.0**, **Workflow 2.18.0**, **Workflow 2.18.1**, **Workflow 2.18.2**, **Workflow 2.18.3**, **Workflow 2.18.4**, **Workflow 2.18.5**, **Workflow 2.18.6**, **Workflow 2.18.7**, **Workflow 2.19.0**, **Workflow 2.19.1**, **Workflow 2.19.2**, **Workflow 2.20.0**, **Workflow 2.21.0**, **Workflow 2.22.0**, **Workflow 2.23.0**, **Workflow 2.24.0**, **Workflow 2.25.0**, **Workflow 2.25.1**, **Workflow 2.25.2**, **Workflow 2.25.3**, **Workflow 2.25.4**, **Workflow 2.25.5**, **Workflow 2.25.6**, **Workflow 2.25.7**, **Workflow 2.26.0** and **Workflow 2.27.0** (all protocol `1.5`).
+  listed only here, never in a response: **Workflow 2.7.0** (protocol `1.0`), **Workflow 2.8.0** (protocol `1.1`), **Workflow 2.9.0**, **Workflow 2.9.1** and **Workflow 2.9.2** (all protocol `1.2`), **Workflow 2.10.0** and **Workflow 2.11.0** (both protocol `1.3`), **Workflow 2.12.0**, **Workflow 2.13.0** and **Workflow 2.14.0** (all protocol `1.4`), **Workflow 2.15.0**, **Workflow 2.16.0**, **Workflow 2.17.0**, **Workflow 2.18.0**, **Workflow 2.18.1**, **Workflow 2.18.2**, **Workflow 2.18.3**, **Workflow 2.18.4**, **Workflow 2.18.5**, **Workflow 2.18.6**, **Workflow 2.18.7**, **Workflow 2.19.0**, **Workflow 2.19.1**, **Workflow 2.19.2**, **Workflow 2.20.0**, **Workflow 2.21.0**, **Workflow 2.22.0**, **Workflow 2.23.0**, **Workflow 2.24.0**, **Workflow 2.25.0**, **Workflow 2.25.1**, **Workflow 2.25.2**, **Workflow 2.25.3**, **Workflow 2.25.4**, **Workflow 2.25.5**, **Workflow 2.25.6**, **Workflow 2.25.7**, **Workflow 2.26.0**, **Workflow 2.27.0**, **Workflow 2.28.0**, **Workflow 2.29.0**, **Workflow 2.29.1**, **Workflow 2.29.2** and **Workflow 2.29.3** (all protocol `1.5`).
 
 ## 2. Invocation and the envelope
 
@@ -61,7 +61,7 @@ stdout is exactly one JSON document, the **envelope**
 ```json
 {
   "protocol": {"name": "workflow-orchestration", "version": "1.5"},
-  "workflow_release": "2.27.0",
+  "workflow_release": "2.29.3",
   "operation": "next-action",
   "ok": true,
   "result": { "...": "operation-specific" }
@@ -1190,8 +1190,8 @@ under automatic gates). A courier is admissible when, and only when:
 
 ## 10. Compatibility notes
 
-- **Protocol `1.5`** (Workflow 2.15.0; Workflow 2.16.0, 2.17.0, 2.18.0, 2.18.1, 2.18.2, 2.18.3, 2.18.4, 2.18.5, 2.18.6, 2.18.7, 2.19.0, 2.19.1, 2.19.2, 2.20.0, 2.21.0, 2.22.0, 2.23.0, 2.24.0, 2.25.0, 2.25.1, 2.25.2, 2.25.3, 2.25.4, 2.25.5, 2.25.6, 2.25.7, 2.26.0 and 2.27.0 keep it: no snapshot field,
-  row, action, envelope key or classification changed; Workflow 2.26.0 adds a `workflow_state.py` flag, `--acceptance-gate <id>`, that is a read-only report and not a protocol operation; Workflow 2.27.0 adds a `workflow_state.py` flag, `--satisfy-acceptance <id>`, that writes state through `state_transaction` and is not a protocol operation). The `review_round` object of an item's
+- **Protocol `1.5`** (Workflow 2.15.0; Workflow 2.16.0, 2.17.0, 2.18.0, 2.18.1, 2.18.2, 2.18.3, 2.18.4, 2.18.5, 2.18.6, 2.18.7, 2.19.0, 2.19.1, 2.19.2, 2.20.0, 2.21.0, 2.22.0, 2.23.0, 2.24.0, 2.25.0, 2.25.1, 2.25.2, 2.25.3, 2.25.4, 2.25.5, 2.25.6, 2.25.7, 2.26.0, 2.27.0, 2.28.0, 2.29.0, 2.29.1, 2.29.2 and 2.29.3 keep it: no snapshot field,
+  row, action, envelope key or classification changed; Workflow 2.26.0 adds a `workflow_state.py` flag, `--acceptance-gate <id>`, that is a read-only report and not a protocol operation; Workflow 2.27.0 adds a `workflow_state.py` flag, `--satisfy-acceptance <id>`, that writes state through `state_transaction` and is not a protocol operation; Workflow 2.28.0 adds a `workflow_state.py` flag, `--write-findings-record <id>`, that writes the findings record file and is not a protocol operation; Workflow 2.29.0 adds a `workflow_state.py` flag, `--commit-gate-policy-floor <id>`, that records the acceptance floor through the library and is not a protocol operation; Workflow 2.29.1 changes no flag and no protocol operation: it moves a phase guard inside `workflow_state.py`'s completion; Workflow 2.29.2 changes no flag and no protocol operation either: `--finding-dispositions` and the acceptance report answer a malformed state or registry with one JSON object; Workflow 2.29.3 changes no flag and no protocol operation either, and the protocol stays `1.5`). The `review_round` object of an item's
   `next-action` snapshot gains four additive properties after `current`:
   `plan_local`, `plan_external`, `implementation_local` and
   `implementation_external`, each an integer `>= 0` or `null` (section 5.4),

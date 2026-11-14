@@ -93,7 +93,12 @@ says.
       is_terminal=is_terminal)`. `False` stops here — report the actual
       `phase` and, if `not is_terminal`, name `outstanding_checkpoint_id`
       and what the next bullet says about it; do not proceed past
-      this point.
+      this point. `complete_work_item` makes the same phase check itself
+      (workflow-2.29.1): called from any phase but `AWAITING_FUNCTIONAL_REVIEW`
+      or `AWAITING_USER_ACCEPTANCE` it raises `CompletionPhaseNotReachableError`
+      (`code` `work_item_terminal` or `phase_not_reachable`), after the child and
+      own-registry checks and before the completion obligations. That is a stop
+      too: it writes nothing; report the phase and its `code`.
     - **A non-terminal registry** (ledger
       `I10` of the Workflow v2.x defect ledger retired the non-terminal
       acceptance command that used to be named here; its
@@ -245,12 +250,32 @@ says.
    through this command or `/satisfy-gate acceptance`) finds the archive copy
    and the roadmap row already present: it overwrites the copy with the current
    plan and leaves the one roadmap row complete, so there is exactly one of
-   each per work item id. `complete_work_item` is unchanged: an automatic
-   re-acceptance overwrites `acceptance_satisfaction`, and
+   each per work item id. `complete_work_item` takes no separate path for a
+   re-acceptance: an automatic re-acceptance overwrites `acceptance_satisfaction`, and
    `completion_obligations_accepted` is kept (not rewritten) when the item
    declares no completion obligations.
 5a. **Write the findings record** (workflow-2.14.0, `D-Record`; every item,
-   a remediation child included): call
+   a remediation child included). Run one plain command (workflow-2.28.0):
+
+   ```
+   python3 scripts/workflow_state.py --write-findings-record <work-item-id>
+   ```
+
+   It reads the stored state, so the completed state step 2a returned must already
+   be **written to `docs/ai-workflow/WORKFLOW_STATE.json`** (step 2a persists it as
+   part of step 6's commit, but this flag reads the file: a worker holding the state
+   only in memory gets a clean `work_item_not_complete` refusal, no harm done). It
+   prints exactly `{"paths": [...]}` with exit 0, the paths step 6 stages, and
+   refuses an item that is not `MILESTONE_COMPLETE`. It takes no lock, does not
+   commit and writes no file but the record. A refusal exits 1 with one object
+   `{"error", "message", "record_changed", "state_changed"}` (plus `"code"`): with
+   both `false` the content of both files is unchanged, stop and fix the cause;
+   `record_changed: true` means the record moved and the write then failed, so
+   do not stage or commit it, fix the cause and run it again (a successful run
+   rewrites the whole file);
+   `state_changed: true` means another writer changed the state: stop and re-read it.
+   Run it as written, not under `python3 -I`. The Python description is the
+   specification: call
    `workflow_state.write_finding_dispositions_record(repo_root, state,
    work_item_id)` on the completed state. It writes
    `docs/milestones/completed/<id>-findings.md` (every recorded Optional

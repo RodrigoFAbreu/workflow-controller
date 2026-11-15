@@ -644,7 +644,8 @@ def interpreter_environment(env: Mapping[str, str], private_dir: Path) -> dict[s
     """``env`` with the interpreter configuration of :func:`run_in_place` (D4); public so a test can read the exact
     mapping a run is given."""
     clean = {key: value for key, value in env.items()
-             if not key.startswith("PYTHON") and key not in ("BASH_ENV", "ENV")}
+             if not key.startswith(("PYTHON", "BASH_FUNC_"))
+             and key not in ("BASH_ENV", "ENV", "SHELLOPTS", "BASHOPTS")}
     clean.update(
         PYTHONSAFEPATH="1", PYTHONNOUSERSITE="1", PYTHONDONTWRITEBYTECODE="1",
         PYTHONPYCACHEPREFIX=str(private_dir / _PRIVATE_PYCACHE), PYTHONPATH=str(private_dir / _PRIVATE_PYPATH),

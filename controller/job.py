@@ -9575,7 +9575,7 @@ def _guarded_regeneration(fields: Mapping, record: Mapping, *, managed_repo: Any
         evidence_extra = {key: exc.evidence[key] for key in ("returncode", "stdout_tail", "stderr_tail")
                           if key in exc.evidence}
         return refused(exc.cause, exc.detail, **evidence_extra)
-    finished = {"stage": "finished", "argument": stage, "returncode": ran.returncode,
+    finished = {"stage": "finished", "argument": stage, "ownership_tag": run_tag, "returncode": ran.returncode,
                 "stdout_tail": ran.stdout_tail, "stderr_tail": ran.stderr_tail}
     held = _persist(runtime_root, job_id, {**held, "regeneration": finished, "updated_at": _now()},
                     event="regeneration_finished")
@@ -9618,16 +9618,46 @@ def _landing_gate_before_queries(record: Mapping, *, managed_repo: Any, decision
 _REGENERATION_IN_FLIGHT = ("checked", "started", "finished")
 
 
-def _interrupted_publication(fields: Mapping, record: Mapping) -> bool:
+def _interrupted_publication(fields: Mapping, record: Mapping, root: Path) -> bool:
     """I1 of the h4e3b review: a resumed record whose ``regeneration`` block shows a run in flight and whose first
     reconcile is ``reconcile_invalid``. A kill between the generator's two publications (``current/`` is replaced
     before the archive) leaves a manifest that is missing or already at the carried revision, which the stale-bundle
     check refuses by design; the persisted stage is the evidence the bundle is torn, not stale, so the generator runs
-    again under the guard. The second reconcile, after that run, is still the ending."""
+    again under the guard. The second reconcile, after that run, is still the ending.
+
+    CX1 (D4): for the plan role -- the one role whose stale-bundle check reads a carried revision -- only the two
+    torn-manifest shapes qualify: a missing ``current/MANIFEST.md``, or one already at the carried-out entry's
+    ``plan_revision`` (the same two reads :func:`_is_expected_stale_bundle` makes), and never a ``REJECTED`` bundle.
+    Any other ``reconcile_invalid`` reason ends the record without the extra generator run. The two implementation
+    roles keep the check unchanged: the implementation stage has no carried plan revision to compare."""
     block = record.get("regeneration")
     found = fields.get("reconciliation_evidence")
-    return (isinstance(block, Mapping) and block.get("stage") in _REGENERATION_IN_FLIGHT
-            and isinstance(found, Mapping) and found.get("reason") == RECONCILE_INVALID_REASON)
+    if not (isinstance(block, Mapping) and block.get("stage") in _REGENERATION_IN_FLIGHT
+            and isinstance(found, Mapping) and found.get("reason") == RECONCILE_INVALID_REASON):
+        return False
+    carry = record.get("codex_carry")
+    if not (isinstance(carry, Mapping) and carry.get("role") == routing.APPLY_PLAN_REVIEW):
+        return True
+    work_item_id = str(record["work_item_id"])
+    try:
+        os.lstat(root / codex_carry.ITEM_ROOT / work_item_id / "REJECTED")
+        return False
+    except FileNotFoundError:
+        pass
+    except OSError:
+        return False
+    manifest = _manifest_plan_revision(root, work_item_id)
+    if manifest is None:
+        try:
+            os.lstat(root / codex_carry.ITEM_ROOT / work_item_id / "current" / "MANIFEST.md")
+        except FileNotFoundError:
+            return True  # the manifest is missing: the torn shape
+        except OSError:
+            return False
+        return False  # present but unreadable or without an integer revision: not a torn publication
+    entry = _carried_out_entry(root, work_item_id)
+    revision = None if entry is None else entry.get("plan_revision")
+    return type(revision) is int and manifest == revision
 
 
 #: The phase a wrap-up role's generation record writes, by governing version: the Workflow's
@@ -9778,7 +9808,7 @@ def _carry_resolution(record: Mapping, *, managed_repo: Any, runtime_root: Path,
                                      worker_outcome=worker_outcome, decision=decision)
     if fields["status"] == STATUS_FAILED and (
             _is_expected_stale_bundle(fields, record, Path(managed_repo.root))
-            or _interrupted_publication(fields, record)):
+            or _interrupted_publication(fields, record, Path(managed_repo.root))):
         return _guarded_regeneration(fields, record, managed_repo=managed_repo, runtime_root=runtime_root,
                                      worker_outcome=worker_outcome, decision=decision)
     return fields

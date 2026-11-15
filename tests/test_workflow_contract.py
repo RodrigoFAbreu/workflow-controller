@@ -1640,6 +1640,14 @@ class RunInPlaceTest(unittest.TestCase):
         self.assertEqual(env["PATH"], "/priv/bin:/usr/bin")
         self.assertEqual((env["HOME"], "BASH_ENV" in env, "ENV" in env), ("/h", False, False))
 
+    def test_exported_bash_functions_and_shell_options_are_dropped(self) -> None:
+        # CX1 (D5): an exported `python3` function, `SHELLOPTS` and `BASHOPTS` never reach the generator.
+        env = workflow_contract.interpreter_environment(
+            {"BASH_FUNC_python3%%": "() { echo x; }", "BASH_FUNC_git%%": "() { echo y; }", "SHELLOPTS": "xtrace",
+             "BASHOPTS": "extdebug", "PS4": "$(true)", "PATH": "/usr/bin", "HOME": "/h"}, Path("/priv"))
+        self.assertEqual([k for k in env if k.startswith("BASH_FUNC_")], [])
+        self.assertEqual(("SHELLOPTS" in env, "BASHOPTS" in env, env["HOME"]), (False, False, "/h"))
+
 
 class OwnershipTagVariableTest(unittest.TestCase):
     def test_the_variable_name_is_the_anchors(self) -> None:

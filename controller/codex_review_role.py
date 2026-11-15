@@ -466,10 +466,22 @@ def _not_started(cause: str, message: str, **evidence: Any) -> Ending:
     return Ending(NOT_STARTED, cause, None, {"message": message, **evidence})
 
 
-def _run(managed_repo: Any, *, runtime_root: Path, job_id: str, operator_home: Path, stage: str, work_item_id: str,
-         base: str, model: str, effort: str, state_identity: str, timeout: float, brief: str | None,
-         progress: Callable[[dict], None], launch: Callable[..., worker.WorkerResult],
-         launch_options: dict, clock: Callable[[], str]) -> Ending:
+def _run(managed_repo: Any, **kwargs: Any) -> Ending:
+    """:func:`_run_steps`, then (CX1, D2) the failure of removing ``last-message.md``, if there was one, named once as
+    ``last_message_removal_error`` in whatever ending the steps returned, so no return path can drop it. The outcome
+    is unchanged: a retained message is a leak to report, not a reason to change the verdict."""
+    removal_errors: list[str] = []
+    ending = _run_steps(managed_repo, removal_errors=removal_errors, **kwargs)
+    if removal_errors:
+        ending = Ending(ending.code, ending.cause, ending.worker,
+                        {**ending.evidence, "last_message_removal_error": removal_errors[0]})
+    return ending
+
+
+def _run_steps(managed_repo: Any, *, runtime_root: Path, job_id: str, operator_home: Path, stage: str,
+               work_item_id: str, base: str, model: str, effort: str, state_identity: str, timeout: float,
+               brief: str | None, progress: Callable[[dict], None], launch: Callable[..., worker.WorkerResult],
+               launch_options: dict, clock: Callable[[], str], removal_errors: list[str]) -> Ending:
     root = Path(managed_repo.root)
     layout = codex_worker_sandbox.WorkerLayout(runtime_root, job_id)
     progress({"read_only": True, "stage": "preparing"})
@@ -523,8 +535,8 @@ def _run(managed_repo: Any, *, runtime_root: Path, job_id: str, operator_home: P
     # the Workflow's feedback) are its only retained copies (review I1).
     try:
         runtime.remove_tree(runtime_root, layout.rel("last-message.md"))
-    except (OSError, ControllerError):
-        pass
+    except (OSError, ControllerError) as exc:
+        removal_errors.append(f"{type(exc).__name__}: {exc}")
     if _worker_output_holds_armour(raw, result):
         return Ending(REFUSED, "credential_in_verdict", _emptied(result), {
             "message": "the role's output holds a private-key armour line; nothing was recorded",

@@ -128,6 +128,11 @@ _GIT_PINNED_CONFIG: tuple[tuple[str, str], ...] = (
     ("core.fsmonitor", ""),
     ("core.splitindex", "false"),
     ("log.showsignature", "false"),
+    # CX1, D1: nothing in the target's Git configuration may start a program in a Workflow run, so a signing request
+    # is switched off and the program it would run is one that fails and runs nothing of the target's.
+    ("commit.gpgsign", "false"),
+    ("tag.gpgsign", "false"),
+    ("gpg.program", "false"),
 )
 #: ``git config --show-scope`` scopes whose files are the operator's. Every
 #: other scope (``local``, ``worktree``, and the files they include) is the
@@ -771,7 +776,7 @@ def _git_isolation(root: Path, private_dir: Path, *, context: dict, timeout: flo
     - ``GIT_ALLOW_PROTOCOL`` is empty: no transport, so no remote helper, SSH
       command or partial-clone fetch;
     - command-scope configuration switches off every hook file, fsmonitor,
-      shared-index write and signature check (:data:`_GIT_PINNED_CONFIG`),
+      shared-index write, signature check and signing program (:data:`_GIT_PINNED_CONFIG`),
       every filter driver and every configured hook, named from the
       configuration Git reads for the target, whichever file defines them.
 

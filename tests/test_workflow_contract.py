@@ -1093,7 +1093,8 @@ class GitIsolationTest(_SeededTargets):
         pinned = {env[f"GIT_CONFIG_KEY_{i}"]: env[f"GIT_CONFIG_VALUE_{i}"]
                   for i in range(1, int(env["GIT_CONFIG_COUNT"]))}
         self.assertEqual(pinned, {"core.hookspath": os.devnull, "core.fsmonitor": "", "core.splitindex": "false",
-                                  "log.showsignature": "false"})
+                                  "log.showsignature": "false",
+                                  "commit.gpgsign": "false", "tag.gpgsign": "false", "gpg.program": "false"})
         run = lambda *args: subprocess.run(["git", *args], cwd=root, env=env, capture_output=True, text=True)  # noqa: E731
         self.assertEqual(run("config", "core.hooksPath").stdout, f"{os.devnull}\n")
         self.assertEqual(run("config", "user.name").stdout, "Operator\n")
@@ -1182,6 +1183,16 @@ class RealIndexTest(_SeededTargets):
                 self.assertIn(f"command\thook.{event}.enabled=false", answer["config"])
         for key, value in workflow_contract._GIT_PINNED_CONFIG:
             self.assertIn(f"command\t{key}={value}", answer["config"])
+
+    def test_the_signing_switch_offs_are_pinned_and_in_force_as_command_scope_values(self) -> None:
+        """CX1, D1: signing is off and the program a request would run is one that runs nothing of the target's."""
+        pinned = dict(workflow_contract._GIT_PINNED_CONFIG)
+        for key, value in (("commit.gpgsign", "false"), ("tag.gpgsign", "false"), ("gpg.program", "false")):
+            self.assertEqual(pinned.get(key), value)
+        answer, _call = self.run_probe(self.target("ready"), real_index=True)
+        for key, value in (("commit.gpgsign", "false"), ("tag.gpgsign", "false"), ("gpg.program", "false")):
+            with self.subTest(key=key):
+                self.assertIn(f"command\t{key}={value}", answer["config"])
 
     def test_a_hook_setting_that_is_not_in_force_is_refused_as_not_isolated(self) -> None:
         real = workflow_contract._with_git_config

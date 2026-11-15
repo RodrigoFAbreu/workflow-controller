@@ -266,10 +266,13 @@ class RunTests:
         (extra / "link").symlink_to(outside)
         os.mkfifo(extra / "fifo")
         (extra / "sub" / ".gitmodules").write_text("[submodule]\n")
+        (extra / "sub" / ".git").mkdir()
+        (extra / "sub" / ".git" / "config").write_text("[core]\n")
         (extra / "auth.json").write_text("{}")
         (extra / "armoured.txt").write_text(f"x\n{ARMOUR}\n")
         (extra / "big.bin").write_bytes(b"0" * (crr.MAX_INPUT_FILE_BYTES + 1))
         cases = (("link", "special_file"), ("fifo", "special_file"), ("sub/.gitmodules", "submodule"),
+                 ("sub/.git/config", "submodule"),
                  ("auth.json", "credential_input"), ("armoured.txt", "credential_input"),
                  ("big.bin", "input_over_bound"), ("../../../outside.txt", "path_escape"),
                  (str(outside), "path_escape"))
@@ -579,6 +582,52 @@ class RunTests:
         with mock.patch.object(crr.runtime, "remove_tree", side_effect=OSError("busy")):
             ending = self.run_role(launch=stub)
         self.assertIn("busy", ending.evidence["clone_removal_error"])
+
+
+    def test_a_failed_deletion_of_the_last_message_is_named_on_every_ending(self) -> None:
+        """CX1, D2: the key rides on a recorded ending and on `WORKER_FAILED`; the outcomes are unchanged."""
+        def stub(outcome, subtype):
+            def launch(task, *, runtime_root, job_id, cwd, **kw):
+                Path(runtime_root, "worker", job_id, "last-message.md").write_text(message("APPROVE"))
+                return types.SimpleNamespace(outcome=outcome, subtype=subtype, result="", stdout="", stderr="",
+                                             stream_diagnosis={})
+            return launch
+
+        real = crr.runtime.remove_tree
+
+        def failing(root, rel, *a, **kw):
+            if str(rel).endswith("last-message.md"):
+                raise OSError("busy")
+            return real(root, rel, *a, **kw)
+
+        for name, launch, code in (("failed worker", stub(worker.FAILURE, "error"), crr.WORKER_FAILED),
+                                   ("successful worker", stub(worker.SUCCESS, "success"), None)):
+            with self.subTest(name), mock.patch.object(crr.runtime, "remove_tree", failing):
+                self.script(message=message("APPROVE"))
+                ending = self.run_role(launch=launch)
+                self.assertIn("busy", ending.evidence["last_message_removal_error"])
+                if code:
+                    self.assertEqual(ending.code, code)
+                else:
+                    self.assertNotEqual(ending.code, crr.NOT_STARTED)
+        self.script(message=message("APPROVE"))
+        clean = self.run_role()
+        self.assertNotIn("last_message_removal_error", clean.evidence)
+
+    def test_a_symlink_replacing_an_input_is_reported_non_regular(self) -> None:
+        """CX1, D2 (F-4b73d0cc9188): the branch of `after_check` that names a non-regular file under `.ai-review`."""
+        def swap(task, **kw):
+            result = self.seam(task, **kw)
+            target = next((kw["cwd"] / ".ai-review").rglob("REVIEW_REQUEST.md"))
+            target.unlink()
+            target.symlink_to(kw["cwd"] / "README.md")
+            return result
+
+        self.script(message=message("APPROVE"))
+        ending = self.run_role(launch=swap)
+        self.assertEqual((ending.code, ending.cause), (crr.REFUSED, "read_only_violated"), dict(ending.evidence))
+        self.assertTrue(any(p.startswith("non-regular ") for p in ending.evidence["problems"]),
+                        ending.evidence["problems"])
 
 
 class PlanRoleTests(RunTests, RoleCase):

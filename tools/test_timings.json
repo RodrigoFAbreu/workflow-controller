@@ -200,10 +200,20 @@
       "seconds": 0.0,
       "tests": 3
     },
+    "tests.test_ci_workflows.AfterMergeChecksTest": {
+      "samples": 3,
+      "seconds": 0.006,
+      "tests": 11
+    },
     "tests.test_ci_workflows.AllJobsTest": {
       "samples": 24,
       "seconds": 0.008,
       "tests": 12
+    },
+    "tests.test_ci_workflows.BuildPublishWorkflowTest": {
+      "samples": 4,
+      "seconds": 0.012,
+      "tests": 16
     },
     "tests.test_ci_workflows.ChangeDetectionTest": {
       "samples": 2,
@@ -229,16 +239,6 @@
       "samples": 31,
       "seconds": 0.002,
       "tests": 9
-    },
-    "tests.test_ci_workflows.MainChecksTest": {
-      "samples": 3,
-      "seconds": 0.006,
-      "tests": 11
-    },
-    "tests.test_ci_workflows.MainWorkflowTest": {
-      "samples": 4,
-      "seconds": 0.012,
-      "tests": 16
     },
     "tests.test_ci_workflows.PrTitleWorkflowTest": {
       "samples": 24,

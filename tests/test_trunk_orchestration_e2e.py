@@ -927,9 +927,9 @@ class ReleaseHistoryTest(test_release_txn._ReleaseCase):
         self.assertEqual(self.ci_run(self.squash("chore: settle", overrides={bad: "none"})), "NO_CHANGE")
 
     def _build_job_step(self, name: str, outputs: dict[str, str]) -> None:
-        """Run ``main.yml``'s build-job step ``name`` as the generated model
+        """Run ``build-publish.yml``'s build-job step ``name`` as the generated model
         declares it, in the checked-out clone, with the job's environment."""
-        job = ci_workflows.main_workflow()["jobs"]["build"]
+        job = ci_workflows.build_publish_workflow()["jobs"]["build"]
         step = next(step for step in job["steps"] if step.get("name") == name)
         env = {**job.get("env", {}), **step.get("env", {})}
         for key, value in env.items():
@@ -938,7 +938,7 @@ class ReleaseHistoryTest(test_release_txn._ReleaseCase):
             self.assertNotIn("${{", value, f"{name}: {key} is not a release-plan output")
             env[key] = value
         # The classified version reaches build and verify only through the
-        # job's own environment, as main.yml declares it.
+        # job's own environment, as build-publish.yml declares it.
         self.assertEqual(env.get("RELEASE_VERSION"), outputs["version"])
         runner_env = dict(self.env, TOY_VERIFY_LOG=str(self.verify_log), **env)
         result = subprocess.run(["bash", "-e", "-c", step["run"]], cwd=self.clone, env=runner_env,

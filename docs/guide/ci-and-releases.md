@@ -6,23 +6,54 @@
 
 ## Continuous integration
 
+`CI` (`.github/workflows/ci.yml`) is the one workflow that GitHub starts on
+its own. It runs on every pull request, every push to `main` and on
+`workflow_dispatch`, and calls two reusable workflows, each of which can also
+be run by hand:
+
+```text
+pull request, push to main, manual run
+  └─ ci.yml  "CI"
+       ├─ reuse                         (main only, CI_MAIN_REUSE=on)
+       ├─ validate ── validate.yml  "Validate"
+       │                ├─ changes, docs-tests (shared python-tests.yml), docs
+       │                └─ plan, tests (<i>), tests-result, package
+       ├─ after-merge-determinism, after-merge-mutations   (not on a pull request)
+       └─ build-publish ── build-publish.yml  "Build and publish"
+                             (main only, once validate succeeded)
+                             release-plan, release-target-*, build, publish
+```
+
 `.github/workflows/validate.yml` is the single definition of required
-validation. It is called, never triggered directly, and has six jobs,
-each on `ubuntu-latest` with Python 3.12 and read-only permissions
-(`tests-result` also has `actions: read`, which only the reuse path below
-uses):
+validation. `CI` calls it, a manually dispatched `build-publish.yml` calls
+it, and it can be dispatched by hand on any branch (a manual run never reuses
+another run's results). It has seven jobs, each on `ubuntu-latest` with
+Python 3.12 and read-only permissions (`tests-result` also has
+`actions: read`, which only the reuse path below uses):
 
 - `changes`: decides whether the pull request changes anything but
   documentation (`python3 tools/ci_changes.py detect`). It checks out the
   full history, because it compares the merge ref with its first parent,
   and exposes one output, `code`. See
   [Documentation-only pull requests](#documentation-only-pull-requests);
-- `docs`: runs the documentation gate on every event, whatever `changes`
-  says: `python3 tools/check_docs.py` and
-  `python3 -m unittest tests.test_docs tests.test_backlog`. It is a job of
-  its own so that a documentation failure never hides the shards' feedback
-  on a code pull request, and so that a pull request that skips the shards
-  still has its documentation checked;
+- `docs-tests`: runs the two test modules that read the real documentation
+  and backlog files (`tests.test_docs` and `tests.test_backlog`) on every
+  event, through the shared `python-tests.yml` workflow of
+  `RodrigoFAbreu/action-workflows` (on its `main` branch). The shared
+  workflow checks out this repository itself and runs
+  `python -m unittest discover` with the inputs given here: the `tests`
+  directory, the repository root as the import root, and a file pattern that
+  selects exactly those two modules (`DOCS_TEST_PATTERN` in
+  `tools/ci_workflows.py`; a test fails if it selects any other file). Generic
+  discovery is used only for these two modules: both are stdlib-only, need no
+  install and start no process, so it runs them exactly as before. Its check
+  is `validate / docs-tests / Python tests`;
+- `docs`: runs `python3 tools/check_docs.py` on every event, whatever
+  `changes` says, once `docs-tests` succeeded (a failed `docs-tests` skips
+  it, and `tests-result` then fails). It is a job of its own so that a
+  documentation failure never hides the shards' feedback on a code pull
+  request, and so that a pull request that skips the shards still has its
+  documentation checked;
 - `plan`: (only when `code` is `true`) plans the whole CI selection with
   `tools/run_tests.py plan --profile ci --ci-placement`: every test
   `python3 -m unittest discover -s tests -t .` loads, plus the nine frozen
@@ -56,29 +87,45 @@ uses):
   modules (`tests.test_packaged_runtime`), then installs the wheel with
   pipx and checks `--version`'s first line.
 
-Two workflows call it:
+What `CI` does depends on the event:
 
-- `ci.yml` runs on every pull request, milestone branches included (they
-  are validated through their Draft PR). A newer push to the same ref
-  cancels the run in progress. Pushes to other branches without a pull
-  request are not validated.
-- `main.yml` runs on every push to `main` and on `workflow_dispatch`
-  (no inputs: it classifies the current tip of `main`). After `validate`,
-  its `release-plan` job classifies the commit, and its `build` and
-  `publish` jobs run only when a release is due or resumable (see
-  [Releasing](#releasing)). It also runs the two whole-catalogue scenario
-  checks that no longer run on a pull request (see
-  [Checks that run after the merge](#checks-that-run-after-the-merge)). Its runs never cancel one another (concurrency group
-  `main-release`). GitHub keeps one running and one pending run per
-  group, so a burst of merges can replace a pending `main` run. Then the
-  `after-merge-*` checks do not run for the replaced commit. Nothing is
-  lost for the release: classification compares with the last release tag
-  in the commit's history, not with the previous push, and the release
-  gate checks the commit it publishes (see
+- **A pull request**, milestone branches included (they are validated
+  through their Draft PR): `CI` calls `validate` and nothing else; `reuse`,
+  the `after-merge-*` checks and `build-publish` are skipped. A newer push to
+  the same pull request cancels the run in progress (concurrency group
+  `CI-<ref>`). Pushes to other branches without a pull request are not
+  validated.
+- **A push to `main`**: `CI` calls `validate` (after `reuse` when
+  `CI_MAIN_REUSE` is `on`) and runs the two whole-catalogue scenario checks
+  that no longer run on a pull request beside it (see
   [Checks that run after the merge](#checks-that-run-after-the-merge)).
-  So `main` is checked on every surviving `main` run, not on every commit. `publish` is the
-  only job with write permission, and every action outside `validate` is
-  pinned to a commit SHA.
+  When `validate` succeeded it calls `build-publish.yml`, handing it the
+  results of `validate` and of both checks, so the commit is validated once
+  before a release. `build-publish.yml`'s `release-plan` job classifies the
+  commit, and its `build` and `publish` jobs run only when a release is due
+  or resumable (see [Releasing](#releasing)). A failed or cancelled
+  `validate` skips `build-publish` entirely. `main`'s runs never cancel one
+  another (concurrency group `main-release`). GitHub keeps one running and
+  one pending run per group, so a burst of merges can replace a pending
+  `main` run. Then the `after-merge-*` checks do not run for the replaced
+  commit. Nothing is lost for the release: classification compares with the
+  last release tag in the commit's history, not with the previous push, and
+  the release gate checks the commit it publishes (see
+  [Checks that run after the merge](#checks-that-run-after-the-merge)). So
+  `main` is checked on every surviving `main` run, not on every commit.
+- **A manual run** (`workflow_dispatch`, no inputs): on `main`, exactly
+  what a push does, in the same `main-release` group (reuse is never taken
+  for a manual run); on any other branch, `validate` and the `after-merge-*`
+  checks, in a concurrency group of the run's own, and no publication. See
+  [Running a workflow by hand](#running-a-workflow-by-hand).
+
+`publish` is the only job with write permission (`CI`'s `build-publish`
+job grants `contents: write` because a called workflow can never have more
+than its caller grants, and `build-publish.yml` gives it to `publish` alone),
+and every action outside `validate.yml` is pinned to a commit SHA.
+`main.yml`, the separate trunk workflow before `CI` became the one entry
+point, is retired: `python3 tools/ci_workflows.py --check` fails while it
+exists.
 
 `workflow-conformance.yml` is managed by the Workflow Manager and is
 untouched. It still runs the nine conformance suites in one job, on every
@@ -122,7 +169,7 @@ are the single-test ones: the conformance `protocol`, `state` and `gate_policy` 
 `IsolationTest`, `CycleClosesTest`, `PersonStopsTest` and the generated `Scenario_*`
 classes; a class of one test cannot be made smaller by moving methods. The largest
 check outside the shard estimate is `tests.test_catalogue_determinism.CatalogueDeterminismTest`
-(1075.4 s), which `CI_PLACEMENT` runs in `main.yml` after the merge. Six classes of several
+(1075.4 s), which `CI_PLACEMENT` runs on `main` after the merge. Six classes of several
 tests that held a shard up were split along their test methods in CI1b, and a ratchet in
 `tests.test_test_shards` keeps a multi-test class from growing back past 200 s.
 
@@ -130,7 +177,7 @@ tests that held a shard up were split along their test methods in CI1b, and a ra
 
 A pull request whose every changed path is documentation skips `plan` and
 the six `tests` shards, about 24 minutes of the roughly 25 a pull request
-took. It still runs `docs` and `package`, and the required check
+took. It still runs `docs-tests`, `docs` and `package`, and the required check
 `tests-result` still reports. The decision is a job, never a `paths` or
 `paths-ignore` filter on the workflow: a filtered workflow would leave the
 required check pending forever.
@@ -167,7 +214,7 @@ required check pending forever.
   tools/ci_changes.py require`, always runs and passes only when `changes`
   and `docs` succeeded and `code` is exactly `true` or `false`; a failed or
   cancelled `changes` job fails the required check.
-- **`main` runs everything.** `main.yml` calls the same workflow on a push,
+- **`main` runs everything.** `CI` calls the same workflow on a push,
   where `code` is always `true`. The saving applies to a pull request only.
 - **Measurement.** On the last 60 first-parent commits of `main` 19 were
   documentation-only under this set, about a third. The live duration of
@@ -185,7 +232,7 @@ detects differences these three scenarios expose in the runner or the normaliser
 (a break in the normaliser's masking alone does not fail it, because none of the
 three observes a volatile value).
 
-On a push to `main`, `main.yml` runs them as `after-merge-determinism` and
+On a push to `main`, `CI` runs them as `after-merge-determinism` and
 `after-merge-mutations`, each with the same setup as a shard (including
 `ALLOW_USERNS`), through `python3 tools/run_tests.py main-check MODULE`. That
 command fails closed: it exits non-zero on an empty or short selection, any skip or
@@ -195,7 +242,10 @@ any failure, and an older tree that lacks it refuses. They are never reused unde
 Both checks gate the release. `build` and `publish` need the checks of the exact
 commit they publish: the `after-merge-*` jobs when the release target is the pushed
 commit, or `release-target-determinism` and `release-target-mutations` when a
-`RESUME` targets an ancestor (those run on the target after `release-plan`). A
+`RESUME` targets an ancestor (those run on the target after `release-plan`).
+`CI` hands the `after-merge-*` results to `build-publish.yml` as inputs, so
+`build-publish` starts once both checks and `validate` have finished; a
+manually dispatched `build-publish.yml` runs the two checks itself. A
 missing, pending, failed, cancelled or skipped covering job, or a success for a
 different commit, prevents the release. **Timing:** an ordinary release publishes
 after the slower of `validate` (11.8 to 22.1 minutes across the six shards when it
@@ -316,36 +366,65 @@ GitHub re-runs it. The same command works locally:
 `python3 tools/release.py check-title "fix: a typo in the gate text"`
 reads the policy committed at `HEAD`.
 
-The workflow files `ci.yml`, `main.yml`, `main-reuse-report.yml`, `validate.yml` and
-`pr-title.yml` are generated. Edit the model in
+The workflow files `ci.yml`, `validate.yml`, `build-publish.yml`,
+`main-reuse-report.yml` and `pr-title.yml` are generated. Edit the model in
 `tools/ci_workflows.py`, then run `python3 tools/ci_workflows.py --write`;
 `python3 tools/ci_workflows.py --check` (and a test) fails when a
-committed file differs from the model.
+committed file differs from the model, or when a retired file (`release.yml`,
+`main.yml`) exists.
 
-The checks are `validate / changes`, `validate / docs`,
+The checks of a pull request are `validate / changes`,
+`validate / docs-tests / Python tests`, `validate / docs`,
 `validate / plan`, `validate / tests (<i>)`, `validate / tests-result`,
-`validate / package` and `PR title`. See
+`validate / package` and `PR title`. A run on `main` adds
+`reuse`, `after-merge-determinism`, `after-merge-mutations` and
+`build-publish / <job>` for each job of `build-publish.yml`. See
 [Repository settings](#repository-settings) for which of them `main`
 requires.
+
+### Running a workflow by hand
+
+Each of the three can be started from the Actions tab or with `gh`
+(`gh workflow run <file> --ref <branch>`); none takes inputs.
+
+- **`CI`** on `main` is the usual manual release run: it validates the tip
+  of `main` once and, if that succeeds, calls `build-publish.yml` exactly
+  as a push does. On another branch it validates and runs the after-merge
+  checks, and publishes nothing.
+- **`Build and publish`** (`build-publish.yml`) on `main` is a manual
+  publication that cannot skip a gate: dispatched, it has no results handed
+  in, so it calls `validate.yml` (the full shards, never reused) and runs
+  both after-merge checks itself, and `release-plan`, `build` and `publish`
+  need them exactly as they need `CI`'s results. It takes the `main-release`
+  slot, so it never runs beside a `CI` run on `main`. On another branch it
+  validates and publishes nothing (`release-plan` runs only on `main`).
+- **`Validate`** (`validate.yml`) runs the required validation alone, on any
+  branch, with `changes` reporting `code=true` (a manual run is never
+  documentation-only).
+
+`build-publish.yml` trusts a result only from its inputs, which only a
+calling workflow can set: `workflow_dispatch` declares none, so a manual run
+cannot claim a validation it did not run. A called run has a concurrency
+group of its own, because its caller already holds `main-release`.
 
 ### Reusing a pull request's results on `main` (`CI_MAIN_REUSE`)
 
 A squash merge makes a new commit, but its **tree** (the files) equals the
 tree of the pull request's merge ref whenever `main` did not move after the
 pull request's last CI run. For that tree the whole validation already ran.
-`main.yml` can therefore skip the shards and re-check the recorded results
+`CI` on `main` can therefore skip the shards and re-check the recorded results
 instead of running the same tests a second time. Whether it does is set by
 one repository variable, `CI_MAIN_REUSE` (Settings, Secrets and variables,
 Actions, Variables):
 
-| Value | What `Main` does |
+| Value | What `CI` does on `main` |
 | --- | --- |
-| unset, empty or `report` | **Report only (the default).** The separate workflow `main-reuse-report.yml` (job `reuse-report`) works out what it would do and writes it to its job summary. It is not part of `Main`: nothing in `Main` waits for it, it holds no `main-release` concurrency slot and it cannot fail `Main`, so `Main` is exactly as fast as without it. The full validation runs as before. |
+| unset, empty or `report` | **Report only (the default).** The separate workflow `main-reuse-report.yml` (job `reuse-report`) works out what it would do and writes it to its job summary. It is not part of `CI`: nothing in `CI` waits for it, it holds no `main-release` concurrency slot and it cannot fail `CI`, so `CI` is exactly as fast as without it. The full validation runs as before. |
 | `on` | **Reuse.** The `reuse` job runs first (about a minute, which `validate` waits for). When every check passes, `validate` does not run the shards: `tests-result` verifies the recorded tree and plan digest and re-aggregates the recorded records. Any failed check runs the full shards. |
 | `off` | Neither job runs; nothing is looked up and nothing changes. |
 | anything else | Treated as `off` (nothing is looked up), and the `reuse-report` summary says so. Values are compared without regard to case (`ON` is `on`) and are not trimmed (`" on "` is an unknown value). |
 
-**What the jobs check** (`reuse` in `main.yml` and `reuse-report` in `main-reuse-report.yml` share the logic in `tools/ci_reuse.py`; permissions `actions: read`,
+**What the jobs check** (`reuse` in `ci.yml`, which never runs on a pull request, and `reuse-report` in `main-reuse-report.yml` share the logic in `tools/ci_reuse.py`; permissions `actions: read`,
 `contents: read`, `pull-requests: read`; it cannot write). It finds the pull
 request that was merged as this commit, requires that it came from this
 repository, and takes its latest successful `CI` run on the pull request's
@@ -358,18 +437,19 @@ from before reuse existed (its artifact has no `tree.txt`), or any API
 error. A reused run still goes through `tests-result`, which verifies the
 tree and digest again and fails the run (no release) on a mismatch, and
 re-runs `aggregate` on the records: each planned test exactly once, all
-passed, no leaked process. `release-plan`, `build` and `publish` keep
-`needs: validate`, and each states in its own `if` that every job it needs
-must be `success` (a skipped `reuse` upstream, as in report and `off` modes,
+passed, no leaked process. `CI`'s `build-publish` job keeps
+`needs: validate`, and it and `build-publish.yml`'s `release-plan`, `build`
+and `publish` each state in their own `if` that the validation must be
+`success` (a skipped `reuse` upstream, as in report and `off` modes,
 must not suppress a release; `!cancelled()`, never `always()`).
 
-**Reading the report.** Open the `Main reuse report` run for the push (the `reuse` job's summary in the `Main` run, once the variable is `on`).
+**Reading the report.** Open the `Main reuse report` run for the push (the `reuse` job's summary in the `CI` run on `main`, once the variable is `on`).
 It lists this commit's tree, the merged pull request and its head, the
 candidate `CI` run id, the recorded tree and plan digest next to this
 commit's (each marked `equal` or `DIFFERENT`), and a last line: `Decision:
 would reuse.` or `Decision: would not reuse: <reason>.` To check a decision
 against reality, open the candidate run (it is the id in the summary) and
-compare: if the report said "would reuse", the full `validate` of this `Main`
+compare: if the report said "would reuse", the full `validate` of this `CI`
 run should be green, and its test count equal to the pull request's. A
 "would reuse" next to a red `validate` is a bug in the decision. Do three or
 more merges before switching to `on`. Three cross-checks (PRs #47, #48 and #45) all matched,
@@ -381,7 +461,7 @@ and the owner switched this repository to `on` on 2026-10-15.
 `--body off` removes the job's work as well. It is a variable change, not a
 code change, and takes effect on the next push to `main`.
 
-**Rolling back.** If a reused `Main` run is wrong, set the variable to `off`
+**Rolling back.** If a reused `CI` run on `main` is wrong, set the variable to `off`
 (or `report`) and choose **Re-run all jobs**: the full shards run. `validate`
 is handed a run id only while the variable is `on` when it is evaluated, so
 a retry after the change does not reuse. **Re-run failed jobs** is not a
@@ -453,7 +533,8 @@ comes from its plan (see
 
 ### How a commit on `main` is classified
 
-Every push to `main` runs `main.yml`. Its `release-plan` job runs
+Every push to `main` runs `CI`, which calls `build-publish.yml` once
+`validate` succeeded. Its `release-plan` job runs
 `tools/release.py classify --commit <sha>` (a full 40-hex SHA of a
 commit already on `origin/main`), which prints one state. For a commit
 `C`:
@@ -464,8 +545,9 @@ commit already on `origin/main`), which prints one state. For a commit
    release (none, or only a draft) and is not in `abandoned_tags`, the
    version is the base's, and `C` classifies `RESUME` at the base tag's
    own commit, whatever came after it. The commits since the base are
-   released by the next run: the next push to `main`, or `main.yml` run
-   from the Actions tab (`workflow_dispatch`).
+   released by the next run: the next push to `main`, or a manual run of
+   `CI` or `Build and publish` on `main` (see
+   [Running a workflow by hand](#running-a-workflow-by-hand)).
 3. **The range** is `C`'s first-parent history since the base tag (all
    of it without one). Each commit in it contributes:
    - nothing, when the policy committed at that commit is absent or uses
@@ -515,8 +597,9 @@ whitespace, like this repository's, is stored exactly as before.
 The tag is created only after validation and artifact verification, and
 it is never moved or deleted. A run interrupted at any point -- before
 the tag push, or after it with no release or a half-uploaded draft -- is
-completed by the next push to `main`, or by running `main.yml` from the
-Actions tab: both classify `RESUME` at the tag's own commit. A draft is
+completed by the next push to `main`, or by running `CI` or
+`Build and publish` on `main` from the Actions tab: each classifies `RESUME`
+at the tag's own commit. A draft is
 completed from its present assets, which must verify; a draft that does
 not is left for a human, never deleted. A failed or bad *published*
 release is fixed with a new release: merge a `fix:` pull request.
@@ -740,8 +823,9 @@ python3 tools/release.py classify --commit "$(git rev-parse origin/main)"
 ```
 
 `--commit` takes a full 40-hex SHA of a commit already on `origin/main`.
-If a release job fails, fix the cause and re-run `main.yml` from the
-Actions tab, or let the next push to `main` do it. Never re-push or move
+If a release job fails, fix the cause and run `CI` (or
+`Build and publish`) on `main` from the Actions tab, or let the next push to
+`main` do it. Never re-push or move
 a tag.
 
 With auto-merge on, a milestone whose release did not publish stops at
@@ -783,9 +867,12 @@ configuration from the [cutover](#cutover-from-the-version-file-model) on.
     `validate / package`, `workflow-conformance` and `PR title`. The
     individual `validate / tests (<i>)` shards are deliberately not
     required: their number changes with the plan, and `tests-result`
-    fails whenever a shard fails or is missing. `validate / changes` and
-    `validate / docs` are not required either, because `tests-result`
-    fails unless both succeeded. On a
+    fails whenever a shard fails or is missing. `validate / changes`,
+    `validate / docs-tests / Python tests` and `validate / docs` are not
+    required either, because `tests-result` fails unless `changes` and
+    `docs` succeeded, and `docs` runs only after `docs-tests` succeeded.
+    The contexts come from `CI`'s job id `validate`, which must stay
+    `validate` for them to keep their names. On a
     [documentation-only pull request](#documentation-only-pull-requests)
     `validate / plan` is skipped by its condition, and GitHub reports a
     job skipped that way as a success, so the required check passes and
@@ -818,7 +905,9 @@ configuration from the [cutover](#cutover-from-the-version-file-model) on.
   allowed, which it is here; the merge runs as the account `gh` is
   authenticated as. The policy's `release_workflow` (default `main.yml`)
   names the workflow whose trunk run publishes the release the Controller
-  then waits for. A repository that requires a **merge queue** is not
+  then waits for. In this repository that is `ci.yml` (its `build-publish`
+  job calls `build-publish.yml` within the same run), so an opt-in here must
+  set `"release_workflow": "ci.yml"`. A repository that requires a **merge queue** is not
   supported: the queue writes its own squash message, and the merge then
   fails verification (`MERGED_REWRITTEN`). This repository's policy does
   not opt in yet; the opt-in is a `chore:` pull request after 1.6.0 is

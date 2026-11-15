@@ -126,13 +126,13 @@ next step stops at the `fast_forward_trunk` gate with the exact command
 refusal state until you choose an exit. See
 [When a milestone gets stuck](milestone-branches.md#when-a-milestone-gets-stuck-the-refusal-state-exits).
 
-**"A merged milestone did not produce a release."** `main.yml` classified
-the merge `NO_CHANGE`: under the `conventional_commit` trigger, the pull
+**"A merged milestone did not produce a release."** `CI`'s
+`build-publish / release-plan` job classified the merge `NO_CHANGE`: under the `conventional_commit` trigger, the pull
 request's title had a type that releases nothing (`docs`, `chore`, `ci` or
 `test` here); under `version_change`, the version did not change. See
 [Releasing](ci-and-releases.md#releasing).
 
-**"`main.yml` failed with `INVALID_SUBJECT`."** A commit on `main` since the
+**"`CI` failed on `main` with `INVALID_SUBJECT`."** A commit on `main` since the
 last release tag has a subject the policy cannot classify, for example a
 squash message edited in the merge dialog. Nothing was tagged. Add the
 commit to `release.bump_overrides` in a pull request. See

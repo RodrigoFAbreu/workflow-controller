@@ -648,7 +648,7 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-ns1` (NS1), implementation revision 1, plan `docs/ai-workflow/CONTROLLER_NS1_PLAN.md` (revision 3), base commit
+Item `workflow-controller-ns1` (NS1), implementation revision 2 (revision 1 plus the functional round 1 fix F1), plan `docs/ai-workflow/CONTROLLER_NS1_PLAN.md` (revision 3), base commit
 `1ffbde2`. Three checkpoints: CP1 (the launcher, `--namespace`, Ctrl-C), CP2 (the kill proof, the unsafe-module list, unwrapped shards), CP3 (docs).
 Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and
 the system directories, and no write inside the read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; flows
@@ -676,7 +676,7 @@ Pick a module from `NAMESPACE_UNSAFE_MODULES` (`sed -n 2016,2036p tools/test_sha
 `python3 -B tools/run_tests.py --namespace require <that module>; echo rc=$?`; then run it with the default `auto`.
 Expected: `require` exits 2 naming the module and its reason, running nothing; `auto` runs the shard bare, the header reads `namespace: none` or
 `isolated for N of M shards (unwrapped: ...)`, with a notice.
-Functional round 1 fix: the `require` refusal printed only the module names; it now prints each module's reason too (`tests.test_lock (the lock probe answers unknown outside the init PID namespace)`). Re-test this flow; flows 1 and 6 ran at the previous head and need re-running.
+Functional round 1 fix: the `require` refusal printed only the module names; it now prints each module's reason too (`tests.test_lock (the lock probe answers unknown outside the init PID namespace)`). Re-test this flow (revision 2); flows 1 and 6 ran at the previous head and need re-running.
 
 **Flow 5: `--plan-only` never probes.**
 Run `python3 -B tools/run_tests.py --namespace require --plan-only | head -5; echo rc=$?`.

@@ -75876,7 +75876,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-cx1-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-cx1-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 4,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -76024,12 +76024,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 0,
+          "local": 1,
           "external": 0
         }
       },
-      "state_revision": 25,
-      "last_transition": "2026-11-15T17:55:26Z",
+      "state_revision": 26,
+      "last_transition": "2026-11-15T18:04:40Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -76150,6 +76150,34 @@
               "review_content_id": "2a49388eb3c60046a6aab2d379cc0814799a00ff74b3a1dbdd85d584a155f0c8",
               "verdict": "APPROVE",
               "at": "2026-11-15T16:58:24Z"
+            }
+          ]
+        },
+        "F-262eec5c109e": {
+          "digest": "262eec5c109ed0d4f975d79d2820380650ab40c7c16200c3d82380176d847d1e",
+          "text": "**O1. An unchanged clone holding a tracked path whose name is not UTF-8 is now a false refusal, undeclared.** `_clone_git` decodes the `ls-tree -z` output with `errors=\"replace\"`, so `n\\xffame` becomes `n�ame`, the `lstat` fails, and the path is reported `changed or new path n�ame`; the old `status` comparison listed nothing for the same unchanged clone (both checked here). It fails closed, but `docs/common-problems.md` names only the `ident` and `working-tree-encoding` classes. Decode with `surrogateescape` (and `os.fsencode` the path), or declare it on the page.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "3efe6cf46f795fac0a3f3c86cd99dde12a7a16a75fc6f8926498dbde2df8d4cf",
+              "verdict": "REVISE",
+              "at": "2026-11-15T18:04:40Z"
+            }
+          ]
+        },
+        "F-a94bdde88279": {
+          "digest": "a94bdde882791f9ea9e637d7794e4554e3ff4116513d83e08a1a87b7ccb12144",
+          "text": "**O2. `docs/ACTIVE_MILESTONE.md`'s CP2 paragraph still says \"the fresh-index `status` gains `--ignored`\"**; the self-review replaced that listing with `ls-files -z --others` (the next paragraph says so). Reword the CP2 sentence so the narrative does not state both.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "3efe6cf46f795fac0a3f3c86cd99dde12a7a16a75fc6f8926498dbde2df8d4cf",
+              "verdict": "REVISE",
+              "at": "2026-11-15T18:04:40Z"
             }
           ]
         }

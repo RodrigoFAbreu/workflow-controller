@@ -917,29 +917,31 @@ class FilterAndStatusTest(unittest.TestCase):
 
         return runner
 
-    def test_another_failure_of_the_worktree_read_alone_raises(self) -> None:
-        # The ``--local`` read succeeds here, so this reaches the second read's narrowing (fail-closed).
-        runner = self.worktree_read_stub(128, b"fatal: unknown error occurred while reading the configuration files\n")
-        with self.assertRaises(GitOperationError):
-            gitrepo.filter_disabling_config(self.repo, runner=runner)
-        runner = self.worktree_read_stub(1, b"fatal: --worktree cannot be used with multiple working trees\n")
-        with self.assertRaises(GitOperationError):
-            gitrepo.filter_disabling_config(self.repo, runner=runner)
+    def conditional_include(self, marker: Path) -> None:
+        """``config.worktree`` includes a clean filter only when ``.git/config``'s remote URL matches (``CX2-E-I01``)."""
+        self.config("extensions.worktreeConfig", "true")
+        self.config("remote.origin.url", "https://example.invalid/repo")
+        (self.base_dir / "cond.cfg").write_text(f'[filter "plant"]\n\tclean = "sh -c \'touch {marker}; cat\'"\n')
+        (self.repo / ".git" / "config.worktree").write_text(
+            f'[includeIf "hasconfig:remote.*.url:https://example.invalid/**"]\n\tpath = {self.base_dir / "cond.cfg"}\n')
 
-    def test_each_no_worktree_scope_refusal_gives_the_local_options(self) -> None:
-        self.config("filter.loc.clean", "prog")
-        for stderr in (b"fatal: --worktree cannot be used with multiple working trees unless the config\n"
-                       b"extension worktreeConfig is enabled. Please read \"CONFIGURATION FILE\"\n",
-                       b"fatal: unable to read config file '/r/.git/config.worktree': No such file or directory\n"):
-            options = gitrepo.filter_disabling_config(self.repo, runner=self.worktree_read_stub(128, stderr))
-            self.assertIn("filter.loc.clean=", options)
-            self.assertEqual(len(options), 8)
+    def test_a_worktree_conditional_include_satisfied_by_the_local_config_is_named(self) -> None:
+        self.conditional_include(self.base_dir / "ran")
+        options = gitrepo.filter_disabling_config(self.repo)
+        self.assertIn("filter.plant.clean=", options)
+        self.assertEqual(len(options), 4 * 2)
 
-    def test_a_matching_refusal_with_output_raises(self) -> None:
-        runner = self.worktree_read_stub(128, b"fatal: --worktree cannot be used with multiple working trees\n",
-                                         stdout=b"filter.x.clean\0")
-        with self.assertRaises(GitOperationError):
-            gitrepo.filter_disabling_config(self.repo, runner=runner)
+    def test_a_worktree_conditional_include_filter_does_not_run_under_the_disabling_set(self) -> None:
+        marker = self.base_dir / "ran"
+        self.plant_attributes()
+        self.conditional_include(marker)
+        (self.repo / "a.txt").write_text("a\n")
+        os.utime(self.repo / "a.txt", (1, 1))
+        config = gitrepo.filter_disabling_config(self.repo)
+        self.assertEqual(gitrepo.status_counts(self.repo, config=config), (0, 0))
+        self.assertFalse(marker.exists())
+        gitrepo.status_counts(self.repo)
+        self.assertTrue(marker.exists())
 
     def test_a_worktree_clean_filter_runs_only_without_the_disabling_set(self) -> None:
         marker = self.base_dir / "ran"

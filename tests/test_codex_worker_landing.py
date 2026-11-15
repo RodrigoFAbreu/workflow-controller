@@ -1518,6 +1518,23 @@ class UnfinishedWorkTest(Fixture):
         self.assertIsNone(self.probe())
         self.assertFalse(marker.exists())
 
+    def test_a_clean_filter_in_a_worktree_conditional_include_does_not_run(self) -> None:
+        # CX2-E-I01: the include condition is satisfied by ``.git/config``'s remote URL, which only the combined read sees.
+        marker = self.tmp / "ran"
+        (self.clone / ".gitattributes").write_text("src.txt filter=plant\n")
+        git(self.clone, "add", ".gitattributes")
+        git(self.clone, "commit", "-q", "-m", "attrs")
+        git(self.clone, "config", "--local", "extensions.worktreeConfig", "true")
+        git(self.clone, "config", "--local", "remote.origin.url", "https://example.invalid/repo")
+        included = self.tmp / "cond.cfg"
+        included.write_text(f"[filter \"plant\"]\n\tclean = \"sh -c 'touch {marker}; cat'\"\n")
+        (self.clone / ".git" / "config.worktree").write_text(
+            f'[includeIf "hasconfig:remote.*.url:https://example.invalid/**"]\n\tpath = {included}\n')
+        (self.clone / "src.txt").write_text("one\n")
+        os.utime(self.clone / "src.txt", (1, 1))  # racy stat data: Git would look at the content and run the filter
+        self.assertIsNone(self.probe())
+        self.assertFalse(marker.exists())
+
     def test_a_clean_clone_with_the_worktree_extension_and_no_worktree_config_holds_none(self) -> None:
         git(self.clone, "config", "--local", "extensions.worktreeConfig", "true")
         self.assertFalse((self.clone / ".git" / "config.worktree").exists())

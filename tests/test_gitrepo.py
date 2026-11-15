@@ -847,6 +847,55 @@ class FilterAndStatusTest(unittest.TestCase):
         gitrepo.status_counts(self.repo)  # without the set the configured program is what Git runs
         self.assertTrue(marker.exists())
 
+    # ``workflow-controller-cx2`` D1: the worktree scope.
+    def worktree_config(self, *args: str) -> None:
+        run(["git", "-C", str(self.repo), "config", "--worktree", *args], cwd=self.repo)
+
+    def plant_attributes(self) -> None:
+        (self.repo / ".gitattributes").write_text("a.txt filter=plant\n")
+        run(["git", "add", ".gitattributes"], cwd=self.repo)
+        run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "attrs"], cwd=self.repo)
+
+    def test_a_driver_in_the_worktree_configuration_is_named(self) -> None:
+        self.config("extensions.worktreeConfig", "true")
+        self.worktree_config("filter.wt.clean", "prog")
+        self.config("filter.loc.clean", "prog")
+        options = gitrepo.filter_disabling_config(self.repo)
+        self.assertIn("filter.wt.clean=", options)
+        self.assertIn("filter.loc.clean=", options)
+        self.assertEqual(len(options), 16)
+
+    def test_a_single_worktree_repository_without_the_extension_is_unchanged(self) -> None:
+        self.config("filter.loc.clean", "prog")
+        options = gitrepo.filter_disabling_config(self.repo)
+        self.assertEqual(len(options), 8)
+
+    def test_a_linked_worktree_without_the_extension_gives_the_local_options(self) -> None:
+        self.config("filter.loc.clean", "prog")
+        run(["git", "worktree", "add", "-q", str(self.base_dir / "linked")], cwd=self.repo)
+        options = gitrepo.filter_disabling_config(self.repo)
+        self.assertIn("filter.loc.clean=", options)
+        self.assertEqual(len(options), 8)
+
+    def test_another_failure_of_the_worktree_read_raises(self) -> None:
+        self.config("extensions.worktreeConfig", "true")
+        (self.repo / ".git" / "config.worktree").write_text("[filter \"x\"\n\tclean = [broken\n")
+        with self.assertRaises(GitOperationError):
+            gitrepo.filter_disabling_config(self.repo)
+
+    def test_a_worktree_clean_filter_runs_only_without_the_disabling_set(self) -> None:
+        marker = self.base_dir / "ran"
+        self.plant_attributes()
+        self.config("extensions.worktreeConfig", "true")
+        self.worktree_config("filter.plant.clean", f"sh -c 'touch {marker}; cat'")
+        (self.repo / "a.txt").write_text("a\n")
+        os.utime(self.repo / "a.txt", (1, 1))
+        config = gitrepo.filter_disabling_config(self.repo)
+        self.assertEqual(gitrepo.status_counts(self.repo, config=config), (0, 0))
+        self.assertFalse(marker.exists())
+        gitrepo.status_counts(self.repo)
+        self.assertTrue(marker.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

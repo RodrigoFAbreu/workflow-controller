@@ -1506,6 +1506,18 @@ class UnfinishedWorkTest(Fixture):
         self.assertEqual((out(self.root, "status", "--porcelain", "--untracked-files=all"),
                           out(self.root, "for-each-ref")), before)
 
+    def test_a_clean_filter_in_the_clone_worktree_config_does_not_run(self) -> None:
+        marker = self.tmp / "ran"
+        (self.clone / ".gitattributes").write_text("src.txt filter=plant\n")
+        git(self.clone, "add", ".gitattributes")
+        git(self.clone, "commit", "-q", "-m", "attrs")
+        git(self.clone, "config", "--local", "extensions.worktreeConfig", "true")
+        git(self.clone, "config", "--worktree", "filter.plant.clean", f"sh -c 'touch {marker}; cat'")
+        (self.clone / "src.txt").write_text("one\n")
+        os.utime(self.clone / "src.txt", (1, 1))  # racy stat data: Git would look at the content and run the filter
+        self.assertIsNone(self.probe())
+        self.assertFalse(marker.exists())
+
     def test_a_hook_in_the_clone_does_not_run(self) -> None:
         marker = self.tmp / "hook-ran"
         hooks = self.clone / ".git" / "hooks"

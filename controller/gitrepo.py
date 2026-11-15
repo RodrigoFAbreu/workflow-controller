@@ -1008,14 +1008,23 @@ def filter_disabling_config(repo_root: Path, *, runner: Runner | None = None) ->
     """The ``-c`` options that switch off every filter driver ``repo_root``'s own configuration names
     (``workflow-controller-h4f``, D6b): each driver's ``process``, ``clean`` and ``smudge`` set empty, which Git reads
     as no filter, and ``required`` false, so a status of a tree whose stat data is racy runs no program of the tree's
-    configuration. Read with ``git config --local --includes --name-only --list -z``, so a driver an included file
-    defines is named too. The names are the clone's, so every one is passed as an argument, never through a shell."""
-    out = _git(repo_root, ["config", "--local", "--includes", "--name-only", "--list", "-z"], runner, quiet=True)
+    configuration. Two reads, because Git resolves a driver from either scope: ``git config --local --includes
+    --name-only --list -z`` (``.git/config`` and what it includes) and ``git config --worktree ...`` (``config.worktree``
+    when ``extensions.worktreeConfig`` is on), the names unioned (``workflow-controller-cx2``, D1). Without that
+    extension a repository with a linked worktree refuses ``--worktree`` with exit 128 and "--worktree cannot be used
+    with multiple working trees"; exactly that refusal means no worktree scope. Every other failure of either read
+    raises. The names are the clone's, so every one is passed as an argument, never through a shell."""
     names: set[str] = set()
-    for key in out.split("\0"):
-        found = _FILTER_KEY.match(key)
-        if found:
-            names.add(found.group("name"))
+    reads = (
+        _git(repo_root, ["config", "--local", "--includes", "--name-only", "--list", "-z"], runner, quiet=True),
+        _probe(repo_root, ["config", "--worktree", "--includes", "--name-only", "--list", "-z"], runner, absent=128,
+               absent_stderr="--worktree cannot be used with multiple working trees", quiet=True),
+    )
+    for out in reads:
+        for key in (out or "").split("\0"):
+            found = _FILTER_KEY.match(key)
+            if found:
+                names.add(found.group("name"))
     options: list[str] = []
     for name in sorted(names):
         for variable, value in (("process", ""), ("clean", ""), ("smudge", ""), ("required", "false")):

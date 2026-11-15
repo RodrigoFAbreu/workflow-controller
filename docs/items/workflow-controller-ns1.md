@@ -4,6 +4,8 @@ Item id: `workflow-controller-ns1`.
 
 Not yet planned. Run the commands a Controller worker uses to test code inside an isolated PID namespace. **Needs an owner decision on strictness: wrap automatically, or refuse an unwrapped test command.** Source: [#329](https://github.com/RodrigoFAbreu/workflow-controller/issues/329), a follow-up to [PR #328](https://github.com/RodrigoFAbreu/workflow-controller/pull/328). Complexity: low to medium. Priority: medium-high.
 
+Follow-up: [NS2](workflow-controller-ns2.md) makes the full suite namespace-clean.
+
 ## Background
 
 On 2026-11-09 `killpg(1, SIGKILL)` crashed the desktop session. PR #328 refuses an unsafe group id at every place the Controller signals a process group, but it does not stop a test or worker command from sending a signal that ends the session by another route; a worker ran such a test on the host four times before anyone saw it.

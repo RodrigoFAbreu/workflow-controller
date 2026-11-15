@@ -512,7 +512,7 @@ items:
     detail: docs/items/workflow-controller-ns1.md
   - id: workflow-controller-lt1
     title: "Workers run the selected tests per checkpoint and leave the full suite to CI"
-    status: next
+    status: done
     order: 88
     depends_on: []
     detail: docs/items/workflow-controller-lt1.md

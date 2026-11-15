@@ -1,0 +1,43 @@
+{
+  "dispositions": {
+    "F-240c085d7da7": {
+      "disposition": "fixed"
+    },
+    "F-25a31ca79a98": {
+      "disposition": "dropped",
+      "reason": "The pgrep check is documented as a rule, not a lock, for the plain python3 invocation; interpreter options with a separate value (-X dev) are a rare form and the pattern covers the common flags."
+    },
+    "F-330953e9e2dc": {
+      "disposition": "fixed"
+    },
+    "F-460b39bd86e7": {
+      "disposition": "fixed"
+    },
+    "F-597ba6aca060": {
+      "disposition": "fixed"
+    },
+    "F-72585ce72ad6": {
+      "disposition": "fixed"
+    },
+    "F-84f0116b2c1c": {
+      "disposition": "dropped",
+      "reason": "The guide bullet names the classifier test (a diff tools/ci_changes.py classifies as docs needs no run); the self-review applied a stricter test than the page requires, so the page's rule is not unsafe."
+    },
+    "F-896204ece907": {
+      "disposition": "dropped",
+      "reason": "The plan and mapping wordings mean the same thing, as the finding says; plans are historical records and are not edited after approval."
+    },
+    "F-d48ae582b0d1": {
+      "disposition": "fixed"
+    },
+    "F-ef10b4d24def": {
+      "disposition": "dropped",
+      "reason": "The finding itself says the D7 trade-off is unchanged; the guide names the two post-merge modules and the other exceptions are skipped locally without their environment variables."
+    },
+    "F-f3fb04fef58b": {
+      "disposition": "fixed"
+    }
+  },
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-lt1"
+}

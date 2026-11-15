@@ -423,6 +423,22 @@ stays `FAILED` and carries the fact in its evidence. `run` then waits and
 repeats an interrupted one; see
 [pausing for usage limits](../run.md#pausing-for-usage-limits).
 
+### What a worker runs at a checkpoint
+
+A worker verifies a checkpoint with the tests its plan selects, not with the
+full suite. The `**Tests:**` paragraph that ends the checkpoint's section of
+the plan lists the modules, and the worker runs
+`python3 tools/run_tests.py <those names>` plus the repository-wide guards
+when the tree changes. The full suite is CI's, on the pull request, with two
+exceptions: `tests.test_catalogue_determinism` and
+`tests.test_scenarios_negative` run only after the merge and gate the
+release, so a plan that touches the scenario catalogue selects them itself.
+At most one local full run happens, at the self-review. Between lanes, two
+full runs never overlap: a worker checks with the anchored `pgrep` command of
+[the verification policy](development.md#verification-policy) before it starts
+one and waits or asks the orchestrator if another is live. That is a rule,
+not a lock.
+
 ## Harness adapters
 
 The agent harnesses the Controller can reach are declared in one registry,

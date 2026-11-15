@@ -91,7 +91,7 @@
 | 85 | [Fix the timing flakes: OrphanWatchdogTest readiness waits (#246) and the Ctrl-C test under load (#342); owner priority](items/workflow-controller-fx1.md) `workflow-controller-fx1` | Done | - | - |
 | 86 | [Move this repository to Workflow 2.29.3](items/workflow-controller-w1.md) `workflow-controller-w1` | Done | - | - |
 | 87 | [Run worker test commands in an isolated PID namespace (#329)](items/workflow-controller-ns1.md) `workflow-controller-ns1` | Done | - | - |
-| 88 | [Workers run the selected tests per checkpoint and leave the full suite to CI](items/workflow-controller-lt1.md) `workflow-controller-lt1` | Next | - | - |
+| 88 | [Workers run the selected tests per checkpoint and leave the full suite to CI](items/workflow-controller-lt1.md) `workflow-controller-lt1` | Done | - | - |
 | 89 | [Let the functional tester sandbox run the PID-namespace launcher (unshare)](items/workflow-controller-ts1.md) `workflow-controller-ts1` | Next | - | - |
 | 90 | [Review follow-ups of the Codex worker items H4e2, H4e3 and H4e3b (#320, #339, #341)](items/workflow-controller-cx1.md) `workflow-controller-cx1` | Next | - | - |
 | 91 | [Review follow-ups of the Codex worker item H4f (#344)](items/workflow-controller-cx2.md) `workflow-controller-cx2` | Next | - | - |

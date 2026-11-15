@@ -739,6 +739,21 @@ class RunTests:
                                        edit=edit("lf.txt"))
         self.assertEqual(problems, ["changed or new path lf.txt"])
 
+    def test_a_tracked_file_grown_past_twice_its_blob_is_refused_unread(self) -> None:
+        """Self-review: no conversion can more than double a file, so a worker's sparse giant is never read."""
+        real = Path.read_bytes
+
+        def spy(path: Path) -> bytes:
+            if path.name == "big.txt" and path.stat().st_size > 1 << 20:
+                raise AssertionError("the sparse giant was read")
+            return real(path)
+
+        grow = lambda clone: os.truncate(clone / "big.txt", 1 << 40)  # noqa: E731
+        with mock.patch.object(Path, "read_bytes", spy):
+            self.assertEqual(self.clone_problems({"big.txt": b"a\nb\n"}, edit=grow), ["changed or new path big.txt"])
+        self.assertEqual(self.clone_problems({"big.txt": b"a\nb\n"},
+                                             edit=lambda clone: (clone / "big.txt").write_bytes(b"a\r\nb\r\n")), [])
+
     def test_ident_and_working_tree_encoding_paths_are_a_declared_false_refusal(self) -> None:
         """D3: checkout converts these, so an unchanged clone is refused; `docs/common-problems.md` words it."""
         problems = self.clone_problems({"id.c": b"/* $Id$ */\n", ".gitattributes": b"*.c ident\n"})

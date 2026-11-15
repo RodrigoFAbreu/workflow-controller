@@ -328,14 +328,16 @@ def _lf(data: bytes) -> bytes:
 
 
 def _tracked_problems(clone: Path, runner: Any, tree: str) -> list[str]:
-    """Why a tracked path of the clone differs from the base tree's ``ls-tree -r -z`` listing ``tree`` (CX1, D3): by
-    ``lstat`` type, executable bit and raw bytes. No attribute, filter or program is consulted. A regular file passes
-    when its raw bytes hash to the entry's id or when both sides are equal after each CRLF becomes LF (a checkout
-    conversion in either direction); ``ident`` and ``working-tree-encoding`` paths are a declared false refusal."""
+    """Why a tracked path of the clone differs from the base tree's ``ls-tree -r -l -z`` listing ``tree`` (CX1, D3):
+    by ``lstat`` type, executable bit and raw bytes. No attribute, filter or program is consulted. A regular file
+    passes when its raw bytes hash to the entry's id or when both sides are equal after each CRLF becomes LF (a
+    checkout conversion in either direction); ``ident`` and ``working-tree-encoding`` paths are a declared false
+    refusal. A file larger than twice its blob cannot pass either way, so it is refused without being read: the
+    worker's file is never an unbounded read."""
     problems: list[str] = []
     for entry in (e for e in tree.split("\0") if e):
         head, _, rel = entry.partition("\t")
-        mode, _, oid = head.split(" ", 2)
+        mode, _, oid, size = head.split()
         if rel == ".ai-review" or rel.startswith(".ai-review/"):
             continue
         path = clone / rel
@@ -350,7 +352,8 @@ def _tracked_problems(clone: Path, runner: Any, tree: str) -> list[str]:
         elif mode == "120000":
             same = kind == stat.S_IFLNK and _blob_id(os.readlink(bytes(path)), len(oid)) == oid
         elif mode in ("100644", "100755"):
-            same = kind == stat.S_IFREG and bool(info.st_mode & stat.S_IXUSR) == (mode == "100755")
+            same = (kind == stat.S_IFREG and bool(info.st_mode & stat.S_IXUSR) == (mode == "100755")
+                    and info.st_size <= 2 * int(size))
             if same:
                 try:
                     data = path.read_bytes()
@@ -381,14 +384,13 @@ def after_check(prepared: codex_worker_tree.Prepared, layout: codex_worker_sandb
             env = {**review._git_env(layout.base), "GIT_INDEX_FILE": str(Path(scratch) / "index")}
             fresh = gitrepo.subprocess_runner(env)
             _clone_git(clone, fresh, "read-tree", prepared.base)
-            listing = _clone_git(clone, fresh, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored")
-            tree = _clone_git(clone, runner, "ls-tree", "-r", "-z", "--full-tree", prepared.base)
-        for record in (r for r in listing.split("\0") if r):
-            path = record[3:]
-            # Tracked content is compared per entry below (CX1, D3): the attribute-converting ``status`` comparison
-            # would refuse an unchanged line-ending-normalised file, so only untracked ("??") and ignored ("!!")
-            # paths are taken from the listing.
-            if record[:2] in ("??", "!!") and not (path == ".ai-review" or path.startswith(".ai-review/")):
+            # Every path the fresh index does not hold, untracked and ignored alike (no exclude file is read), so a
+            # worker's ``.gitignore`` of ``*`` hides nothing. Tracked content is compared per entry below (CX1, D3):
+            # ``status`` would refuse an unchanged line-ending-normalised file and would hash a worker's sparse giant.
+            listing = _clone_git(clone, fresh, "ls-files", "-z", "--others")
+            tree = _clone_git(clone, runner, "ls-tree", "-r", "-l", "-z", "--full-tree", prepared.base)
+        for path in (r for r in listing.split("\0") if r):
+            if not (path == ".ai-review" or path.startswith(".ai-review/")):
                 problems.append(f"changed or new path {path}")
         problems.extend(_tracked_problems(clone, runner, tree))
         refs = _clone_git(clone, runner, "for-each-ref", "--format=%(refname) %(objectname)").splitlines()

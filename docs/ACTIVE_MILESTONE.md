@@ -663,54 +663,57 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-ts1` (TS1), implementation revision 1, plan `docs/ai-workflow/CONTROLLER_TS1_PLAN.md` (revision 4), base commit
-`707daa9`. Two checkpoints: CP1 (the sixth `SANDBOX_LIMITS` entry in `controller/functional_review.py`, repeated in `controller/codex_bridge.py`,
-and the `GATE_FLOWS_NOT_RUNNABLE` text) and CP2 (the pages `docs/guide/automation.md`, `docs/guide/harnesses.md`, `docs/guide/development.md`
-and the item record). The item only states a limit in prompt text; nothing allows or fakes the launcher. Every flow runs offline: no network,
-no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the system directories, and no
-write inside the read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write only to the scratch
-`TMPDIR`. **No flow runs the PID-namespace launcher** (that is the limit under test): none uses `--namespace require`, and none runs the full suite.
+Item `workflow-controller-cx1` (CX1), implementation revision 2, plan `docs/ai-workflow/CONTROLLER_CX1_PLAN.md` (revision 4), base commit
+`cd294d5`. Four checkpoints, all complete: CP1 (signing switch-offs, named failed deletion of `last-message.md`), CP2 (the review after-check
+compares mode, links, ignored files and raw bytes), CP3 (the regeneration record keeps its tag, narrow plan-role resume, clean generator
+environment), CP4 (gate text, pages, item record). Revision 2 holds the fixes of the local and manual external implementation reviews. It closes
+#320, #339 and #341. Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the
+sandbox's `bin/` and the system directories, and no write inside the read-only product clone. Run from the product clone with `python3 -B` and no
+`PYTHONPATH=.`; flows write only to the scratch `TMPDIR`. No flow needs a pull request, a forge call or a model turn, and none runs the full suite.
 
-Setup: `export TMPDIR=$(mktemp -d)`. No data to seed. Flows 1 to 3 are one-line Python reads; flows 4 and 5 are reading flows; flow 6 runs narrow selections.
+Setup: `export TMPDIR=$(mktemp -d)`. No data to seed; the tests build their own scratch repositories.
 
-**Flow 1: the Claude tester's sixth limit.**
-Run `python3 -B -c "from controller import functional_review as f; print(f.SANDBOX_LIMITS[5]); print(f.SHARED_SANDBOX_LIMITS == f.SANDBOX_LIMITS[:6])"`.
-Expected: the text names the launcher (`unshare --user ... --pid`, `python3 tools/run_tests.py --namespace require`); says the tester tries it once and, if refused, records
-the flow `failed` with `reason` `environment`, quotes the message, does not retry or work around it; names the forms of the refusal (`Operation not permitted`,
-`no PID namespace here`, `running the shards without a PID namespace`, `namespace: none (<reason>)`, `no PID namespace on this host`); and says a namespace-isolation
-flow is `passed` only on evidence (`namespace: isolated`, or `isolated for N of M shards` with N above 0, never `isolated for 0 of M shards`). Second line prints `True`.
+**Flow 1: the signing switch-offs (#320).**
+Run `python3 -B tools/run_tests.py tests.test_workflow_contract tests.test_review_recorder; echo rc=$?`, then
+`python3 -B -c "from controller import workflow_contract as w; print([c for c in w._GIT_PINNED_CONFIG if 'gpg' in str(c)])"`.
+Expected: `# Test run: PASS`, `rc=0`; the printed list holds `commit.gpgsign=false`, `tag.gpgsign=false` and `gpg.program=false` (in whatever tuple form the table uses).
+The recorder's hostile-configuration test (a target whose `gpg.program` would leave a marker) leaves no marker.
 
-**Flow 2: the Codex tester repeats it word for word.**
-Run `python3 -B -c "from controller import functional_review as f, codex_bridge as c; print(f.SANDBOX_LIMITS[5] in c.SANDBOX_LIMITS, c.SANDBOX_LIMITS.index(f.SANDBOX_LIMITS[5]))"`.
-Expected: `True 4` (right after the Codex tuple's `PATH` entry).
+**Flow 2: the review role's ending and after-check (#320).**
+Run `python3 -B tools/run_tests.py tests.test_codex_review_role tests.test_job_codex_review tests.test_codex_apply_safety; echo rc=$?`.
+Expected: `PASS`, `rc=0`. The cases to look for in the listing (`-v`): a failed deletion of `last-message.md` is named once as `last_message_removal_error`; a changed
+input mode, a symlinked `.ai-review`, a `chmod +x`, a symlink swapped for identical content, a deleted tracked path, a worker's `.gitignore` of `*`, a one-byte edit and
+a file grown past twice its blob are each refused; an unchanged clone with a tracked symlink, a line-ending-normalised file or a non-UTF-8 tracked name passes; a forged
+loose blob is refused and a deleted loose blob is a named problem, not an exception; `ident` and `working-tree-encoding` paths are the declared false refusal.
 
-**Flow 3: the checklist writer's note and the stop's words.**
-Run `python3 -B -c "from controller import functional_review as f; n=f.sandbox_limits_note(); print('unshare' in n, 'namespace: isolated' in n); print(f.gate_text(f.GATE_FLOWS_NOT_RUNNABLE, flows='1', detail='d'))"`.
-Expected: `True True`; the gate text lists "no PID-namespace launcher (`unshare`)" among what the sandbox lacks and its remedy says to run the flows by hand on the host and record
-one `functional_evidence` result per flow with the Workflow's protocol script (it does not name the `record-external-result` operation; the pages do).
+**Flow 3: the regeneration record and the generator's environment (#341).**
+Run `python3 -B tools/run_tests.py tests.test_job_codex_apply tests.test_codex_apply_regeneration tests.test_generator_run tests.test_resume; echo rc=$?`.
+Expected: `PASS`, `rc=0`: the `finished` block keeps `ownership_tag`; an unrelated invalid reason ends a plan-role record with no second generator run; a torn manifest
+still gets its rerun for each role; an exported bash function and `SHELLOPTS=xtrace` run nothing from the generator's environment.
 
-**Flow 4: `docs/guide/automation.md` and `docs/guide/harnesses.md`.**
-Run `grep -n -i 'launcher\|environment_limited' docs/guide/automation.md docs/guide/harnesses.md` and read the hits ("What the sandbox does not claim", the `environment_limited`
-paragraph, "The Codex tester sandbox").
-Expected: both pages say the launcher is refused in both testers' sandboxes, a flow needing it ends `environment_limited`, an operator runs it on the host and records it with
-`record-external-result --kind functional_evidence`; the Codex statement is conditional (not measured; a launcher that runs lets the flow pass). Links resolve (flow 6).
+**Flow 4: the gate text and a run past the regeneration gate (#341, #339).**
+Run `python3 -B tools/run_tests.py tests.test_job_codex_apply tests.test_codex_apply_regeneration -v 2>&1 | grep -i "exposure\|past_the_regeneration"; echo rc=$?`.
+Expected: both tests listed `ok`. The `surface_landing_touched` gate text says `explain` and every later Controller step also run the landed `scripts/` and names
+restoring or verifying `scripts/` and `.workflow-manager/`; the text is absent for every other cause. A run past the gate without regenerating ends `GATE_BLOCKED` on the
+protocol's answer, launches no review and records nothing.
 
-**Flow 5: `docs/guide/development.md` "Namespace" and the item page.**
-Read the "In a functional tester's sandbox" bullet (`grep -n "functional tester's sandbox" docs/guide/development.md`) and `docs/items/workflow-controller-ts1.md`.
-Expected: the bullet calls such a flow an operator flow; the item page is retitled "State that the functional tester sandbox refuses the PID-namespace launcher" (also in
-`docs/backlog.yaml` and the `docs/ROADMAP.md` row) and carries what shipped, mechanisms chosen and rejected (D1), owner decisions O1 and O2 (the `workflow-manager` tester `PATH` is O2) and the verification.
+**Flow 5: the pages and the item record (#339, #341, #320).**
+Read `docs/common-problems.md` (the `ended read_only_violated on a clone the worker did not change` entry, the carry-gate causes) and `docs/guide/harnesses.md`
+(`grep -n -i "not_written\|protected_paths\|BASH_FUNC\|gpgsign\|ownership_tag\|scripts/" docs/common-problems.md docs/guide/harnesses.md`), then `docs/items/workflow-controller-cx1.md`.
+Expected: the pages say a refusal at the check writes nothing and `not_written` names only the state file; an item whose artifacts file declares more plan-stage protected
+paths is refused and applied by hand; the false refusal of `ident` and `working-tree-encoding` paths is worded with its remedy; the landed `scripts/` exposure is stated; the
+item page records the status, the plan link, the built list and the deviation (GATE_BLOCKED, not FAILED).
 
-**Flow 6: the checkpoint selections and the docs checks pass.**
-Run `python3 -B tools/run_tests.py tests.test_functional_review tests.test_codex_bridge tests.test_protocol_schema tests.test_package_structure tests.test_write_containment tests.test_docs tests.test_plan_document_consistency; echo rc=$?`
-(no `--namespace require`; the default is fine, and a `namespace: none` line is expected in this sandbox), then `python3 -B tools/check_docs.py; echo rc=$?`,
-`python3 -B scripts/workflow_backlog.py check; echo rc=$?` and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-ts1; echo rc=$?`.
+**Flow 6: the checkpoint selections together and the docs checks.**
+Run `python3 -B tools/run_tests.py tests.test_workflow_contract tests.test_review_recorder tests.test_codex_review_role tests.test_job_codex_review tests.test_codex_apply_safety tests.test_job_codex_apply tests.test_codex_apply_regeneration tests.test_generator_run tests.test_resume tests.test_write_containment tests.test_package_structure tests.test_docs tests.test_plan_document_consistency; echo rc=$?`
+(default namespace; a `namespace: none` line is expected in this sandbox), then `python3 -B tools/check_docs.py; echo rc=$?`, `python3 -B scripts/workflow_backlog.py check; echo rc=$?`
+and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-cx1; echo rc=$?`.
 Expected: `# Test run: PASS`, exact coverage, every `rc=0`.
 
-**Known limitations / out of scope.** The limit is stated, not probed (D3): the Controller does not test the launcher before a launch, so a later harness build that admits it lets a flow
-that ran it pass. Allowing or faking the launcher is rejected (D1, O1); `workflow-manager` on the tester `PATH` is a separate item (D6, O2). Existing checklists are not rewritten (D4).
-`docs/common-problems.md`'s `flows_not_runnable` causes do not name the launcher yet (outside the plan's files; recorded follow-up). The full suite is not a flow; the single local full run at
-the self-review failed only the environmental `tests.test_fake_codex_contract` mcp-list test (the fake reads the host's `~/.codex` config) after the fixed `tests.test_protocol_schema` guard.
+**Known limitations / out of scope.** `ident` and `working-tree-encoding` paths stay a declared false refusal (D3). #339 items 1 and 2 ship as words, not code (O1: either could be
+its own item). A run past `carry_bundle_regeneration_pending` ends `GATE_BLOCKED`, not `FAILED` as the issue said. H4f's follow-ups (CX2), routing further roles and new Codex worker
+features are out of scope. The full suite is CI's on the pull request; it is not a flow.
 
 ## Next action
 
-`/milestone-plan` for `workflow-controller-cx1` (Review follow-ups of the Codex worker items H4e2, H4e3 and H4e3b (#320, #339, #341)), ready for `PLANNING`.
+Manual functional review of `workflow-controller-cx1` (the checklist above), then `/accept-milestone` or `/apply-functional-review`.

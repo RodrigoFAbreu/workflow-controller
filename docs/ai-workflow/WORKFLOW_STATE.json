@@ -76611,7 +76611,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-cx2-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-cx2-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 2,
       "implementation_revision": 3,
       "functional_review_round": null,
@@ -76751,12 +76751,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 2,
+          "local": 3,
           "external": 1
         }
       },
-      "state_revision": 19,
-      "last_transition": "2026-11-15T21:52:57Z",
+      "state_revision": 20,
+      "last_transition": "2026-11-15T22:05:00Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -76847,6 +76847,34 @@
               "review_content_id": "427f6a3a8fa1f8eb625f8da44e4f507e784f0930f2413a9d918a326558d5ceda",
               "verdict": "APPROVE",
               "at": "2026-11-15T21:47:00Z"
+            }
+          ]
+        },
+        "F-952c7c42ba82": {
+          "digest": "952c7c42ba82cff8c5c3cb22e537991bb598d88d4838a8c4e3a5aea1a350b982",
+          "text": "**CX2-I-L3-O01:** The `filter_disabling_config` docstring still opens with \"every filter driver `repo_root`'s own configuration names\" and lists only `.git/config`, `config.worktree` and their includes. The single read now also names system, global and command-line (`GIT_CONFIG_PARAMETERS`) drivers whenever the caller's environment allows them. `docs/ACTIVE_MILESTONE.md` already says this. The docstring could say it too, and could note that `unfinished_work`'s scrubbed environment excludes system and global.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "3f169b8d47443935df8dafec796c6beb3960fc7c244227182035f1f25a178bcc",
+              "verdict": "REVISE",
+              "at": "2026-11-15T22:05:00Z"
+            }
+          ]
+        },
+        "F-277e9ff15a5a": {
+          "digest": "277e9ff15a5a8914c835f67feefa73b7959e384a9a175e990637aa905cc859d9",
+          "text": "**CX2-I-L3-O02:** `FilterAndStatusTest.worktree_read_stub` (`tests/test_gitrepo.py:909`) is now unused, because the tests that called it were deleted with the per-scope narrowing. Its docstring describes a `--local` read that no longer exists. It could be removed.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "3f169b8d47443935df8dafec796c6beb3960fc7c244227182035f1f25a178bcc",
+              "verdict": "REVISE",
+              "at": "2026-11-15T22:05:00Z"
             }
           ]
         }

@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ns1",
+  "dispositions": {
+    "F-079831b23211": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/356"
+    },
+    "F-0bfeb33952df": {
+      "disposition": "dropped",
+      "reason": "The bundle files are generated review artifacts, already approved by both implementation reviewers at revision 2; CHANGES_SINCE_REVIEW.md carries the F1 fix (2e2ad27), so nothing is lost."
+    },
+    "F-0c3f70e785c4": {
+      "disposition": "fixed",
+      "note": "Plan revision 3 D9(b) says replay resolves a module from the atom key without an inventory; namespace_unsafe_modules in tools/test_shards.py does so, and NamespaceUnsafeShardTest.test_a_replayed_plan_resolves_modules_without_an_inventory covers it."
+    },
+    "F-1f450fdee21b": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/356"
+    },
+    "F-22fe8651e47e": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/356"
+    },
+    "F-25b2c098341c": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/356"
+    },
+    "F-38dc0010b7cd": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/356"
+    },
+    "F-5a147291c6ad": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/356"
+    },
+    "F-5c48ac81f2b7": {
+      "disposition": "fixed",
+      "note": "Plan D1 states that the probe runs the builder's own argv (every flag, util-linux 2.32 and 2.38), and probe_namespace and docs/guide/development.md say the same."
+    },
+    "F-5fa169760b96": {
+      "disposition": "fixed",
+      "note": "Plan CP2 states its wrapped verification uses `python3 tools/run_tests.py --namespace require` on a selection of safe modules."
+    },
+    "F-c2e6d21043fd": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/356"
+    },
+    "F-dc5c344d3588": {
+      "disposition": "fixed",
+      "note": "Plan D9(e) records that no listed module can run wrapped through the runner and that the follow-up removes an entry, with its fix, before it verifies that module wrapped."
+    },
+    "F-eae166d81dd0": {
+      "disposition": "dropped",
+      "reason": "The finding asks for a plan wording change at the next plan edit; plans are historical records and are not edited after approval, and the mapping, D9(a) and CP2 already carry the wrapped-and-unwrapped rule."
+    },
+    "F-f745a6fdf4bf": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/356"
+    }
+  }
+}

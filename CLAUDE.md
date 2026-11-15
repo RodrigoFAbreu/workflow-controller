@@ -37,6 +37,13 @@ on update. Add repository-specific guidance below it; it is never touched.
 
 <!-- workflow-manager:end -->
 
+## Running tests
+
+Run tests through `python3 tools/run_tests.py [names]`, which starts each
+namespace-safe shard in an isolated PID namespace so a stray `kill(-1)` reaches
+only the run (`docs/guide/development.md`, "The test runner"); never use a bare
+`python3 -m unittest` for a signal-sending test.
+
 ## Controller documentation
 
 - Documentation map (guides, ADRs, roadmap, history): `docs/README.md`

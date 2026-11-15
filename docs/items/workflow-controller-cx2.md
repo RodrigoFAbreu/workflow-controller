@@ -19,7 +19,7 @@ The H4e items' follow-ups (CX1) and any new role routing.
 
 All four findings of [#344](https://github.com/RodrigoFAbreu/workflow-controller/issues/344) are closed:
 
-1. **`config.worktree` filters: code.** `gitrepo.filter_disabling_config` reads `git config --worktree` as well as `--local` and unions the filter names. It tolerates two `--worktree` refusals, which mean no worktree scope: a linked worktree without `extensions.worktreeConfig` (CP1), and the extension on with no `config.worktree` written (found at the self-review). Every other failure raises.
+1. **`config.worktree` filters: code.** `gitrepo.filter_disabling_config` reads the combined configuration, `git config --includes --name-only --list -z`, the context `git status` itself uses, so a driver in `.git/config`, in `config.worktree` (`extensions.worktreeConfig`) or in anything either includes is named, including a worktree `includeIf "hasconfig:remote.*.url:"` whose condition `.git/config` satisfies (external review `CX2-E-I01`). It first read `--local` and `--worktree` separately, which could not resolve that condition; the combined read also needs no tolerated refusal (a linked worktree without the extension, or the extension with no `config.worktree`, is simply no worktree scope). Every failure raises.
 2. **State value legality: words.** The harnesses guide and common problems say that the Workflow's `reconcile` judges the values and what to do after `reconcile_invalid` (CP2).
 3. **The `.ai-review/` assumption: words.** Both pages name it and its remedy (CP2).
 4. **The absent amendment witness: words.** Both pages name the case and its remedy (CP2).

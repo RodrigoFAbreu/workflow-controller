@@ -68,8 +68,7 @@
       "gradlew": "the application's own Gradle wrapper entry point -- product deliverable (salvage audit I8)",
       "gradlew.bat": "the application's own Gradle wrapper entry point -- product deliverable (salvage audit I8)",
       "docs/DOMAIN_GLOSSARY.md": "the application's own domain terminology and business rules -- product design content a product technical review binds (salvage audit I8)",
-      "docs/UX_FLOWS.md": "the application's own navigation/UI/interaction flows -- product design content a product technical review binds (salvage audit I8)",
-      "docs/common-problems.md": "the operator task page that lists the flows_not_runnable causes, edited at the self-review to name the PID-namespace launcher -- a deliverable page, protected like docs/guide/"
+      "docs/UX_FLOWS.md": "the application's own navigation/UI/interaction flows -- product design content a product technical review binds (salvage audit I8)"
     },
     "protected_prefixes": {
       "app/": "application source and its own tests -- product deliverable",

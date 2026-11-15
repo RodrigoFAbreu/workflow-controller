@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
 """The Controller's GitHub Actions workflows, as a model. Stdlib only.
 
-The tests are stdlib-only and cannot parse YAML, so the four workflows live
-here as Python data and are rendered by a small deterministic emitter:
+The tests are stdlib-only and cannot parse YAML, so the workflows live
+here as Python data and are rendered by a small deterministic emitter.
+``ci.yml`` is the one entry point that runs on its own; it calls the
+reusable validation (``validate.yml``) and, on ``main`` after a successful
+validation, the reusable build and publication (``build-publish.yml``):
 
-- ``validate.yml`` (``workflow_call`` only) is the single definition of the
+- ``validate.yml`` (``workflow_call``, and ``workflow_dispatch`` for a
+  manual run) is the single definition of the
   required validation: ``changes`` decides, from the pull request's changed
   paths, whether it touches anything but documentation
-  (``tools/ci_changes.py``), ``docs`` runs the documentation gate on every
-  event, ``plan`` computes a duration-balanced plan over the
+  (``tools/ci_changes.py``), ``docs-tests`` runs the documentation test
+  modules through the shared ``python-tests.yml`` workflow of
+  ``RodrigoFAbreu/action-workflows``, ``docs`` runs ``tools/check_docs.py``
+  after it on every event, ``plan`` computes a duration-balanced plan over the
   Controller suite and the frozen conformance suites
   (``tools/run_tests.py``, over ``tools/test_shards.py``), ``tests`` runs
   one matrix job per planned shard, ``tests-result`` aggregates them and
@@ -16,23 +22,32 @@ here as Python data and are rendered by a small deterministic emitter:
   checks the wheel. A pull request that changes only documentation skips
   ``plan`` and ``tests``; ``tests-result`` then succeeds only when ``changes``
   and ``docs`` did, and fails closed otherwise;
-- ``ci.yml`` runs it on every pull request;
+- ``ci.yml`` runs on every pull request, every push to ``main`` and on
+  ``workflow_dispatch``. It calls ``validate.yml`` (``reuse`` first, on
+  ``main`` under ``CI_MAIN_REUSE=on``), runs the two after-merge checks
+  beside it except on a pull request, and on ``main`` calls
+  ``build-publish.yml`` once ``validate`` succeeded, handing it the results,
+  so that the revision is validated once;
+- ``build-publish.yml`` (``workflow_call``, and ``workflow_dispatch`` for a
+  manual publication) classifies the trunk commit with
+  ``tools/release.py classify`` and, when a release is due or resumable,
+  builds, verifies and publishes it as one release transaction. Called, it
+  trusts its caller's results; dispatched, it has none, and runs
+  ``validate.yml`` and the after-merge checks itself first. ``build``
+  receives the classified version as ``RELEASE_VERSION``, and its ``build``
+  and ``verify`` command lines are 1.3.0's, so a ``RESUME`` target carrying
+  1.3.0's tooling still builds;
 - ``pr-title.yml`` checks every pull request's title against the committed
   policy (``tools/release.py check-title``): the title becomes the squash
   commit's subject, and its Conventional Commit type decides the release;
-- ``main.yml`` runs it on every push to ``main`` (and on
-  ``workflow_dispatch``), then classifies the trunk commit with
-  ``tools/release.py classify`` and, when a release is due or resumable,
-  builds, verifies and publishes it as one release transaction. ``build``
-  receives the classified version as ``RELEASE_VERSION``, and its ``build``
-  and ``verify`` command lines are 1.3.0's, so a ``RESUME`` target carrying
-  1.3.0's tooling still builds.
+- ``main-reuse-report.yml`` logs the report-only reuse decision on a push
+  to ``main``.
 
 A ``v*`` tag push triggers nothing: the release transaction creates the tag,
 after validation.
 
-``--write`` renders ``.github/workflows/{validate,ci,main,pr-title}.yml`` and removes
-the retired ``release.yml``; ``--check`` exits ``1`` naming every committed
+``--write`` renders every file in ``WORKFLOWS`` under ``.github/workflows/`` and
+removes the retired ``release.yml`` and ``main.yml``; ``--check`` exits ``1`` naming every committed
 file that differs from the render, and a retired file that still exists. The
 committed YAML is what GitHub runs, so ``--check`` passing means GitHub runs
 exactly the model ``tests.test_ci_workflows`` asserts on.
@@ -83,8 +98,9 @@ RESERVED_SCALARS = frozenset({
 PYTHON_VERSION = "3.12"
 RUNNER = "ubuntu-latest"
 
-#: Every action ``main.yml``'s ``release-plan``, ``build`` and ``publish``
-#: jobs and ``pr-title.yml``'s ``title`` job use, pinned to the full commit
+#: Every action outside ``validate.yml`` uses (``ci.yml``'s ``reuse`` and
+#: ``after-merge-*`` jobs, ``build-publish.yml``'s jobs, ``pr-title.yml``'s
+#: ``title`` job and the report), pinned to the full commit
 #: its tag named when the retired ``release.yml`` first read it (``git ls-remote
 #: https://github.com/actions/<repo>``; each is a lightweight tag, so the
 #: listed object is the commit). ``validate.yml`` keeps the major tag, as
@@ -96,7 +112,7 @@ ACTION_PINS = {
     "actions/download-artifact": ("d3f86a106a0bac45b974a628896c90dbdf5c8093", "v4"),
 }
 
-#: What ``$GITHUB_SHA`` holds for the runs ``main.yml`` classifies.
+#: What ``$GITHUB_SHA`` holds for the runs ``build-publish.yml`` classifies.
 GITHUB_SHA_NOTE = (
     "GitHub documents GITHUB_SHA for a push event as the \"Tip commit pushed to the ref\" "
     "(https://docs.github.com/en/actions/reference/workflows-and-actions/"
@@ -122,7 +138,7 @@ GH_RELEASE_CREATE_NOTE = (
 PACKAGE_TEST_MODULES = tuple(module for module, (where, _) in test_shards.CI_PLACEMENT.items()
                              if where == test_shards.PACKAGE)
 
-#: The ``tests.*`` modules ``main.yml`` runs after the merge, one job each
+#: The ``tests.*`` modules run after the merge, one job each
 #: (``after-merge-<check>`` on the pushed commit, ``release-target-<check>`` on
 #: the commit a release publishes when that is an ancestor), keyed by the job's
 #: check name. The release waits for them; ``tools/test_shards.py``'s CI
@@ -155,9 +171,24 @@ SHARDS_DIR = f"{RESULTS_DIR}/shards"
 SELECTED_DIR = f"{RESULTS_DIR}/selected"
 PLAN_JOB_OUTPUTS = ("shards", "count", "digest")
 
-#: The ``docs`` job's checks: the offline link, anchor and command check, and
-#: the two test modules that read the real documentation and backlog files.
-DOCS_GATE = "python3 tools/check_docs.py\npython3 -m unittest tests.test_docs tests.test_backlog"
+#: The ``docs`` job's check: the offline link, anchor and command check.
+DOCS_GATE = "python3 tools/check_docs.py"
+
+#: The shared workflows this repository calls (``RodrigoFAbreu/action-workflows``,
+#: on its ``main`` branch, as the owner's standard asks). A shared test
+#: workflow checks out the calling repository itself and is configured
+#: through structured inputs only.
+SHARED_WORKFLOWS = "RodrigoFAbreu/action-workflows/.github/workflows"
+SHARED_PYTHON_TESTS = f"{SHARED_WORKFLOWS}/python-tests.yml@main"
+#: The test modules that read the real documentation and backlog files,
+#: run by ``docs-tests`` through the shared ``python-tests.yml``. Its generic
+#: ``unittest discover`` preserves their semantics: both are plain stdlib
+#: modules that need no install (they import ``controller`` from the
+#: checkout and forbid every subprocess). The shared workflow takes one file
+#: pattern, so ``DOCS_TEST_PATTERN`` must select exactly these files under
+#: ``tests/`` (a test checks it against the tree).
+DOCS_TEST_MODULES = ("tests.test_backlog", "tests.test_docs")
+DOCS_TEST_PATTERN = "test_[bd][ao]c*.py"
 
 #: ``validate.yml``'s only input: the id of a pull request run whose recorded
 #: results ``tests-result`` re-verifies instead of the shards running.
@@ -174,7 +205,7 @@ IS_CODE = f"{CHANGES_CODE_OUTPUT} == 'true'"
 TREE_FILE = "tree.txt"
 #: Where ``tests-result`` puts the reused run's timings artifact.
 REUSED_DIR = "reused"
-#: ``main.yml``'s ``reuse`` job: the switch, its work files and its output.
+#: ``ci.yml``'s ``reuse`` job: the switch, its work files and its output.
 REUSE_VARIABLE = "CI_MAIN_REUSE"
 REUSE_WORK_DIR = "reuse"
 REUSE_FACTS = f"{REUSE_WORK_DIR}/facts.json"
@@ -183,7 +214,7 @@ REUSE_RECORDED_DIR = f"{REUSE_WORK_DIR}/recorded"
 REUSE_PERMISSIONS = {"actions": "read", "contents": "read", "pull-requests": "read"}
 #: What a job that calls ``validate.yml`` grants it: ``tests-result`` reads
 #: another run's artifact when it reuses results (a called workflow can only
-#: narrow its caller's permissions, so ``ci.yml`` grants it too).
+#: narrow its caller's permissions, so every caller grants it).
 VALIDATE_CALL_PERMISSIONS = {"contents": "read", "actions": "read"}
 
 DIST_DIR = "dist"
@@ -212,7 +243,7 @@ PIPX_SMOKE = _pipx_smoke("$(python3 tools/release.py version)")
 #: ubuntu-latest sets; the existence guard lets an image without it pass.
 ALLOW_USERNS = ("if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then "
                 "sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0; fi")
-#: ``main.yml``'s ``build`` job's smoke test: the version ``release-plan``
+#: ``build-publish.yml``'s ``build`` job's smoke test: the version ``release-plan``
 #: classified, which the job receives as ``RELEASE_VERSION``. Under
 #: ``version_change`` that is the committed version, and a ``RESUME`` target
 #: carrying 1.3.0's tooling builds exactly it.
@@ -354,9 +385,13 @@ def validate_workflow() -> dict:
                   f"--results-dir {RESULTS_DIR} --run-attempt {RUN_ATTEMPT}")
     return {
         "name": "Validate",
+        # workflow_dispatch has no inputs: a manual run never reuses another
+        # run's results, and inputs.tests-from-run is then null, which
+        # compares equal to '' (GitHub coerces both to 0), so the shards run.
         "on": {"workflow_call": {"inputs": {REUSE_INPUT: {
             "description": "Id of a pull request run to reuse the results of; empty runs the shards.",
-            "type": "string", "required": False, "default": ""}}}},
+            "type": "string", "required": False, "default": ""}}},
+               "workflow_dispatch": None},
         "jobs": {
             # Detection is a job, never a workflow-level paths filter: the
             # required check is tests-result, and a skipped workflow would
@@ -371,10 +406,21 @@ def validate_workflow() -> dict:
                     {"name": "detect", "id": "detect", "run": "python3 tools/ci_changes.py detect"},
                 ],
             },
+            # The documentation test modules, through the shared generic
+            # Python test workflow (it checks out this repository itself).
+            "docs-tests": {
+                "permissions": read,
+                "uses": SHARED_PYTHON_TESTS,
+                "with": {"python-version": PYTHON_VERSION, "test-directory": "tests",
+                         "top-level-directory": ".", "test-pattern": DOCS_TEST_PATTERN},
+            },
             # The documentation gate, on every event: what a skipped shard
             # run must not lose. Separate from changes so a documentation
             # failure never hides the shards' feedback on a code pull request.
+            # It needs docs-tests, so a failed or cancelled docs-tests skips
+            # it and tests-result's require (which reads docs) fails closed.
             "docs": {
+                "needs": ["docs-tests"],
                 "runs-on": RUNNER,
                 "permissions": read,
                 "steps": [
@@ -440,7 +486,7 @@ def validate_workflow() -> dict:
                      "with": {"name": PLAN_ARTIFACT, "path": RESULTS_DIR}},
                     {"if": f"{RUN_SHARDS} && {IS_CODE}", "uses": "actions/download-artifact@v4", "continue-on-error": True,
                      "with": {"pattern": RESULTS_ARTIFACT_PREFIX + "*", "path": SHARDS_DIR}},
-                    # Reuse (main.yml, CI_MAIN_REUSE=on): the pull request run's
+                    # Reuse (ci.yml on main, CI_MAIN_REUSE=on): the pull request run's
                     # records stand in for the shards, but only when its tree
                     # and plan digest equal this run's (verify fails closed),
                     # and they are re-aggregated: exactly once, all passed.
@@ -503,18 +549,6 @@ def validate_workflow() -> dict:
     }
 
 
-def ci_workflow() -> dict:
-    return {
-        "name": "CI",
-        "on": {"pull_request": None},
-        "concurrency": {"group": "${{ github.workflow }}-${{ github.ref }}",
-                        "cancel-in-progress": True},
-        "permissions": {"contents": "read"},
-        "jobs": {"validate": {"permissions": dict(VALIDATE_CALL_PERMISSIONS),
-                              "uses": "./.github/workflows/validate.yml"}},
-    }
-
-
 #: The ``release-plan`` states whose target ``build`` and ``publish`` act on.
 PUBLISHING_STATES = ("RELEASE_DUE", "RESUME")
 #: ``release-plan``'s outputs, written by ``tools/release.py classify``.
@@ -535,11 +569,35 @@ GIT_CREDENTIAL_ENV = {
 def _after(*jobs: str) -> str:
     """Every job in ``jobs`` must have succeeded, explicitly. ``validate``
     has a skipped ``reuse`` ancestor whenever ``CI_MAIN_REUSE`` is not
-    ``on``, and the implicit ``success()`` of a job looks at its whole
-    ``needs`` ancestry, so without this the release jobs would never run in
-    the default mode. ``!cancelled()`` is not ``always()``: a cancelled run
-    still stops, and each prerequisite is still required to be ``success``."""
+    ``on``, and a called ``build-publish.yml`` has a skipped ``validate`` of
+    its own; the implicit ``success()`` of a job looks at its whole
+    ``needs`` ancestry, so without this the release jobs would never run.
+    ``!cancelled()`` is not ``always()``: a cancelled run still stops, and
+    each prerequisite is still required to be ``success``."""
     return " && ".join(["!cancelled()", *(f"needs.{job}.result == 'success'" for job in jobs)])
+
+
+#: ``build-publish.yml``'s inputs when ``ci.yml`` calls it: the results of
+#: the caller's ``validate`` and ``after-merge-<check>`` jobs on the same
+#: ``github.sha``. Empty (the default) means no caller validated anything.
+#: ``workflow_dispatch`` declares no inputs, so a manual run cannot claim a
+#: result: its ``inputs`` are null, and it validates itself.
+VALIDATE_RESULT_INPUT = "validate-result"
+#: The workflow validates the revision itself: nothing was handed in.
+SELF_VALIDATING = f"inputs.{VALIDATE_RESULT_INPUT} == ''"
+#: Exactly one of the two sources says the validation succeeded: the
+#: caller's result (the own ``validate`` is then skipped), or the own
+#: ``validate`` job (the input is then empty or null).
+VALIDATED = (f"(inputs.{VALIDATE_RESULT_INPUT} == 'success' || "
+             "needs.validate.result == 'success')")
+
+
+def _after_merge_ok(check: str) -> str:
+    """The ``after-merge-<check>`` result for the pushed commit: the caller's
+    (handed in) or the own job's (dispatched). The own job runs only when
+    nothing was handed in, so the two never both count."""
+    return (f"(inputs.after-merge-{check} == 'success' || "
+            f"needs.after-merge-{check}.result == 'success')")
 
 
 def _publishing_condition() -> str:
@@ -561,19 +619,20 @@ CHECK_JOBS = tuple(f"{kind}-{check}" for kind in ("after-merge", "release-target
 
 def _coverage_condition() -> str:
     """The after-merge checks passed on the commit that is published: for each
-    check, ``after-merge-<check>`` when the target is the pushed commit and
+    check, ``after-merge-<check>`` (the caller's result, or the own job's)
+    when the target is the pushed commit and
     ``release-target-<check>`` when it is an ancestor. Used by ``build`` and
     ``publish`` only, because it reads the results of the ``release-target-*``
     jobs, which a job's own ``if`` must never depend on. Each result is
     compared to ``success``, so a missing, pending, failed, cancelled or
     skipped covering job, or a success for another commit, is false."""
-    terms = [f"({TARGET_IS_PUSHED} && needs.after-merge-{check}.result == 'success') || "
+    terms = [f"({TARGET_IS_PUSHED} && {_after_merge_ok(check)}) || "
              f"({TARGET_IS_ANCESTOR} && needs.release-target-{check}.result == 'success')"
              for check in MAIN_TEST_MODULES]
     return " && ".join(f"({term})" for term in terms)
 
 
-def _main_check_job(check: str, *, release_target: bool) -> dict:
+def _main_check_job(check: str, *, release_target: bool, condition: str | None = None) -> dict:
     """``after-merge-<check>`` (the pushed commit) or ``release-target-<check>``
     (the commit ``release-plan`` selected, only when that is an ancestor and
     the run publishes). Both run ``run_tests.py main-check``, which fails when
@@ -581,6 +640,8 @@ def _main_check_job(check: str, *, release_target: bool) -> dict:
     steps are the ``tests`` job's, ``ALLOW_USERNS`` included."""
     module = MAIN_TEST_MODULES[check]
     job: dict = {}
+    if condition is not None:
+        job["if"] = condition
     if release_target:
         job.update({
             "needs": ["release-plan"],
@@ -602,26 +663,28 @@ def _main_check_job(check: str, *, release_target: bool) -> dict:
     return job
 
 
-#: ``reuse`` (in ``main.yml``) blocks ``validate`` and runs only for ``on``.
+#: ``reuse`` (in ``ci.yml``) blocks ``validate`` and runs only for ``on``,
+#: and never on a pull request (``tools/ci_reuse.py`` would find nothing).
 #: ``reuse-report`` (in ``main-reuse-report.yml``, a workflow of its own so
-#: that it can never hold ``main.yml``'s serialised ``main-release`` slot)
+#: that it can never hold ``ci.yml``'s serialised ``main-release`` slot)
 #: runs for unset, ``report`` and unknown values (which its summary names as
 #: off), and for no other. ``off`` runs neither. Actions compares strings
 #: without regard to case and without trimming; ``tools/ci_reuse.py`` parses
 #: the value the same way.
 REUSE_ON = f"vars.{REUSE_VARIABLE} == 'on'"
+NOT_PULL_REQUEST = "github.event_name != 'pull_request'"
 REUSE_REPORT = f"vars.{REUSE_VARIABLE} != 'on' && vars.{REUSE_VARIABLE} != 'off'"
 
 
 def _reuse_job(report: bool = False) -> dict:
     """``reuse`` (``CI_MAIN_REUSE=on``): decides whether ``validate`` may
     reuse the merged pull request's CI run. With ``report`` it is
-    ``reuse-report``: the same decision logged beside ``validate``, which
-    nothing needs and which cannot fail ``Main``. The modes are described in
+    ``reuse-report``: the same decision logged beside ``CI``, which
+    nothing needs and which cannot fail ``CI``. The modes are described in
     ``tools/ci_reuse.py``."""
     have_candidate = "steps.find.outputs.candidate != ''"
     job = {
-        "if": REUSE_REPORT if report else REUSE_ON,
+        "if": REUSE_REPORT if report else f"{REUSE_ON} && {NOT_PULL_REQUEST}",
         "runs-on": RUNNER,
         "permissions": dict(REUSE_PERMISSIONS),
         "env": {"GH_TOKEN": "${{ github.token }}",
@@ -639,7 +702,7 @@ def _reuse_job(report: bool = False) -> dict:
                       "run-id": "${{ steps.find.outputs.candidate }}",
                       "github-token": "${{ github.token }}",
                       "repository": "${{ github.repository }}"}},
-            # The report must never turn a green Main red: a failing install or
+            # The report must never turn a green run red: a failing install or
             # plan leaves no digest, which decide reports as "would not reuse".
             {"if": have_candidate, "continue-on-error": True, **_install_editable()},
             {"if": have_candidate, "continue-on-error": True, "name": "plan (to compare its digest)",
@@ -656,38 +719,70 @@ def _reuse_job(report: bool = False) -> dict:
     return job
 
 
-def main_workflow() -> dict:
+VALIDATE_WORKFLOW = "./.github/workflows/validate.yml"
+BUILD_PUBLISH_WORKFLOW = "./.github/workflows/build-publish.yml"
+#: The serialised release slot: every run that can publish from ``main``
+#: holds it, and never cancels another (GitHub keeps one running and one
+#: pending run per group).
+RELEASE_SLOT = "main-release"
+
+
+def _validate_call(*, needs: list[str] | None = None, condition: str | None = None,
+                   inputs: dict | None = None) -> dict:
+    """A job calling ``validate.yml``, granting what its jobs may ask for."""
+    job: dict = {}
+    if needs is not None:
+        job["needs"] = needs
+    if condition is not None:
+        job["if"] = condition
+    job.update({"permissions": dict(VALIDATE_CALL_PERMISSIONS), "uses": VALIDATE_WORKFLOW})
+    if inputs is not None:
+        job["with"] = inputs
+    return job
+
+
+def build_publish_workflow() -> dict:
+    """``build-publish.yml``: classify the trunk commit and, when a release
+    is due or resumable, build, verify and publish it. Called by ``ci.yml``
+    with its results (the revision is validated once); dispatched by hand,
+    it validates the revision itself first, with no reuse."""
     classify = ('python3 tools/release.py classify '
                 '--commit "$(git rev-parse "$GITHUB_SHA^{commit}")"')
+    caller_result = {"type": "string", "required": False, "default": ""}
+    read = {"contents": "read"}
     return {
-        "name": "Main",
-        "on": {"push": {"branches": ["main"]}, "workflow_dispatch": None},
-        "concurrency": {"group": "main-release", "cancel-in-progress": False},
+        "name": "Build and publish",
+        "on": {
+            "workflow_call": {"inputs": {
+                VALIDATE_RESULT_INPUT: {
+                    "description": "The caller's validate.yml result for github.sha; empty: validate here.",
+                    **caller_result},
+                **{f"after-merge-{check}": {
+                    "description": f"The caller's after-merge-{check} result for github.sha.",
+                    **caller_result} for check in MAIN_TEST_MODULES},
+            }},
+            # No inputs: a manual run cannot hand in a result, so it validates.
+            "workflow_dispatch": None,
+        },
+        # Dispatched on main, it takes the release slot like ci.yml's main
+        # runs. Called, its caller already holds that slot, and the same
+        # group here would deadlock, so a called run has a group of its own.
+        "concurrency": {"group": f"${{{{ {SELF_VALIDATING} && {ON_TRUNK} && '{RELEASE_SLOT}' || "
+                                 "format('build-publish-{0}', github.run_id) }}",
+                        "cancel-in-progress": False},
         "permissions": {"contents": "read"},
         "jobs": {
-            "reuse": _reuse_job(),
-            # !cancelled(): a reuse job that crashed leaves run-id empty, so
-            # the shards run. Nothing is skipped on a doubt.
-            "validate": {
-                "needs": ["reuse"],
-                "if": "!cancelled()",
-                "permissions": dict(VALIDATE_CALL_PERMISSIONS),
-                "uses": "./.github/workflows/validate.yml",
-                # Forwarded only while the variable is still "on": a "Re-run
-                # failed jobs" keeps a successful reuse job's old output, and
-                # must not reuse again after the owner set the variable off.
-                "with": {REUSE_INPUT: f"${{{{ vars.{REUSE_VARIABLE} == 'on' && "
-                                      "needs.reuse.outputs.run-id || '' }}"},
-            },
-            # The two whole-catalogue checks run beside validate on the pushed
-            # commit and are never reused or skipped; build and publish wait
-            # for them (_coverage_condition).
-            "after-merge-determinism": _main_check_job("determinism", release_target=False),
-            "after-merge-mutations": _main_check_job("mutations", release_target=False),
+            # Only when dispatched: called, the caller's results stand in.
+            "validate": _validate_call(condition=SELF_VALIDATING),
+            "after-merge-determinism": _main_check_job("determinism", release_target=False,
+                                                       condition=SELF_VALIDATING),
+            "after-merge-mutations": _main_check_job("mutations", release_target=False,
+                                                     condition=SELF_VALIDATING),
             "release-plan": {
                 "needs": ["validate"],
-                "if": f"{_after('validate')} && {ON_TRUNK}",
+                "if": f"!cancelled() && {VALIDATED} && {ON_TRUNK}",
                 "runs-on": RUNNER,
+                "permissions": dict(read),
                 "env": {"GH_TOKEN": "${{ github.token }}"},
                 "outputs": {name: f"${{{{ steps.classify.outputs.{name} }}}}" for name in PLAN_OUTPUTS},
                 "steps": [
@@ -700,9 +795,10 @@ def main_workflow() -> dict:
             "release-target-mutations": _main_check_job("mutations", release_target=True),
             "build": {
                 "needs": ["validate", "release-plan", *CHECK_JOBS],
-                "if": f"{_after('validate', 'release-plan')} && {_publishing_condition()} "
-                      f"&& {_coverage_condition()}",
+                "if": f"!cancelled() && {VALIDATED} && needs.release-plan.result == 'success' "
+                      f"&& {_publishing_condition()} && {_coverage_condition()}",
                 "runs-on": RUNNER,
+                "permissions": dict(read),
                 # tools/release.py build and verify read it; their command
                 # lines stay 1.3.0's, which a RESUME target's tooling accepts.
                 "env": {"RELEASE_VERSION": "${{ needs.release-plan.outputs.version }}"},
@@ -719,7 +815,8 @@ def main_workflow() -> dict:
             },
             "publish": {
                 "needs": ["validate", "release-plan", "build", *CHECK_JOBS],
-                "if": f"{_after('validate', 'release-plan', 'build')} && {_publishing_condition()} "
+                "if": f"!cancelled() && {VALIDATED} && needs.release-plan.result == 'success' "
+                      f"&& needs.build.result == 'success' && {_publishing_condition()} "
                       f"&& {_coverage_condition()}",
                 "runs-on": RUNNER,
                 "permissions": {"contents": "write"},
@@ -732,6 +829,62 @@ def main_workflow() -> dict:
                      "with": {"name": ARTIFACT_NAME, "path": DIST_DIR}},
                     {"name": "publish", "run": 'python3 tools/release.py publish --commit "$COMMIT"'},
                 ],
+            },
+        },
+    }
+
+
+#: ``ci.yml``'s concurrency group: a pull request's runs share its ref's
+#: group and a newer push cancels the older run; ``main`` (a push or a
+#: dispatch) takes the release slot and never cancels; a dispatch on any
+#: other ref gets a group of its own.
+CI_CONCURRENCY_GROUP = ("${{ github.event_name == 'pull_request' && "
+                        "format('{0}-{1}', github.workflow, github.ref) || "
+                        f"{ON_TRUNK} && '{RELEASE_SLOT}' || "
+                        "format('{0}-{1}', github.workflow, github.run_id) }}")
+
+
+def ci_workflow() -> dict:
+    return {
+        "name": "CI",
+        "on": {"pull_request": None, "push": {"branches": ["main"]}, "workflow_dispatch": None},
+        "concurrency": {"group": CI_CONCURRENCY_GROUP,
+                        "cancel-in-progress": "${{ github.event_name == 'pull_request' }}"},
+        "permissions": {"contents": "read"},
+        "jobs": {
+            "reuse": _reuse_job(),
+            # The job id stays validate: the required checks are named
+            # "validate / <job>". !cancelled(): a skipped reuse (a pull
+            # request, or CI_MAIN_REUSE not on) or one that crashed leaves
+            # run-id empty, so the shards run. Nothing is skipped on a doubt.
+            # Forwarded only while the variable is still "on": a "Re-run failed
+            # jobs" keeps a successful reuse job's old output, and must not
+            # reuse again after the owner set the variable off.
+            "validate": _validate_call(
+                needs=["reuse"], condition="!cancelled()",
+                inputs={REUSE_INPUT: f"${{{{ vars.{REUSE_VARIABLE} == 'on' && "
+                                     "needs.reuse.outputs.run-id || '' }}"}),
+            # The two whole-catalogue checks run beside validate on the pushed
+            # commit (not on a pull request) and are never reused or skipped;
+            # build-publish receives their results (_coverage_condition).
+            "after-merge-determinism": _main_check_job("determinism", release_target=False,
+                                                       condition=NOT_PULL_REQUEST),
+            "after-merge-mutations": _main_check_job("mutations", release_target=False,
+                                                     condition=NOT_PULL_REQUEST),
+            # Only on main, only after validate succeeded. It also waits for
+            # the after-merge checks, whose results it needs, but does not
+            # require them here: a RESUME of an ancestor is gated by that
+            # ancestor's own checks instead.
+            "build-publish": {
+                "needs": ["validate", "after-merge-determinism", "after-merge-mutations"],
+                "if": f"{_after('validate')} && {NOT_PULL_REQUEST} && {ON_TRUNK}",
+                # The union of what build-publish.yml's jobs ask for: publish
+                # writes; its validate (skipped here) reads actions.
+                "permissions": {"contents": "write", "actions": "read"},
+                "uses": BUILD_PUBLISH_WORKFLOW,
+                "with": {VALIDATE_RESULT_INPUT: "${{ needs.validate.result }}",
+                         **{f"after-merge-{check}": f"${{{{ needs.after-merge-{check}.result }}}}"
+                            for check in MAIN_TEST_MODULES}},
             },
         },
     }
@@ -770,7 +923,7 @@ def pr_title_workflow() -> dict:
 
 def reuse_report_workflow() -> dict:
     """A workflow of its own, so that a slow report can never hold
-    ``main.yml``'s ``main-release`` concurrency slot or delay a release."""
+    ``ci.yml``'s ``main-release`` concurrency slot or delay a release."""
     return {
         "name": "Main reuse report",
         "on": {"push": {"branches": ["main"]}},
@@ -784,35 +937,49 @@ _GENERATED = ("Generated by tools/ci_workflows.py -- do not edit by hand.\n"
               "Change the model there and run: python3 tools/ci_workflows.py --write")
 
 WORKFLOWS = {
+    "ci.yml": (ci_workflow,
+               "The entry point: every pull request, every push to main and workflow_dispatch. It\n"
+               "calls the required validation (validate.yml); except on a pull request it runs the\n"
+               "two after-merge checks beside it; on main, once validate succeeded, it calls\n"
+               "build-publish.yml with those results, so the revision is validated once before a\n"
+               "release. A pull request's newer push cancels its older run; main's runs never cancel\n"
+               "one another (main-release). Milestone branches are validated through their Draft PR.\n\n"
+               "reuse (read-only, never on a pull request) is switched by the repository variable\n"
+               "CI_MAIN_REUSE. on: reuse runs first and validate skips the shards when the recorded\n"
+               "tree and plan digest match. Any other value: reuse does not run and validate starts\n"
+               "at once. The report-only mode is the separate workflow main-reuse-report.yml. See\n"
+               "docs/guide/ci-and-releases.md.\n\n"
+               "after-merge-determinism and after-merge-mutations run the two whole-catalogue scenario\n"
+               "checks on the pushed commit (tools/run_tests.py main-check); they are never reused or\n"
+               "skipped. Every action outside validate is pinned to a full commit SHA."),
     "validate.yml": (validate_workflow,
-                     "The required validation, called by ci.yml and main.yml. Its input tests-from-run is\n"
-                     "empty except when main.yml reuses a pull request run (CI_MAIN_REUSE=on); then the\n"
-                     "shards are skipped and tests-result re-verifies that run's recorded results. A pull\n"
-                     "request that changes only documentation (tools/ci_changes.py) skips plan and tests;\n"
-                     "the docs job runs on every event and tests-result requires it."),
-    "ci.yml": (ci_workflow, "Runs the required validation on pull requests. Milestone branches are\n"
-                            "validated through their Draft PR."),
-    "main.yml": (main_workflow,
-                 "Trunk: validate every push to main, then classify it and, when a release is due or\n"
-                 "resumable, build, verify and publish it as one release transaction\n"
-                 "(tools/release.py over controller/release_txn.py). Runs never cancel one another.\n"
-                 "Every action outside validate is pinned to a full commit SHA; publish is the only\n"
-                 "job that can write.\n\n"
-                 "reuse (read-only) is switched by the repository variable CI_MAIN_REUSE. on: reuse\n"
-                 "runs first and validate skips the shards when the recorded tree and plan digest\n"
-                 "match. Any other value: reuse does not run and validate starts at once. The\n"
-                 "report-only mode is the separate workflow main-reuse-report.yml. See docs/guide/ci-and-releases.md.\n\n"
-                 "after-merge-determinism and after-merge-mutations run the two whole-catalogue scenario\n"
-                 "checks on the pushed commit (tools/run_tests.py main-check); they are never reused or\n"
-                 "skipped, and build and publish need the checks of the commit being published: the\n"
-                 "after-merge jobs when it is the pushed commit, otherwise release-target-* run on it.\n\n"
-                 + GITHUB_SHA_NOTE + "\n\n" + GH_RELEASE_CREATE_NOTE),
+                     "The required validation, called by ci.yml (and by build-publish.yml when that is\n"
+                     "dispatched), or dispatched by hand. Its input tests-from-run is empty except when\n"
+                     "ci.yml reuses a pull request run on main (CI_MAIN_REUSE=on); then the shards are\n"
+                     "skipped and tests-result re-verifies that run's recorded results. A pull request\n"
+                     "that changes only documentation (tools/ci_changes.py) skips plan and tests; the\n"
+                     "docs-tests and docs jobs run on every event and tests-result requires docs, which\n"
+                     "needs docs-tests. docs-tests is the shared python-tests.yml of\n"
+                     "RodrigoFAbreu/action-workflows."),
+    "build-publish.yml": (build_publish_workflow,
+                          "Build and publication: classify the trunk commit and, when a release is due or\n"
+                          "resumable, build, verify and publish it as one release transaction\n"
+                          "(tools/release.py over controller/release_txn.py). Called by ci.yml on main after\n"
+                          "its validate succeeded, with the validate and after-merge results for the same\n"
+                          "commit, so nothing is validated twice. Dispatched by hand (no inputs), it has no\n"
+                          "results and runs validate.yml and the after-merge checks itself first, taking the\n"
+                          "main-release slot on main. Every action outside validate is pinned to a full commit\n"
+                          "SHA; publish is the only job that can write.\n\n"
+                          "build and publish need the after-merge checks of the commit being published: the\n"
+                          "after-merge results when it is the pushed commit, otherwise release-target-* run on\n"
+                          "it.\n\n"
+                          + GITHUB_SHA_NOTE + "\n\n" + GH_RELEASE_CREATE_NOTE),
     "main-reuse-report.yml": (reuse_report_workflow,
                               "Report-only reuse (CI_MAIN_REUSE unset, report or an unknown value): logs, in\n"
                               "its job summary, whether the merged pull request's CI run could have stood in\n"
-                              "for main's shards. A workflow apart from main.yml: nothing waits for it, it does\n"
-                              "not share main-release's concurrency group, and it cannot fail Main. Read-only;\n"
-                              "the logic is tools/ci_reuse.py, shared with main.yml's reuse job."),
+                              "for main's shards. A workflow apart from ci.yml: nothing waits for it, it does\n"
+                              "not share main-release's concurrency group, and it cannot fail CI. Read-only;\n"
+                              "the logic is tools/ci_reuse.py, shared with ci.yml's reuse job."),
     "pr-title.yml": (pr_title_workflow,
                      "Checks every pull request's title against the policy committed on its merge ref\n"
                      "(tools/release.py check-title). The title becomes the squash commit's subject,\n"
@@ -821,8 +988,10 @@ WORKFLOWS = {
 }
 #: Workflow files the model once rendered and no longer does. ``--write``
 #: removes them and ``--check`` fails while one exists: the tag-triggered
-#: ``release.yml`` would otherwise keep publishing on a hand-pushed ``v*`` tag.
-RETIRED_WORKFLOWS = ("release.yml",)
+#: ``release.yml`` would otherwise keep publishing on a hand-pushed ``v*`` tag,
+#: and ``main.yml`` (the trunk run before ``ci.yml`` became the one entry
+#: point) would validate and release every push to ``main`` a second time.
+RETIRED_WORKFLOWS = ("release.yml", "main.yml")
 
 
 def _wrap(text: str, width: int = 96) -> str:

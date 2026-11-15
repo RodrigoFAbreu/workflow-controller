@@ -152,9 +152,14 @@ python3 tools/run_tests.py      # the full suite, in parallel shards
 python3 tools/check_docs.py     # links, anchors and the commands shown on the task pages
 ```
 
-Do not set `PYTHONPATH=.`, and run the suite in the foreground. Pull requests
-are validated by `.github/workflows/validate.yml`, whose jobs are `changes`,
-`docs`, `plan`, `tests` (one per shard), `tests-result` and `package`; a
-pull request that changes only documentation skips `plan` and `tests`, and
-the `docs` job runs the documentation checks on every pull request. See
-[Development and the test runner](docs/guide/development.md).
+Do not set `PYTHONPATH=.`, and run the suite in the foreground. `CI`
+(`.github/workflows/ci.yml`) runs on every pull request and every push to
+`main`. It validates through `.github/workflows/validate.yml`, whose jobs are
+`changes`, `docs-tests` (the documentation test modules, through the shared
+`python-tests.yml` workflow), `docs`, `plan`, `tests` (one per shard),
+`tests-result` and `package`; a pull request that changes only documentation
+skips `plan` and `tests`, and the `docs-tests` and `docs` jobs run the
+documentation checks on every pull request. On `main` it then releases
+through `.github/workflows/build-publish.yml`. See
+[Development and the test runner](docs/guide/development.md) and
+[Continuous integration and releases](docs/guide/ci-and-releases.md).

@@ -4,7 +4,7 @@
 A squash (or merge-commit) merge creates a new commit on ``main`` whose
 *tree* equals the tree of the pull request's merge ref whenever ``main`` did
 not move after the pull request's last CI run. For that tree the required
-validation already ran, so ``main.yml`` may skip the shards and re-verify the
+validation already ran, so ``ci.yml`` on ``main`` may skip the shards and re-verify the
 recorded results instead (ADR 0014). This file is the decision and the
 verification; ``tools/ci_workflows.py`` wires them into the workflows.
 
@@ -12,7 +12,7 @@ verification; ``tools/ci_workflows.py`` wires them into the workflows.
 
 - unset or ``report``: the decision is computed and written to the job
   summary; the full validation still runs, exactly as before;
-- ``on``: when every check passes, ``main.yml`` passes the pull request run's
+- ``on``: when every check passes, ``ci.yml`` passes the pull request run's
   id to ``validate.yml``, which skips the shards;
 - ``off``, or any other value (treated as ``off``, and said so): nothing is
   looked up and nothing changes.

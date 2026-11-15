@@ -504,7 +504,7 @@ an unattended `run` started from `main` merges nothing.
 
 **The release wait.** After a verified squash (`MERGED_SQUASHED`), before
 close-out switches to `main`, the Controller classifies the squash commit
-with the same release transaction `main.yml` runs, using the policy
+with the same release transaction the release workflow runs, using the policy
 committed at that commit, and reads only (it never downloads a release
 asset, runs a policy command, tags, publishes or re-runs anything):
 
@@ -518,7 +518,8 @@ asset, runs a policy command, tags, publishes or re-runs anything):
   naming each run that did not succeed, or saying the workflow
   succeeded and published nothing;
 - a later push to the trunk can publish the release that covers the
-  squash commit (`main.yml` cancels a pending run when a newer one
+  squash commit (a release workflow serialised like this repository's
+  `main-release` group replaces a pending run when a newer one
   queues, and any later run tags its own commit or resumes an
   unpublished tag). A published covering release settles the wait
   (`SUPERSEDED`, with that release's tag, URL and commit), even when no

@@ -75215,7 +75215,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ts1-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ts1-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 4,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -75324,7 +75324,126 @@
           "workflow_release": "2.29.3"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "0745bc2e38b9b0c036383f726e0fb5fe185a181f0b60fc71c191d5ceda1f49f5",
+        "approved_review_content_id": "203563348787e5bfc7dbc4a36c7912f285132344e7390aa3e73db65ebca0efbd",
+        "review_content_manifest": [
+          {
+            "path": "controller/codex_bridge.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b8f617d8891b3c2fa15d54f0bcc4ad595fc92a09"
+          },
+          {
+            "path": "controller/functional_review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "10da8646936bcf0519c9f35070f85a56a1a0d210"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-ts1-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8a7702b24d33c32c87d10a87bbbdb6ac5a65390d"
+          },
+          {
+            "path": "docs/guide/automation.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "24ef50ce979a1198a46fd11d2e02e7d7f4f5f82b"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d8e7bdbb82a33304349699768c7d56462a6a4d4e"
+          },
+          {
+            "path": "docs/guide/harnesses.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "beff6e286459e1120362d0e2e9686cb36d6caf28"
+          },
+          {
+            "path": "tests/test_codex_bridge.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "095ccf8be5b57b5d2022bf86b83635e5f3cfc466"
+          },
+          {
+            "path": "tests/test_functional_review.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e12cfe5a7f2b4e73db0f4ecaddc8509de00dbf25"
+          }
+        ],
+        "reviewed_content_commit": "ab77cc567ffc5c8d1e499c0186fca5c1d9a1a234",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-15T15:04:04Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "203563348787e5bfc7dbc4a36c7912f285132344e7390aa3e73db65ebca0efbd",
+            "ledger": {
+              "local": {
+                "bundle_id": "0745bc2e38b9b0c036383f726e0fb5fe185a181f0b60fc71c191d5ceda1f49f5",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "7ba1bb477a128fc261e2b565adcc9c538dcd6dcb5944747d1f9afa55b3c28d9d",
+                "ledger_entry_sha256": "2c2038716ac6d52c1bdeada131f6d9a8a21b685b5a5846327d73cea029db04c3",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-ts1/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "0745bc2e38b9b0c036383f726e0fb5fe185a181f0b60fc71c191d5ceda1f49f5",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "2941928e6b6c32ba0364b643a28ec4ee3c0527ad74b4c379985235fcd7241bf0",
+                "ledger_entry_sha256": "6012612219aef1d4f480de6824628325f2970c78d35b4c4a5a647d760eaab63d",
+                "run_ref": "codex:20261115T150105Z-933d8ae2",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-15T15:04:04Z",
+          "workflow_release": "2.29.3"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "16e8b5200eadcd81679aaea863c3e111b36210aec967d1d4119c8881db62b869",
@@ -75355,12 +75474,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 20,
-      "last_transition": "2026-11-15T14:55:38Z",
+      "state_revision": 23,
+      "last_transition": "2026-11-15T15:04:04Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -75441,6 +75560,83 @@
               "at": "2026-11-15T13:47:23Z"
             }
           ]
+        },
+        "F-b0f5f20f201e": {
+          "digest": "b0f5f20f201ed8f509513427333c24a93a1a6ab797906da550541839840cbf3e",
+          "text": "**O1. The new test does not catch a reworded refusal form in the runner.** `test_the_namespace_launcher_limit_is_stated_try_first_with_every_refusal_form` pins the needles inside the limit text only. If `tools/run_tests.py` rewords `no PID namespace here` or `running the shards without a PID namespace`, or `tests/test_run_tests.py` rewords its skip text, the limit goes stale and every test still passes. The review request asked about exactly this drift. A cross-check would close it: assert that each quoted form also appears in `tools/run_tests.py`'s or `tests/test_run_tests.py`'s source. The plan did not require this, so it is not a defect.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "203563348787e5bfc7dbc4a36c7912f285132344e7390aa3e73db65ebca0efbd",
+              "verdict": "APPROVE",
+              "at": "2026-11-15T15:00:29Z"
+            }
+          ]
+        },
+        "F-4fec6d007fa4": {
+          "digest": "4fec6d007fa4a707418275626631cf99860caa04d6618f47399134c105f574ce",
+          "text": "**O2. `docs/common-problems.md` still omits the launcher from the `flows_not_runnable` causes** (line 231: \"flows that need the network, a pull request or a tool outside the sandbox\"). The summary records this as a follow-up. It is acceptable for this item because the page is outside the plan's files and outside its artifact declaration. It is one phrase for a later item.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "203563348787e5bfc7dbc4a36c7912f285132344e7390aa3e73db65ebca0efbd",
+              "verdict": "APPROVE",
+              "at": "2026-11-15T15:00:29Z"
+            }
+          ]
+        },
+        "F-166efd7c81df": {
+          "digest": "166efd7c81df60a08021ff5577dbf556791531a98a5453e207807a8aad4ff7e1",
+          "text": "**O3. Two small wording points in the pages.** First, `docs/guide/harnesses.md:117-121` says a refused flow means \"the run ends `environment_limited`\". That holds only when every failed flow is `environment`, and the automation page states the condition correctly. Second, its link goes to the top of `automation.md`, not to `#protocol-mode-workflow-27-and-later`, where the sandbox list is. The existing link at line 113 uses the same top-of-page target, so this is consistent but less precise.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "203563348787e5bfc7dbc4a36c7912f285132344e7390aa3e73db65ebca0efbd",
+              "verdict": "APPROVE",
+              "at": "2026-11-15T15:00:29Z"
+            }
+          ]
+        },
+        "F-3b0c73a6f9ee": {
+          "digest": "3b0c73a6f9ee152b8c586c20a9884cf70dbaa20c670dd89b62b3653419f35048",
+          "text": "**O4. A small inconsistency on the automation page.** `docs/guide/automation.md:553` introduces the stops as \"each with its remedy in the message\" and then gives the `flows_not_runnable` remedy as the literal `record-external-result --kind functional_evidence` command. The message itself now says \"with the Workflow's protocol script\" (the D5 deviation). Either wording works for the operator. A reader comparing the page with a real stop message will see different words.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "203563348787e5bfc7dbc4a36c7912f285132344e7390aa3e73db65ebca0efbd",
+              "verdict": "APPROVE",
+              "at": "2026-11-15T15:00:29Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "203563348787e5bfc7dbc4a36c7912f285132344e7390aa3e73db65ebca0efbd",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "0745bc2e38b9b0c036383f726e0fb5fe185a181f0b60fc71c191d5ceda1f49f5",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-15T15:00:29Z",
+          "verdict_sha256": "7ba1bb477a128fc261e2b565adcc9c538dcd6dcb5944747d1f9afa55b3c28d9d",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-ts1/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "0745bc2e38b9b0c036383f726e0fb5fe185a181f0b60fc71c191d5ceda1f49f5",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-15T15:02:44Z",
+          "verdict_sha256": "2941928e6b6c32ba0364b643a28ec4ee3c0527ad74b4c379985235fcd7241bf0",
+          "run_ref": "codex:20261115T150105Z-933d8ae2",
+          "reviewer_model": "openai/gpt-6.1-sol"
         }
       }
     }

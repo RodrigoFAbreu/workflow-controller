@@ -644,6 +644,20 @@ nothing is routed to Codex unless an operator selects it.
   resolution of the witness's amendment than the one recorded. A repository where no worktree lags is never refused because of
   another worktree's state file. A dirty tree (an earlier invocation's uncommitted work) is
   refused, not carried: carrying it is the apply roles' mechanism applied to an open-ended file set, which this item does not do.
+- **What the checkpoint role's checks do not judge** ([#344](https://github.com/RodrigoFAbreu/workflow-controller/issues/344)).
+  Three cases are left to the Workflow or to you, by choice, not by oversight:
+  - *State values.* `state_touched` bounds which fields of the item's entry a checkpoint commit may change, not what they hold
+    (`phase`, `checkpoints` and the checkpoint ids). The Workflow's `reconcile` judges the landed state, and an `invalid` answer
+    ends the job `FAILED` with `reconcile_invalid`. After that ending read the clone's commits, restore the state file from the
+    base commit with the Workflow's own commands or `git`, and run again.
+  - *The `.ai-review/` ignore rule.* The checkpoint invocation writes `.ai-review/runtime/` files in the clone. The
+    unfinished-work probe and the surface check count them as changes only when the managed repository does not ignore
+    `.ai-review/`. A repository that does not will see a clean run kept as `unfinished_work`; ignore `.ai-review/` there, as the
+    Workflow's installer does.
+  - *An absent amendment witness.* The Controller reads an absent witness as "no amendment". The Workflow instead bootstraps
+    one by scanning every worktree and refuses when their `amendment_history` entries disagree, which a clone (one worktree)
+    cannot see. The `managed_amendment_*` reads run in the managed repository before the clone is made, so reconcile a
+    repository whose worktrees disagree with the Workflow before routing a Codex checkpoint.
 - **Before the landing** (`codex_worker_landing.land(surface=LandingSurface.IMPLEMENTER)`) both passes of the range check read the
   net `base..tip` change and refuse two more causes. `surface_touched`: a path under `scripts/`, `.workflow-manager/`,
   `.claude/` or `.codex/`, or the root-level `.mcp.json` (the next Claude worker starts the servers it declares), whatever its status (so a deleted script counts), a symbolic link, a mode change where both sides

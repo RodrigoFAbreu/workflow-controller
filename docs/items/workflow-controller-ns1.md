@@ -4,6 +4,8 @@ Item id: `workflow-controller-ns1`.
 
 Status: implementing (2026-11-14); CP1 and CP2 are complete and CP3 records the pages. Plan: [CONTROLLER_NS1_PLAN.md](../ai-workflow/CONTROLLER_NS1_PLAN.md) (revision 3). Source: [#329](https://github.com/RodrigoFAbreu/workflow-controller/issues/329), a follow-up to [PR #328](https://github.com/RodrigoFAbreu/workflow-controller/pull/328). Priority: medium-high.
 
+Follow-up: [NS2](workflow-controller-ns2.md) makes the full suite namespace-clean.
+
 ## Background
 
 On 2026-11-09 `killpg(1, SIGKILL)` crashed the desktop session. PR #328 refuses an unsafe group id at every place the Controller signals a process group, but it does not stop a test or worker command from sending a signal that ends the session by another route; a worker ran such a test on the host four times before anyone saw it.

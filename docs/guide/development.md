@@ -181,8 +181,8 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   (`tests.test_catalogue_determinism` and `tests.test_scenarios_negative`, see
   [Checks that run after the merge](ci-and-releases.md#checks-that-run-after-the-merge));
   a local full run still runs them, and
-  `python3 tools/run_tests.py main-check MODULE` runs one the way `main.yml`
-  does (it fails on an empty selection, a skip or a failure). `--shards N` pins it, `--jobs J` runs at most `J` at
+  `python3 tools/run_tests.py main-check MODULE` runs one the way `CI` does
+  on `main` (it fails on an empty selection, a skip or a failure). `--shards N` pins it, `--jobs J` runs at most `J` at
   once, and `--target-seconds`, `--min-shards` and `--max-shards`
   override the planning parameters. A shard runs its conformance suites
   in a helper process beside its Controller tests (the same executor in

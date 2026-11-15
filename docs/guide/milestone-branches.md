@@ -194,6 +194,11 @@ committed at `HEAD`, the same rule as the `PR title` check; otherwise
 against the grammar alone. Only a plan amendment changes a declared
 title.
 
+**Each checkpoint declares its tests.** Beside the title, every checkpoint
+section of the plan ends with a `**Tests:**` paragraph naming the test
+modules the worker runs at that checkpoint; see the
+[verification policy](development.md#verification-policy).
+
 **Title and body sync.**
 
 - At creation the Draft PR is titled with the declared title, or with the

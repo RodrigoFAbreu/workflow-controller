@@ -734,6 +734,7 @@ class NamespaceUnsafeShardTest(unittest.TestCase):
         status, out, err = self.run_in_process("require", _fake_unshare(self))
         self.assertEqual(status, 2, out + err)
         self.assertIn("tests.test_pass.MorePassTest", err)
+        self.assertIn("a test reason", err)  # the module's reason, not just its name
         self.assertNotIn("selected tests", out)
 
     def test_off_and_a_fully_safe_selection_are_unchanged(self) -> None:

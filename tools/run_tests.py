@@ -117,8 +117,11 @@ def resolve_namespace(mode: str | None, *, launcher: str | None = None,
         return prefix, "namespace: isolated"
     modules = sorted({module for found in unsafe.values() for module in found})
     if mode == "require":
+        reasons = dict(ts.NAMESPACE_UNSAFE_MODULES)
+        listed = "; ".join(f"{module} ({reasons[module]})" if module in reasons else module
+                           for module in modules)
         raise UsageError("--namespace require: the selection holds modules that are not "
-                         "namespace-safe yet and cannot run wrapped: " + ", ".join(modules))
+                         "namespace-safe yet and cannot run wrapped: " + listed)
     total = shard_count if shard_count is not None else len(unsafe)
     _warn(f"{len(unsafe)} of {total} shards run without a PID namespace (they hold "
           f"namespace-unsafe modules: {', '.join(modules)})")

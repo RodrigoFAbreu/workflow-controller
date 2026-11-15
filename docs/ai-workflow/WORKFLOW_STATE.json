@@ -75876,7 +75876,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-cx1-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-cx1-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 4,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -75993,7 +75993,150 @@
           "workflow_release": "2.29.3"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "e7b802e8a1a0bd00b55b06f4b8df24ebfcc376900db985c116f3979c316a7a09",
+        "approved_review_content_id": "66ed18cee62f45318f57ddaaf5f6d149ab47fec6dc5135b268e8a6d0b78db1af",
+        "review_content_manifest": [
+          {
+            "path": "controller/codex_review_role.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "bc744740ee6b9d69034eff78cd87418f48d83f3c"
+          },
+          {
+            "path": "controller/job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a9e8a9a87e1f5914d53411e98b7e844ea326e184"
+          },
+          {
+            "path": "controller/workflow_contract.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "81488b028b2e1a27fe4c27db84409bf392b49310"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-cx1-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a714a9d89c145f4aac8c226aaa83e2e478f29db7"
+          },
+          {
+            "path": "docs/common-problems.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "405aab0aa3476ee375e48a46eb8f1ec8f075c7b1"
+          },
+          {
+            "path": "docs/guide/harnesses.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "329241bbf327608dc62d23c73c60313afeb2fb74"
+          },
+          {
+            "path": "tests/test_codex_apply_regeneration.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "33fedb7fcd6e14f572142930496d857358782c15"
+          },
+          {
+            "path": "tests/test_codex_review_role.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fb099597c7f4c86efd6225c73f2f23ef1be910b7"
+          },
+          {
+            "path": "tests/test_generator_run.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "12332ddf1769970be04111bfdf6ce66923fc3074"
+          },
+          {
+            "path": "tests/test_job_codex_apply.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f0b6560d66b1749c5d7d123d36f13b40b3e38829"
+          },
+          {
+            "path": "tests/test_review_recorder.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3a11c996d15b189cfa631407982a5d49f7a47430"
+          },
+          {
+            "path": "tests/test_workflow_contract.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0889be2ad0fa7b2c6c41e5c15bea1431ae3c10bd"
+          }
+        ],
+        "reviewed_content_commit": "00744ec97348deb40eb1c7d235546bfe2df40796",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-15T18:19:56Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "66ed18cee62f45318f57ddaaf5f6d149ab47fec6dc5135b268e8a6d0b78db1af",
+            "ledger": {
+              "local": {
+                "bundle_id": "e7b802e8a1a0bd00b55b06f4b8df24ebfcc376900db985c116f3979c316a7a09",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "93e40cca459180ae60e99380f47f376d24c4775d925b6b5159b31a9af2814c01",
+                "ledger_entry_sha256": "0b43a4d31913d1c9486bb425486d52b7ba7c2b2dbbb4e2df25b61851befc3d0b",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-cx1/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "e7b802e8a1a0bd00b55b06f4b8df24ebfcc376900db985c116f3979c316a7a09",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "81e62c6e90aca780978abd05eb31e027b08c4c7fd502451ff8e61947b04eb9c2",
+                "ledger_entry_sha256": "82e59393df9dc658c0b1e267a6d0d7a5c2a630bf7b41ea03259e9f59dd9f7c82",
+                "run_ref": "codex:20261115T181504Z-88651cec",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-15T18:19:56Z",
+          "workflow_release": "2.29.3"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "2a49388eb3c60046a6aab2d379cc0814799a00ff74b3a1dbdd85d584a155f0c8",
@@ -76024,12 +76167,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 1,
-          "external": 0
+          "local": 2,
+          "external": 1
         }
       },
-      "state_revision": 27,
-      "last_transition": "2026-11-15T18:08:46Z",
+      "state_revision": 30,
+      "last_transition": "2026-11-15T18:19:56Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -76180,6 +76323,55 @@
               "at": "2026-11-15T18:04:40Z"
             }
           ]
+        },
+        "F-794f3f5d6474": {
+          "digest": "794f3f5d6474266b39d5c19c60088daa55d9e7b211ecbb67661f35aeedcede4c",
+          "text": "**O1. `TEST_RESULTS.md` still describes revision 1.** Its header says `stage: implementation (revision 1)` and `head: 14f5614`, and it records no run of the round-1 fixes. That run (217 tests, exact coverage) appears only in `IMPLEMENTATION_SUMMARY.md`, \"Review round 1 fixes\". Next time the bundle is regenerated, add a section for the fix pass so that each file describes the revision it ships with.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "66ed18cee62f45318f57ddaaf5f6d149ab47fec6dc5135b268e8a6d0b78db1af",
+              "verdict": "APPROVE",
+              "at": "2026-11-15T18:14:11Z"
+            }
+          ]
+        },
+        "F-f0497cd4b597": {
+          "digest": "f0497cd4b597011f9d802475c484db4d0d285b058ce9cc5cf5f637dca8265f07",
+          "text": "The bundle’s `TEST_RESULTS.md` still identifies revision 1 and omits the revision-2 verification recorded in `IMPLEMENTATION_SUMMARY.md`. Update the report when the bundle is next regenerated.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "66ed18cee62f45318f57ddaaf5f6d149ab47fec6dc5135b268e8a6d0b78db1af",
+              "verdict": "APPROVE",
+              "at": "2026-11-15T18:18:44Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "66ed18cee62f45318f57ddaaf5f6d149ab47fec6dc5135b268e8a6d0b78db1af",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "e7b802e8a1a0bd00b55b06f4b8df24ebfcc376900db985c116f3979c316a7a09",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-15T18:14:11Z",
+          "verdict_sha256": "93e40cca459180ae60e99380f47f376d24c4775d925b6b5159b31a9af2814c01",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-cx1/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "e7b802e8a1a0bd00b55b06f4b8df24ebfcc376900db985c116f3979c316a7a09",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-15T18:18:44Z",
+          "verdict_sha256": "81e62c6e90aca780978abd05eb31e027b08c4c7fd502451ff8e61947b04eb9c2",
+          "run_ref": "codex:20261115T181504Z-88651cec",
+          "reviewer_model": "openai/gpt-6.1-sol"
         }
       }
     }

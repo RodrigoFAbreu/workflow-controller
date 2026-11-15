@@ -308,11 +308,16 @@ def compose_verdict(values: Mapping[str, Any], status: str, scope: str | None, b
 # ---------------------------------------------------------------------------
 
 
-def _clone_git(clone: Path, runner: Any, *args: str) -> str:
+def _clone_git_bytes(clone: Path, runner: Any, *args: str) -> bytes:
     result = runner(["git", "-C", str(clone), *args])
     if result.returncode != 0:
         raise OSError(f"git {' '.join(args)} failed: {result.stderr.decode('utf-8', 'replace').strip()}")
-    return result.stdout.decode("utf-8", "replace")
+    return result.stdout
+
+
+def _clone_git(clone: Path, runner: Any, *args: str) -> str:
+    # ``surrogateescape`` keeps a path whose name is not UTF-8 reversible (``os.fsencode`` gives the bytes back).
+    return _clone_git_bytes(clone, runner, *args).decode("utf-8", "surrogateescape")
 
 
 def _blob_id(data: bytes, width: int) -> str:
@@ -342,6 +347,8 @@ def _tracked_problems(clone: Path, runner: Any, tree: str) -> list[str]:
             continue
         path = clone / rel
         try:
+            if not size.isdigit() and mode in ("100644", "100755"):
+                raise OSError("unreadable blob")  # ``ls-tree -l`` prints ``-`` or ``BAD`` for a size it cannot read
             info = os.lstat(path)
         except OSError:
             problems.append(f"changed or new path {rel}")
@@ -359,8 +366,8 @@ def _tracked_problems(clone: Path, runner: Any, tree: str) -> list[str]:
                     data = path.read_bytes()
                     same = _blob_id(data, len(oid)) == oid
                     if not same:
-                        blob = runner(["git", "-C", str(clone), "cat-file", "blob", oid]).stdout
-                        same = _lf(data) == _lf(blob)
+                        blob = _clone_git_bytes(clone, runner, "cat-file", "blob", oid)
+                        same = _blob_id(blob, len(oid)) == oid and _lf(data) == _lf(blob)
                 except OSError:
                     same = False
         else:

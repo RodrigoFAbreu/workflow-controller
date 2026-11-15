@@ -19,6 +19,7 @@ import sys
 import tempfile
 import types
 import unittest
+import zlib
 from pathlib import Path
 from unittest import mock
 
@@ -753,6 +754,34 @@ class RunTests:
             self.assertEqual(self.clone_problems({"big.txt": b"a\nb\n"}, edit=grow), ["changed or new path big.txt"])
         self.assertEqual(self.clone_problems({"big.txt": b"a\nb\n"},
                                              edit=lambda clone: (clone / "big.txt").write_bytes(b"a\r\nb\r\n")), [])
+
+    @staticmethod
+    def _loose_object(clone: Path, oid: str) -> Path:
+        return clone / ".git" / "objects" / oid[:2] / oid[2:]
+
+    def test_a_forged_loose_blob_with_the_workers_matching_edit_is_refused(self) -> None:
+        """CX1 review I1: `cat-file blob` returns stored bytes unchecked, so the blob's id is verified before it is trusted."""
+        def forge(clone: Path) -> None:
+            oid = _git(clone, "rev-parse", "HEAD:top.txt").strip()
+            loose = self._loose_object(clone, oid)
+            loose.chmod(0o644)
+            loose.unlink()  # not written through: a local clone hardlinks it
+            loose.write_bytes(zlib.compress(b"blob 5\0evil\n"))
+            (clone / "top.txt").write_bytes(b"evil\n")
+
+        self.assertEqual(self.clone_problems({"top.txt": b"a\nb\n"}, edit=forge), ["changed or new path top.txt"])
+
+    def test_a_deleted_loose_blob_is_a_problem_not_an_exception(self) -> None:
+        """CX1 review I2: `ls-tree -l` prints ``BAD`` for a size it cannot read."""
+        def delete(clone: Path) -> None:
+            self._loose_object(clone, _git(clone, "rev-parse", "HEAD:top.txt").strip()).unlink()
+
+        self.assertEqual(self.clone_problems({"top.txt": b"a\nb\n"}, edit=delete), ["changed or new path top.txt"])
+
+    def test_an_unchanged_clone_with_a_non_utf8_tracked_name_passes(self) -> None:
+        """CX1 review O1."""
+        area_files = {os.fsdecode(b"n\xffame"): b"x\n"}
+        self.assertEqual(self.clone_problems(area_files), [])
 
     def test_ident_and_working_tree_encoding_paths_are_a_declared_false_refusal(self) -> None:
         """D3: checkout converts these, so an unchanged clone is refused; `docs/common-problems.md` words it."""

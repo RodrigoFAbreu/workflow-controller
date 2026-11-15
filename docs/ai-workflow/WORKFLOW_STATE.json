@@ -73636,7 +73636,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ns1-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ns1-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 3,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -73750,10 +73750,10 @@
         }
       },
       "technical_approval": {
-        "status": "STALE",
+        "status": "CURRENT",
         "basis": "POLICY_SATISFIED",
-        "reviewed_bundle_id": "845c1b5318f6012fe69404ead6795159b6c4dc425427b580f28d57fcb04cf7e1",
-        "approved_review_content_id": "9719a21dcfd252bf47d8ef0dd6841213ce98b6eae9932e7cedad678df8f90e9c",
+        "reviewed_bundle_id": "3382492de7a0b38e18c86d32f3eb915363fef20bb0844fdb37360c83837df200",
+        "approved_review_content_id": "7adf64cb833d459a77d6cfa2b7abf536facd787740a21e1c5102666d18d2dbbc",
         "review_content_manifest": [
           {
             "path": "docs/ai-workflow/registry/workflow-controller-ns1-artifacts.json",
@@ -73777,7 +73777,7 @@
             "path": "tests/test_run_tests.py",
             "exists": true,
             "mode": "100644",
-            "blob": "6fe3cb11274f3e454aff4c66655c96d2cf749ff5"
+            "blob": "f32b0d5470bc60394a3258c9d4c78750d081abfe"
           },
           {
             "path": "tests/test_test_shards.py",
@@ -73789,7 +73789,7 @@
             "path": "tools/run_tests.py",
             "exists": true,
             "mode": "100644",
-            "blob": "751b4c196738884b8d7ebb2065035e2f883ddd35"
+            "blob": "23406a42c5d53023d21985dae4580a1c5e4e1cbd"
           },
           {
             "path": "tools/test_shards.py",
@@ -73798,11 +73798,11 @@
             "blob": "865d7193b14b7f1533b0ce30bf6749a8e1b2069c"
           }
         ],
-        "reviewed_content_commit": "e39ac8797ad543b258f2511dc0c79863e5465f19",
+        "reviewed_content_commit": "c6d5e012d9cea12ffdef5216bbd144d466d97858",
         "legacy_evidence": null,
         "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
         "waived_guarantees": [],
-        "recorded_at": "2026-11-14T22:00:32Z",
+        "recorded_at": "2026-11-15T02:36:37Z",
         "policy_evidence": {
           "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
           "policy_source": "default",
@@ -73832,24 +73832,24 @@
             }
           ],
           "inputs": {
-            "review_content_id": "9719a21dcfd252bf47d8ef0dd6841213ce98b6eae9932e7cedad678df8f90e9c",
+            "review_content_id": "7adf64cb833d459a77d6cfa2b7abf536facd787740a21e1c5102666d18d2dbbc",
             "ledger": {
               "local": {
-                "bundle_id": "845c1b5318f6012fe69404ead6795159b6c4dc425427b580f28d57fcb04cf7e1",
+                "bundle_id": "3382492de7a0b38e18c86d32f3eb915363fef20bb0844fdb37360c83837df200",
                 "verdict": "APPROVE",
-                "round": 1,
-                "verdict_sha256": "843ba7283351ebc06be3ef8581412121c7879bfb7bedc05a887477881b245b14",
-                "ledger_entry_sha256": "8d62a8f2ea209a96827a8d14bcfad9058eced89b2a01bb54b7fd0e912155c58e",
+                "round": 2,
+                "verdict_sha256": "9946ef2d19fe3be0527d93cb2f96de803f6e178e7f5636f385d913e5e9658cb8",
+                "ledger_entry_sha256": "e0a630b49007ebb4ed63aa2a55bd7c196a666bf10053a090024e89f082d15599",
                 "run_ref": "session:local .ai-review/workflow-controller-ns1/feedback/REVIEW_FEEDBACK.md",
                 "reviewer_model": "anthropic/claude-opus-5-5"
               },
               "manual": {
-                "bundle_id": "845c1b5318f6012fe69404ead6795159b6c4dc425427b580f28d57fcb04cf7e1",
+                "bundle_id": "3382492de7a0b38e18c86d32f3eb915363fef20bb0844fdb37360c83837df200",
                 "verdict": "APPROVE",
-                "round": 1,
-                "verdict_sha256": "bcd356d1b054bcb236e6727bd1577ad38effedbd94a213c617b808a6af3f615c",
-                "ledger_entry_sha256": "fe3d7fcbf7ffe48da8eac315d92315d73375a0b504b769e4512b476f5f66ab95",
-                "run_ref": "codex:20261114T215553Z-a5bc658b",
+                "round": 2,
+                "verdict_sha256": "06f18346f22d714971916584e655e8bce5cf72fee68c7bc7f67037992206da75",
+                "ledger_entry_sha256": "edf626f4886b156557412e504d3f835c0568e017ba3fc681febe6ab54a333fbb",
+                "run_ref": "codex:20261115T023301Z-2bd0e44d",
                 "reviewer_model": "openai/gpt-6.1-sol"
               }
             },
@@ -73859,7 +73859,7 @@
           "trust": {
             "review_verdicts": "orchestrator"
           },
-          "evaluated_at": "2026-11-14T22:00:32Z",
+          "evaluated_at": "2026-11-15T02:36:37Z",
           "workflow_release": "2.29.3"
         }
       },
@@ -73893,12 +73893,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 1,
-          "external": 1
+          "local": 2,
+          "external": 2
         }
       },
-      "state_revision": 33,
-      "last_transition": "2026-11-15T02:04:01Z",
+      "state_revision": 36,
+      "last_transition": "2026-11-15T02:36:37Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -74077,6 +74077,48 @@
               "at": "2026-11-14T21:58:49Z"
             }
           ]
+        },
+        "F-0bfeb33952df": {
+          "digest": "0bfeb33952df015cdb051879547ce9c583cdff0733509a8a4f7a3b232e9aaad0",
+          "text": "**O1.** `IMPLEMENTATION_SUMMARY.md`, `TEST_RESULTS.md` and `REVIEW_REQUEST.md` in this bundle still describe revision 1. They give `e39ac87` as the content head and say \"revision 1\", and they never mention the F1 fix (`2e2ad27`) or a test run at `c6d5e01`. I checked the fix myself (see below), so nothing is unverified. Still, a post-fix bundle should say what changed and which tests ran at the reviewed head, so the external reviewer does not have to rebuild that from `CHANGES_SINCE_REVIEW.md`.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "7adf64cb833d459a77d6cfa2b7abf536facd787740a21e1c5102666d18d2dbbc",
+              "verdict": "APPROVE",
+              "at": "2026-11-15T02:06:37Z"
+            }
+          ]
+        },
+        "F-5a147291c6ad": {
+          "digest": "5a147291c6ad074b5bed3cc868b7b84f2bfff919550cca932ce75d30f31709bb",
+          "text": "**O2.** `resolve_namespace` runs the probe before it checks the unsafe list. On a host that refuses namespaces, `--namespace require tests.test_lock` therefore stops with the probe's reason, not with the D9 refusal. That is why Flow 4 could not be judged in the sandbox. If the `require` check against the unsafe modules ran first, the D9 refusal would be the same on every host, and the probe would still run for a fully safe selection. Also, the `else module` branch in the new `listed` expression can never run: every module in `unsafe` comes from `NAMESPACE_UNSAFE_MODULES`. It does no harm.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "7adf64cb833d459a77d6cfa2b7abf536facd787740a21e1c5102666d18d2dbbc",
+              "verdict": "APPROVE",
+              "at": "2026-11-15T02:06:37Z"
+            }
+          ]
+        },
+        "F-1f450fdee21b": {
+          "digest": "1f450fdee21b24615f56fc2c17388a83184259f7082785aa5e9d0f8ee50a3fec",
+          "text": "Previous finding remains: `tests/test_run_tests.py:664` passes the inside token as the shell’s `$0`, which disappears after `exec sleep 60`. The token scan at line 679 therefore cannot detect a surviving sleeper. Preserve the token in the sleeper’s argv or track its PID. The `inner-status -9` assertion still verifies the kill proof, so this remains nonblocking.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "7adf64cb833d459a77d6cfa2b7abf536facd787740a21e1c5102666d18d2dbbc",
+              "verdict": "APPROVE",
+              "at": "2026-11-15T02:34:50Z"
+            }
+          ]
         }
       },
       "amendment_history": [
@@ -74194,23 +74236,23 @@
       ],
       "amendment_base_commit": "0e3cca6a22a6c0a1f3f69572012cee87019a9c92",
       "implementation_review_stages": {
-        "review_content_id": "9719a21dcfd252bf47d8ef0dd6841213ce98b6eae9932e7cedad678df8f90e9c",
+        "review_content_id": "7adf64cb833d459a77d6cfa2b7abf536facd787740a21e1c5102666d18d2dbbc",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "845c1b5318f6012fe69404ead6795159b6c4dc425427b580f28d57fcb04cf7e1",
+          "bundle_id": "3382492de7a0b38e18c86d32f3eb915363fef20bb0844fdb37360c83837df200",
           "verdict": "APPROVE",
-          "round": 1,
-          "completed_at": "2026-11-14T19:58:37Z",
-          "verdict_sha256": "843ba7283351ebc06be3ef8581412121c7879bfb7bedc05a887477881b245b14",
+          "round": 2,
+          "completed_at": "2026-11-15T02:06:37Z",
+          "verdict_sha256": "9946ef2d19fe3be0527d93cb2f96de803f6e178e7f5636f385d913e5e9658cb8",
           "run_ref": "session:local .ai-review/workflow-controller-ns1/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
         "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "845c1b5318f6012fe69404ead6795159b6c4dc425427b580f28d57fcb04cf7e1",
+          "bundle_id": "3382492de7a0b38e18c86d32f3eb915363fef20bb0844fdb37360c83837df200",
           "verdict": "APPROVE",
-          "round": 1,
-          "completed_at": "2026-11-14T21:58:49Z",
-          "verdict_sha256": "bcd356d1b054bcb236e6727bd1577ad38effedbd94a213c617b808a6af3f615c",
-          "run_ref": "codex:20261114T215553Z-a5bc658b",
+          "round": 2,
+          "completed_at": "2026-11-15T02:34:50Z",
+          "verdict_sha256": "06f18346f22d714971916584e655e8bce5cf72fee68c7bc7f67037992206da75",
+          "run_ref": "codex:20261115T023301Z-2bd0e44d",
           "reviewer_model": "openai/gpt-6.1-sol"
         }
       },

@@ -1518,6 +1518,11 @@ class UnfinishedWorkTest(Fixture):
         self.assertIsNone(self.probe())
         self.assertFalse(marker.exists())
 
+    def test_a_clean_clone_with_the_worktree_extension_and_no_worktree_config_holds_none(self) -> None:
+        git(self.clone, "config", "--local", "extensions.worktreeConfig", "true")
+        self.assertFalse((self.clone / ".git" / "config.worktree").exists())
+        self.assertIsNone(self.probe())
+
     def test_a_hook_in_the_clone_does_not_run(self) -> None:
         marker = self.tmp / "hook-ran"
         hooks = self.clone / ".git" / "hooks"

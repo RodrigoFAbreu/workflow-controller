@@ -877,6 +877,29 @@ class FilterAndStatusTest(unittest.TestCase):
         self.assertIn("filter.loc.clean=", options)
         self.assertEqual(len(options), 8)
 
+    def test_the_extension_without_a_worktree_configuration_file_gives_the_local_options(self) -> None:
+        self.config("extensions.worktreeConfig", "true")
+        self.config("filter.loc.clean", "prog")
+        self.assertFalse((self.repo / ".git" / "config.worktree").exists())
+        options = gitrepo.filter_disabling_config(self.repo)
+        self.assertIn("filter.loc.clean=", options)
+        self.assertEqual(len(options), 8)
+
+    def test_a_linked_worktree_with_the_extension_and_no_file_gives_the_local_options(self) -> None:
+        self.config("extensions.worktreeConfig", "true")
+        self.config("filter.loc.clean", "prog")
+        linked = self.base_dir / "linked"
+        run(["git", "worktree", "add", "-q", str(linked)], cwd=self.repo)
+        options = gitrepo.filter_disabling_config(linked)
+        self.assertIn("filter.loc.clean=", options)
+        self.assertEqual(len(options), 8)
+
+    def test_an_unreadable_worktree_configuration_file_raises(self) -> None:
+        self.config("extensions.worktreeConfig", "true")
+        (self.repo / ".git" / "config.worktree").mkdir()  # a directory: Git cannot read it, and it is not absent
+        with self.assertRaises(GitOperationError):
+            gitrepo.filter_disabling_config(self.repo)
+
     def test_another_failure_of_the_worktree_read_raises(self) -> None:
         self.config("extensions.worktreeConfig", "true")
         (self.repo / ".git" / "config.worktree").write_text("[filter \"x\"\n\tclean = [broken\n")

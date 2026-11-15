@@ -1003,6 +1003,25 @@ def diff_raw(repo_root: Path, base: str, tip: str, *, runner: Runner | None = No
 
 _FILTER_KEY = re.compile(r"^filter\.(?P<name>.+)\.(?P<variable>[^.]+)$")
 
+# The two exit-128 refusals of ``git config --worktree`` that mean "no worktree scope" (``workflow-controller-cx2``,
+# D1): a repository with a linked worktree and no ``extensions.worktreeConfig``, and one with the extension on whose
+# ``config.worktree`` was never written. Stderr is stable because the runners set ``LC_ALL=C``.
+_NO_WORKTREE_SCOPE = re.compile(r"--worktree cannot be used with multiple working trees"
+                                r"|unable to read config file '.*config\.worktree': No such file or directory")
+
+
+def _worktree_config_keys(repo_root: Path, runner: Runner | None) -> str:
+    """``git config --worktree --includes --name-only --list -z``'s stdout, or ``""`` for a :data:`_NO_WORKTREE_SCOPE`
+    refusal (exit 128, empty stdout). Any other outcome raises."""
+    args = ["config", "--worktree", "--includes", "--name-only", "--list", "-z"]
+    argv, result = _run(repo_root, args, runner, quiet=True)
+    if result.returncode == 0:
+        return _text(result.stdout)
+    stderr = _text(result.stderr)
+    if result.returncode == 128 and not result.stdout and _NO_WORKTREE_SCOPE.search(stderr):
+        return ""
+    raise _failure(f"git config failed (exit {result.returncode}): {stderr.strip()}", argv, result)
+
 
 def filter_disabling_config(repo_root: Path, *, runner: Runner | None = None) -> tuple[str, ...]:
     """The ``-c`` options that switch off every filter driver ``repo_root``'s own configuration names
@@ -1012,16 +1031,17 @@ def filter_disabling_config(repo_root: Path, *, runner: Runner | None = None) ->
     --name-only --list -z`` (``.git/config`` and what it includes) and ``git config --worktree ...`` (``config.worktree``
     when ``extensions.worktreeConfig`` is on), the names unioned (``workflow-controller-cx2``, D1). Without that
     extension a repository with a linked worktree refuses ``--worktree`` with exit 128 and "--worktree cannot be used
-    with multiple working trees"; exactly that refusal means no worktree scope. Every other failure of either read
-    raises. The names are the clone's, so every one is passed as an argument, never through a shell."""
+    with multiple working trees", and with it on but no ``config.worktree`` written Git exits 128 with "unable to read
+    config file '...config.worktree': No such file or directory"; exactly those two refusals mean no worktree scope
+    (:data:`_NO_WORKTREE_SCOPE`). Every other failure of either read raises. The names are the clone's, so every one is
+    passed as an argument, never through a shell."""
     names: set[str] = set()
     reads = (
         _git(repo_root, ["config", "--local", "--includes", "--name-only", "--list", "-z"], runner, quiet=True),
-        _probe(repo_root, ["config", "--worktree", "--includes", "--name-only", "--list", "-z"], runner, absent=128,
-               absent_stderr="--worktree cannot be used with multiple working trees", quiet=True),
+        _worktree_config_keys(repo_root, runner),
     )
     for out in reads:
-        for key in (out or "").split("\0"):
+        for key in out.split("\0"):
             found = _FILTER_KEY.match(key)
             if found:
                 names.add(found.group("name"))

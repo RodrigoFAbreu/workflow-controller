@@ -676,6 +676,7 @@ Pick a module from `NAMESPACE_UNSAFE_MODULES` (`sed -n 2016,2036p tools/test_sha
 `python3 -B tools/run_tests.py --namespace require <that module>; echo rc=$?`; then run it with the default `auto`.
 Expected: `require` exits 2 naming the module and its reason, running nothing; `auto` runs the shard bare, the header reads `namespace: none` or
 `isolated for N of M shards (unwrapped: ...)`, with a notice.
+Functional round 1 fix: the `require` refusal printed only the module names; it now prints each module's reason too (`tests.test_lock (the lock probe answers unknown outside the init PID namespace)`). Re-test this flow; flows 1 and 6 ran at the previous head and need re-running.
 
 **Flow 5: `--plan-only` never probes.**
 Run `python3 -B tools/run_tests.py --namespace require --plan-only | head -5; echo rc=$?`.

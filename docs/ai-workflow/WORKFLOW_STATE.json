@@ -76611,7 +76611,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-cx2-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-cx2-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 2,
       "implementation_revision": 4,
       "functional_review_round": null,
@@ -76720,7 +76720,114 @@
           "workflow_release": "2.29.3"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "e17b81dae8fd1a53e51d1c7077e9ab9e23e4f9c2191bacb540b762aff886d997",
+        "approved_review_content_id": "c94d3c94af9bed1368d65c3dbe2df0012836120e5c27e865ae5b9269cec5f726",
+        "review_content_manifest": [
+          {
+            "path": "controller/gitrepo.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "701fd7212e0548067df2c62786ab8d0a5bfa223c"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-cx2-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d7d8acbe4fc09a76f43cac1db7ace5c6b6c7e51b"
+          },
+          {
+            "path": "docs/common-problems.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3b25f7459cac3533f342b2c09562649da3ed3a2b"
+          },
+          {
+            "path": "docs/guide/harnesses.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "69f43deceb73a2b325390c8de8592705b4507889"
+          },
+          {
+            "path": "tests/test_codex_worker_landing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f74d610a68457ebf484b53091fa79636a5b4ce22"
+          },
+          {
+            "path": "tests/test_gitrepo.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f8e472b7c7ad3b9d20028070b1334ee64fafd56e"
+          }
+        ],
+        "reviewed_content_commit": "3ff7d4787c51439e84d7e9365286d44dc84bf004",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-15T22:05:08Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "c94d3c94af9bed1368d65c3dbe2df0012836120e5c27e865ae5b9269cec5f726",
+            "ledger": {
+              "local": {
+                "bundle_id": "e17b81dae8fd1a53e51d1c7077e9ab9e23e4f9c2191bacb540b762aff886d997",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "73f9136195b84e78ccd0b607ca366454c7dbe2f96be5e0e5f3506c396a0e0e89",
+                "ledger_entry_sha256": "1b512e2f67685eaa37cb9727d4d24da426036337df644dc3eab92b531f500a24",
+                "run_ref": "session:local .ai-review/workflow-controller-cx2/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "e17b81dae8fd1a53e51d1c7077e9ab9e23e4f9c2191bacb540b762aff886d997",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "4a2f96825a71be8ec1be450c0b0019aed67a50b39e3b5a29db56307aba11b41a",
+                "ledger_entry_sha256": "f69949756e0cc78d918fa350e9646eb33a506178978b40592bc21c43d44ae54b",
+                "run_ref": "codex:20261115T220112Z-5cfaec5c",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-15T22:05:08Z",
+          "workflow_release": "2.29.3"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "3d27c94ce7306f296fe3c64f765a16478cbc2ec7c0eddd9d9a54a305c903a30c",
@@ -76751,12 +76858,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 3,
-          "external": 1
+          "local": 4,
+          "external": 2
         }
       },
-      "state_revision": 21,
-      "last_transition": "2026-11-15T21:58:15Z",
+      "state_revision": 24,
+      "last_transition": "2026-11-15T22:05:08Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -76877,20 +76984,70 @@
               "at": "2026-11-15T22:05:00Z"
             }
           ]
+        },
+        "F-8d2919eed960": {
+          "digest": "8d2919eed96057e35ba294032e5564684f8a0450011ef1ae638726383b25062f",
+          "text": "**CX2-I-L4-O01:** The \"Deviations from the plan\" D1 bullet in `docs/items/workflow-controller-cx2.md` still describes the self-review's intermediate deviation: a second tolerated refusal for the extension with no `config.worktree`. That form was removed with CX2-E-I01. The deviation that shipped is different: one combined read instead of the plan's two per-scope reads, no tolerated refusal at all (the plan's R1 says \"tolerating only the multiple-worktrees refusal\"), and drivers from the system, global and `GIT_CONFIG_PARAMETERS` scopes are named whenever the environment lets Git see them. The Dispositions paragraph above it is already correct. The bullet, and the pull request description it says will state the deviation, could describe the final form.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "c94d3c94af9bed1368d65c3dbe2df0012836120e5c27e865ae5b9269cec5f726",
+              "verdict": "APPROVE",
+              "at": "2026-11-15T22:00:49Z"
+            }
+          ]
+        },
+        "F-03b2a5481e00": {
+          "digest": "03b2a5481e0055db8c36dc314ecddb9733a89d1b6c06b7d63914112b9a0290dd",
+          "text": "**CX2-I-L4-O02:** `b6fa890` deleted one of the two blank lines before `def filter_disabling_config` (`controller/gitrepo.py:1005`), so `git diff 2eeb5d4` shows an unrelated whitespace change and the file breaks its own two-blank-line spacing between top-level definitions. The line could be restored.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "c94d3c94af9bed1368d65c3dbe2df0012836120e5c27e865ae5b9269cec5f726",
+              "verdict": "APPROVE",
+              "at": "2026-11-15T22:00:49Z"
+            }
+          ]
+        },
+        "F-ccd3b603d549": {
+          "digest": "ccd3b603d549f61d59319da19d459d84301af36a6f8d880bbd000da7e77ae5b1",
+          "text": "**CX2-I-L4-O03:** The `filter_disabling_config` docstring says `review._git_env` \"excludes\" the global file. It sets `HOME` to the job base, so Git still reads `<job base>/.gitconfig` and `<job base>/.config/git/config` if one exists. The global scope points into a directory the Controller owns rather than being turned off (`GIT_CONFIG_GLOBAL` is not set). This has no safety effect, because any driver found there is switched off too. \"Points the global file into the job base\" would be more exact.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "c94d3c94af9bed1368d65c3dbe2df0012836120e5c27e865ae5b9269cec5f726",
+              "verdict": "APPROVE",
+              "at": "2026-11-15T22:00:49Z"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "427f6a3a8fa1f8eb625f8da44e4f507e784f0930f2413a9d918a326558d5ceda",
+        "review_content_id": "c94d3c94af9bed1368d65c3dbe2df0012836120e5c27e865ae5b9269cec5f726",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "08999ecfb0ba409daf3019d565f6561c35e926cc6fff7f55c9776d9c26e4b9bc",
+          "bundle_id": "e17b81dae8fd1a53e51d1c7077e9ab9e23e4f9c2191bacb540b762aff886d997",
           "verdict": "APPROVE",
-          "round": 2,
-          "completed_at": "2026-11-15T21:47:00Z",
-          "verdict_sha256": "ce82e4987b777728092dde7c14ae6e7666d599783b6f175efffa78aaa1958c8b",
+          "round": 4,
+          "completed_at": "2026-11-15T22:00:49Z",
+          "verdict_sha256": "73f9136195b84e78ccd0b607ca366454c7dbe2f96be5e0e5f3506c396a0e0e89",
           "run_ref": "session:local .ai-review/workflow-controller-cx2/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
-        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "e17b81dae8fd1a53e51d1c7077e9ab9e23e4f9c2191bacb540b762aff886d997",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-11-15T22:03:16Z",
+          "verdict_sha256": "4a2f96825a71be8ec1be450c0b0019aed67a50b39e3b5a29db56307aba11b41a",
+          "run_ref": "codex:20261115T220112Z-5cfaec5c",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
       }
     }
   }

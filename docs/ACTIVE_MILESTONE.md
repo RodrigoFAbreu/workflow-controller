@@ -653,55 +653,50 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-ns1` (NS1), implementation revision 2 (revision 1 plus the functional round 1 fix F1), plan `docs/ai-workflow/CONTROLLER_NS1_PLAN.md` (revision 3), base commit
-`1ffbde2`. Three checkpoints: CP1 (the launcher, `--namespace`, Ctrl-C), CP2 (the kill proof, the unsafe-module list, unwrapped shards), CP3 (docs).
-Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and
-the system directories, and no write inside the read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; flows
-write only to the scratch `TMPDIR`. No flow needs a pull request or a forge call. The flows use narrow selections only: a full run is unwrapped
-until the follow-up (D9) and takes many minutes.
+Item `workflow-controller-lt1` (LT1), implementation revision 1, plan `docs/ai-workflow/CONTROLLER_LT1_PLAN.md` (revision 4), base commit
+`47abee7`. Two checkpoints: CP1 (the selection rule in `CLAUDE.md` and `docs/guide/development.md` "Verification policy", pinned by
+`tests.test_docs.VerificationPolicyTest`) and CP2 (the pages: `docs/guide/workers.md`, `docs/guide/milestone-branches.md`, the item page).
+This item changes documentation and one test module only; no Controller code. Every flow runs offline: no network, no real `gh` (the
+stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the system directories, and no write inside the
+read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write only to the scratch `TMPDIR`.
+No flow needs a pull request or a forge call, and none runs the full suite.
 
-Setup: `export TMPDIR=$(mktemp -d)`. No data to seed. Flows 1 to 4 need `unshare` with user and PID namespaces; if the sandbox forbids them, flows 1
-and 3 will show `namespace: none (<reason>)` or exit 2, which is the designed fallback and refusal: say so and mark flow 2 as skipped.
+Setup: `export TMPDIR=$(mktemp -d)`. No data to seed. Flows 1 to 3 are reading flows; flows 4 and 5 run narrow selections.
 
-**Flow 1: Default (`auto`) wraps a namespace-safe selection.**
-Run `python3 -B tools/run_tests.py tests.test_test_shards.NamespaceLauncherTest; echo rc=$?`.
-Expected: header line `namespace: isolated`, `# Test run: PASS`, `rc=0`.
+**Flow 1: `CLAUDE.md` "Running tests".**
+Read the "Running tests" section.
+Expected: the worker runs only the modules the plan's `**Tests:**` paragraph names, through `python3 tools/run_tests.py [names]`; the
+repository-wide guards are added when the tree changes; the full suite is CI's, except `tests.test_catalogue_determinism` and
+`tests.test_scenarios_negative`, which run only after the merge; at most one local full run, at the self-review, never two at once; a
+review-fix pass is not rerun with the full suite.
 
-**Flow 2: `kill(-1)` stays inside the namespace.**
-Run `python3 -B tools/run_tests.py --namespace require tests.test_run_tests.NamespaceKillProofTest; echo rc=$?`.
-Expected: `namespace: isolated`, PASS, `rc=0`; your own shell and session are still alive afterwards.
+**Flow 2: `docs/guide/development.md` "Verification policy".**
+Read the section (`grep -n 'Verification policy' docs/guide/development.md`).
+Expected: it states D1 to D4 and D7 (selection named by the plan, guards ride along, one full run at the self-review, two never at once with
+the anchored `pgrep -af '^[^ ]*python[0-9.]*( -[^ ]+)* [^ ]*tools/run_tests\.py'` check, the trade-off), says what `/milestone-implement` step 3
+"full required verification" and `/apply-implementation-review` step 5 "full suite" mean here, and no longer calls the full suite the
+checkpoint verification. The reuse rule, the serial-run rule and the CI-evidence rule are still there.
 
-**Flow 3: `off` never wraps and never probes.**
-Run `python3 -B tools/run_tests.py --namespace off tests.test_test_shards.NamespaceLauncherTest` and again with
-`CONTROLLER_TEST_NAMESPACE=off` and no flag.
-Expected: both print `namespace: none (off)` and pass. An invalid value (`--namespace bogus`) is a usage error, exit 2.
+**Flow 3: The pages and the item record.**
+Read `docs/guide/workers.md` ("What a worker runs at a checkpoint"), the `**Tests:**` sentence in `docs/guide/milestone-branches.md`, and
+`docs/items/workflow-controller-lt1.md`.
+Expected: the workers page tells a lane's operator what a worker runs, that the full suite is CI's apart from the two post-merge modules, and the
+rule between lanes; the item page carries status, plan link, corrected scope (no Controller code changes), O1, O2 and the D7 trade-off.
 
-**Flow 4: `require` refuses a selection that holds an unsafe module (D9).**
-Pick a module from `NAMESPACE_UNSAFE_MODULES` (`sed -n 2016,2036p tools/test_shards.py`) and run
-`python3 -B tools/run_tests.py --namespace require <that module>; echo rc=$?`; then run it with the default `auto`.
-Expected: `require` exits 2 naming the module and its reason, running nothing; `auto` runs the shard bare, the header reads `namespace: none` or
-`isolated for N of M shards (unwrapped: ...)`, with a notice.
-Functional round 1 fix: the `require` refusal printed only the module names; it now prints each module's reason too (`tests.test_lock (the lock probe answers unknown outside the init PID namespace)`). Re-test this flow (revision 2); flows 1 and 6 ran at the previous head and need re-running.
+**Flow 4: The guard test and the checkpoint selections pass.**
+Run `python3 -B tools/run_tests.py tests.test_docs tests.test_plan_document_consistency tests.test_ci_changes tests.test_package_structure tests.test_write_containment; echo rc=$?`.
+Expected: `# Test run: PASS`, exact coverage, `rc=0` (about 208 tests).
 
-**Flow 5: `--plan-only` never probes.**
-Run `python3 -B tools/run_tests.py --namespace require --plan-only | head -5; echo rc=$?`.
-Expected: the plan prints (about 6600 tests, 8 shards) with no refusal, rc 0.
+**Flow 5: Docs check, and the guard fails on a lost rule.**
+Run `python3 -B tools/check_docs.py; echo rc=$?` (expected `rc=0`). Then, in a scratch copy only (`git worktree` is not allowed; use
+`cp -r . "$TMPDIR/c" && cd "$TMPDIR/c"`), delete the "at most one" full-run sentence from `CLAUDE.md` and run
+`python3 -B tools/run_tests.py tests.test_docs.VerificationPolicyTest`.
+Expected: the unmodified check exits 0; the copy's run fails naming the missing marker sentence.
 
-**Flow 6: The launcher and tests pass both ways.**
-Run `python3 -B tools/run_tests.py --namespace require tests.test_run_tests.NamespaceModeTest tests.test_run_tests.NamespaceUnsafeShardTest tests.test_run_tests.NamespaceUnsafeListTest tests.test_test_shards`
-then the same with `--namespace off`.
-Expected: both `Test run: PASS`.
-
-**Flow 7: Docs (CP3).**
-Run `python3 -B tools/check_docs.py; echo rc=$?`. Read `docs/guide/development.md` ("The test runner", "Namespace"), `docs/items/workflow-controller-ns1.md`
-and the test-running paragraph of `CLAUDE.md`.
-Expected: `rc=0`; the pages state the three settings, that a full or `--serial` local run is unwrapped until the follow-up, D6 to D9, and that O1 and O2
-are open owner decisions.
-
-**Known limitations / out of scope.** A full or `--serial` local run wraps no shard (the unsafe-module list spans every shard) until the follow-up
-item; CI is unwrapped. The worker-side refusal of a bare `python3 -m unittest` and the guard harness (O2) are not built. Signalling inside the
-Controller itself was done in PR #328. The full suite is not a flow: three `tests.test_fake_codex_contract` tests fail where `~/.codex` config is read
-(environmental), and `ImplRecoveryTest` cases can fail from a shared `job1` tag collision in another shard (they pass alone).
+**Known limitations / out of scope.** No Controller code or runner change: the rule is documentation plus a documentation-level test. Two
+full suites never overlapping is a documented rule, not a lock (O1); a helper mapping a changed path to the modules that read it is not built (O2).
+A regression outside the selection surfaces in CI on the pull request, except the two post-merge modules, which can fail the release gate (D7).
+The full suite is not a flow; three `tests.test_fake_codex_contract` tests fail where `~/.codex` config is read (environmental).
 
 ## Next action
 

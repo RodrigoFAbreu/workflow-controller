@@ -2388,8 +2388,8 @@ def gate_text(code: str, **facts: Any) -> str:
                 "PID-namespace launcher (`unshare`), no tool outside the sandbox PATH): their results are recorded as "
                 "failed with the reason `environment`, no "
                 f"findings were written and the applier was not started ({detail}).{refused_text(facts.get('refused') or ())} "
-                "Run those flows by hand and record them (`record-external-result --kind functional_evidence`), or "
-                "change the checklist so they run offline")
+                "Run those flows by hand on the host and record one `functional_evidence` result per flow with the "
+                "Workflow's protocol script, or change the checklist so they run offline")
     if code == GATE_ROUNDS_EXHAUSTED:
         return (f"the tester has failed {facts.get('rounds')} times for this work item (the bound is {ROUND_BOUND}): "
                 f"no further tester run is started. To go on, {MANUAL_REMEDY}")

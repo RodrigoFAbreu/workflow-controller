@@ -1561,10 +1561,13 @@ class PromptTest(unittest.TestCase):
         self.assertIn(limit, fr.sandbox_limits_note())
         self.assertIn(limit, self.prompt())
 
-    def test_the_flows_not_runnable_stop_names_the_launcher_and_the_recording_command(self) -> None:
+    def test_the_flows_not_runnable_stop_names_the_launcher_and_how_to_record_the_flow(self) -> None:
+        # The operation's own name stays in protocol.py (test_protocol_schema), so the stop names the
+        # kind and the protocol script, as MANUAL_REMEDY does.
         text = fr.gate_text(fr.GATE_FLOWS_NOT_RUNNABLE, flows=("flow-1",), detail="d")
         self.assertIn("PID-namespace launcher (`unshare`)", text)
-        self.assertIn("record-external-result --kind functional_evidence", text)
+        self.assertIn("Run those flows by hand on the host and record one `functional_evidence` result per flow "
+                      "with the Workflow's protocol script", text)
 
 
 class ConstantsTest(unittest.TestCase):

@@ -150,10 +150,11 @@ they create their own tags.
   `docs/guide/` edit runs at least `tests.test_plan_document_consistency`,
   which parses every guide's invocation lines against the live CLI parser.
 - The full suite is CI's. CI runs it on every pull request (about 19
-  minutes), at most one local full run happens, at the self-review of the
-  whole diff and only when the diff touches shared code (a diff
-  `tools/ci_changes.py` classifies as `docs` needs none), and never at a
-  checkpoint or in a review-fix pass.
+  minutes), apart from the two modules that run after the merge (below).
+  At most one local full run happens: at the self-review of the whole diff,
+  only when the diff touches shared code (a diff `tools/ci_changes.py`
+  classifies as `docs` needs none), and never at a checkpoint or in a
+  review-fix pass.
 - In this repository "the full required verification" of
   `/milestone-implement` step 3 means that single self-review run (or
   `python3 tools/check_docs.py` when the diff is documentation only), and

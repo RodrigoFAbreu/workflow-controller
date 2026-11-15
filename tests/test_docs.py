@@ -608,10 +608,6 @@ class VerificationPolicyTest(unittest.TestCase):
     )
     POST_MERGE = ("tests.test_catalogue_determinism", "tests.test_scenarios_negative")
 
-    @staticmethod
-    def _flat(path: str) -> str:
-        return " ".join((REPO_ROOT / path).read_text(encoding="utf-8").split())
-
     def _policy(self) -> str:
         text = (REPO_ROOT / "docs" / "guide" / "development.md").read_text(encoding="utf-8")
         start = text.index("## Verification policy")
@@ -671,7 +667,7 @@ class VerificationPolicyTest(unittest.TestCase):
     def test_the_worker_instructions_carry_the_rule(self) -> None:
         claude = self._claude()
         for marker in (
-            "run only the test modules the plan's `**Tests:**` paragraph names",
+            "At a checkpoint run only the test modules the plan's `**Tests:**` paragraph names",
             "The full suite is CI's on the pull request",
             "run only after the merge and can fail the release gate for an unselected regression",
             "at most once, at the self-review, and never two at once",
@@ -679,7 +675,7 @@ class VerificationPolicyTest(unittest.TestCase):
             "`/apply-implementation-review` step 5's \"full suite\" is not rerun in a fix pass",
             "never use a bare `python3 -m unittest` for a signal-sending test",
         ):
-            self.assertIn(marker, claude.replace("At a checkpoint run only", "run only"))
+            self.assertIn(marker, claude)
         for module in self.POST_MERGE:
             self.assertIn(f"`{module}`", claude)
 

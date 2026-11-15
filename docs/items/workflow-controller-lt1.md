@@ -2,7 +2,7 @@
 
 Item id: `workflow-controller-lt1`.
 
-Status: implementing (2026-11-15); CP1 and CP2 are complete. Plan: [CONTROLLER_LT1_PLAN.md](../ai-workflow/CONTROLLER_LT1_PLAN.md) (revision 4). Owner decision 2026-11-14. Complexity: low to medium. Priority: high (owner).
+Status: in implementation review (2026-11-15); CP1, CP2 and the self-review are complete. Plan: [CONTROLLER_LT1_PLAN.md](../ai-workflow/CONTROLLER_LT1_PLAN.md) (revision 4). Owner decision 2026-11-14. Complexity: low to medium. Priority: high (owner).
 
 ## Why
 
@@ -25,4 +25,4 @@ A regression outside the changed area surfaces later, in CI on the pull request,
 
 ## Verification
 
-CP1: `tests.test_docs`, `tests.test_plan_document_consistency`, `tests.test_ci_changes`, `tests.test_package_structure`, `tests.test_write_containment` and `python3 tools/check_docs.py`. CP2: `tests.test_docs`, `tests.test_plan_document_consistency` and `python3 tools/check_docs.py`.
+CP1: `tests.test_docs`, `tests.test_plan_document_consistency`, `tests.test_ci_changes`, `tests.test_package_structure`, `tests.test_write_containment` and `python3 tools/check_docs.py`. CP2: `tests.test_docs`, `tests.test_plan_document_consistency` and `python3 tools/check_docs.py`. Self-review: the same five modules as CP1 (208 tests) and `python3 tools/check_docs.py`; the diff changes no shared code, so no local full run, and CI runs the full suite on the pull request.

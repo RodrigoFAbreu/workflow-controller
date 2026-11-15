@@ -630,6 +630,123 @@ class RunTests:
                         ending.evidence["problems"])
 
 
+    # -- CX1, D3: what `after_check` compares ---------------------------------
+
+    def clone_problems(self, files: dict[str, bytes], later: dict[str, bytes] | None = None, edit=None,
+                       link: tuple[str, str] | None = None) -> list[str]:
+        """`after_check`'s problems for a clone of a scratch repository holding ``files`` and then ``later`` (committed
+        separately, so a later `.gitattributes` applies to the earlier blobs), after ``edit(clone)``."""
+        area = Path(tempfile.mkdtemp(prefix="after-check-"))
+        self.addCleanup(shutil.rmtree, area, ignore_errors=True)
+        origin, layout = area / "origin", ws.WorkerLayout(area / "runtime", "job1")
+        origin.mkdir()
+        layout.base.mkdir(parents=True)
+        git = ["-c", "user.name=t", "-c", "user.email=t@t"]
+        _git(origin, "init", "-q", "-b", "main")
+        _git(origin, "config", "core.autocrlf", "false")
+        for batch in (files, later or {}):
+            for rel, data in batch.items():
+                (origin / rel).parent.mkdir(parents=True, exist_ok=True)
+                (origin / rel).write_bytes(data)
+            if link and batch is files:
+                os.symlink(link[1], origin / link[0])
+            _git(origin, "add", "-A")
+            _git(origin, *git, "commit", "-q", "-m", "c", "--allow-empty")
+        base = _git(origin, "rev-parse", "HEAD").strip()
+        clone = area / "clone"
+        _git(area, "clone", "-q", str(origin), str(clone))
+        _git(clone, "remote", "remove", "origin")  # the real clone keeps only its branch
+        if edit:
+            edit(clone)
+        prepared = codex_worker_tree.Prepared(path=clone, branch="main", base=base, guard={})
+        return crr.after_check(prepared, layout, {})
+
+    def refused_with(self, mutate, expected: str | None = None) -> list[str]:
+        def launch(task, **kw):
+            result = self.seam(task, **kw)
+            mutate(kw["cwd"])
+            return result
+
+        self.script(message=message("APPROVE"))
+        ending = self.run_role(launch=launch)
+        self.assertEqual((ending.code, ending.cause), (crr.REFUSED, "read_only_violated"), dict(ending.evidence))
+        problems = ending.evidence["problems"]
+        if expected:
+            self.assertTrue(any(expected in p for p in problems), problems)
+        return problems
+
+    def passes(self, mutate=lambda cwd: None) -> None:
+        def launch(task, **kw):
+            result = self.seam(task, **kw)
+            mutate(kw["cwd"])
+            return result
+
+        self.script(message=message("APPROVE"))
+        ending = self.run_role(launch=launch)
+        self.assertEqual((ending.code, ending.cause), (crr.RECORDED, None), dict(ending.evidence))
+
+    def test_a_changed_input_mode_is_refused(self) -> None:
+        self.refused_with(lambda cwd: next((cwd / ".ai-review").rglob("REVIEW_REQUEST.md")).chmod(0o755),
+                          "changed mode")
+
+    def test_a_symlinked_ai_review_is_refused(self) -> None:
+        def swap(cwd: Path) -> None:
+            real = cwd / ".ai-review"
+            moved = cwd.parent / "moved-ai-review"
+            real.rename(moved)
+            real.symlink_to(moved)
+
+        self.refused_with(swap, "symlink .ai-review")
+
+    def test_a_tracked_symlink_in_an_unchanged_clone_passes(self) -> None:
+        self.assertEqual(self.clone_problems({"target.txt": b"x\n"}, link=("link", "target.txt")), [])
+
+    def test_a_chmod_of_a_tracked_file_is_refused(self) -> None:
+        self.refused_with(lambda cwd: (cwd / "README.md").chmod(0o755), "README.md")
+
+    def test_a_tracked_file_replaced_by_a_symlink_to_identical_content_is_refused(self) -> None:
+        def swap(cwd: Path) -> None:
+            copy = cwd.parent / "same-content"
+            copy.write_bytes((cwd / "README.md").read_bytes())
+            (cwd / "README.md").unlink()
+            (cwd / "README.md").symlink_to(copy)
+
+        self.refused_with(swap, "README.md")
+
+    def test_a_deleted_tracked_path_is_refused(self) -> None:
+        self.refused_with(lambda cwd: (cwd / "README.md").unlink(), "README.md")
+
+    def test_ignored_files_are_listed(self) -> None:
+        def hide(cwd: Path) -> None:
+            (cwd / "sub").mkdir()
+            (cwd / "sub" / ".gitignore").write_text("*\n")
+            (cwd / "sub" / "hidden.txt").write_text("x")
+
+        problems = self.refused_with(hide)
+        self.assertTrue(any("sub/hidden.txt" in p for p in problems), problems)
+
+    def test_a_line_ending_normalised_clone_is_unchanged(self) -> None:
+        """F-a40ae7e802a5: committed CRLF, a later `*.txt text`; CX1-EXT-001: stored LF, checked out CRLF."""
+        self.assertEqual(self.clone_problems({"crlf.txt": b"a\r\nb\r\n"}, {".gitattributes": b"*.txt text\n"}), [])
+        self.assertEqual(self.clone_problems({".gitattributes": b"*.txt text eol=crlf\n", "lf.txt": b"a\nb\n"}), [])
+
+    def test_a_one_byte_edit_under_those_attributes_is_refused(self) -> None:
+        edit = lambda name: (lambda clone: (clone / name).write_bytes(b"a\r\nc\r\n"))  # noqa: E731
+        problems = self.clone_problems({"crlf.txt": b"a\r\nb\r\n"}, {".gitattributes": b"*.txt text\n"},
+                                       edit("crlf.txt"))
+        self.assertEqual(problems, ["changed or new path crlf.txt"])
+        problems = self.clone_problems({".gitattributes": b"*.txt text eol=crlf\n", "lf.txt": b"a\nb\n"},
+                                       edit=edit("lf.txt"))
+        self.assertEqual(problems, ["changed or new path lf.txt"])
+
+    def test_ident_and_working_tree_encoding_paths_are_a_declared_false_refusal(self) -> None:
+        """D3: checkout converts these, so an unchanged clone is refused; `docs/common-problems.md` words it."""
+        problems = self.clone_problems({"id.c": b"/* $Id$ */\n", ".gitattributes": b"*.c ident\n"})
+        self.assertEqual(problems, ["changed or new path id.c"])
+        problems = self.clone_problems({"u.txt": b"abc\n", ".gitattributes": b"*.txt working-tree-encoding=UTF-16LE\n"})
+        self.assertEqual(problems, ["changed or new path u.txt"])
+
+
 class PlanRoleTests(RunTests, RoleCase):
     STAGE = "plan"
 

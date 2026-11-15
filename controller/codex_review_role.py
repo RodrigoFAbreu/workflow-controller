@@ -315,6 +315,58 @@ def _clone_git(clone: Path, runner: Any, *args: str) -> str:
     return result.stdout.decode("utf-8", "replace")
 
 
+def _blob_id(data: bytes, width: int) -> str:
+    """The Git object id of ``data`` as a blob, for an id ``width`` hex digits long (SHA-1 or SHA-256 repository);
+    the value ``git hash-object --no-filters --stdin`` prints, computed without running a program."""
+    algorithm = hashlib.sha256 if width == 64 else hashlib.sha1
+    return algorithm(b"blob %d\0" % len(data) + data).hexdigest()
+
+
+def _lf(data: bytes) -> bytes:
+    """``data`` with each ``\\r\\n`` read as ``\\n``."""
+    return b"\n".join(data.split(b"\r\n"))
+
+
+def _tracked_problems(clone: Path, runner: Any, tree: str) -> list[str]:
+    """Why a tracked path of the clone differs from the base tree's ``ls-tree -r -z`` listing ``tree`` (CX1, D3): by
+    ``lstat`` type, executable bit and raw bytes. No attribute, filter or program is consulted. A regular file passes
+    when its raw bytes hash to the entry's id or when both sides are equal after each CRLF becomes LF (a checkout
+    conversion in either direction); ``ident`` and ``working-tree-encoding`` paths are a declared false refusal."""
+    problems: list[str] = []
+    for entry in (e for e in tree.split("\0") if e):
+        head, _, rel = entry.partition("\t")
+        mode, _, oid = head.split(" ", 2)
+        if rel == ".ai-review" or rel.startswith(".ai-review/"):
+            continue
+        path = clone / rel
+        try:
+            info = os.lstat(path)
+        except OSError:
+            problems.append(f"changed or new path {rel}")
+            continue
+        kind = stat.S_IFMT(info.st_mode)
+        if mode == "160000":
+            same = kind == stat.S_IFDIR
+        elif mode == "120000":
+            same = kind == stat.S_IFLNK and _blob_id(os.readlink(bytes(path)), len(oid)) == oid
+        elif mode in ("100644", "100755"):
+            same = kind == stat.S_IFREG and bool(info.st_mode & stat.S_IXUSR) == (mode == "100755")
+            if same:
+                try:
+                    data = path.read_bytes()
+                    same = _blob_id(data, len(oid)) == oid
+                    if not same:
+                        blob = runner(["git", "-C", str(clone), "cat-file", "blob", oid]).stdout
+                        same = _lf(data) == _lf(blob)
+                except OSError:
+                    same = False
+        else:
+            same = False
+        if not same:
+            problems.append(f"changed or new path {rel}")
+    return problems
+
+
 def after_check(prepared: codex_worker_tree.Prepared, layout: codex_worker_sandbox.WorkerLayout,
                 manifest: Mapping[str, Mapping[str, str]]) -> list[str]:
     """Why the clone is not as the run left it, as one entry per way; empty for unchanged (D2)."""
@@ -329,11 +381,16 @@ def after_check(prepared: codex_worker_tree.Prepared, layout: codex_worker_sandb
             env = {**review._git_env(layout.base), "GIT_INDEX_FILE": str(Path(scratch) / "index")}
             fresh = gitrepo.subprocess_runner(env)
             _clone_git(clone, fresh, "read-tree", prepared.base)
-            listing = _clone_git(clone, fresh, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+            listing = _clone_git(clone, fresh, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored")
+            tree = _clone_git(clone, runner, "ls-tree", "-r", "-z", "--full-tree", prepared.base)
         for record in (r for r in listing.split("\0") if r):
             path = record[3:]
-            if not (path == ".ai-review" or path.startswith(".ai-review/")):
+            # Tracked content is compared per entry below (CX1, D3): the attribute-converting ``status`` comparison
+            # would refuse an unchanged line-ending-normalised file, so only untracked ("??") and ignored ("!!")
+            # paths are taken from the listing.
+            if record[:2] in ("??", "!!") and not (path == ".ai-review" or path.startswith(".ai-review/")):
                 problems.append(f"changed or new path {path}")
+        problems.extend(_tracked_problems(clone, runner, tree))
         refs = _clone_git(clone, runner, "for-each-ref", "--format=%(refname) %(objectname)").splitlines()
         if refs != [f"refs/heads/{prepared.branch} {prepared.base}"]:
             problems.append(f"refs are {refs}")
@@ -346,6 +403,11 @@ def after_check(prepared: codex_worker_tree.Prepared, layout: codex_worker_sandb
     # the run left it, so whatever the worker did to it is D2's refusal, never an exception or an unbounded read.
     seen: set[str] = set()
     base = clone / ".ai-review"
+    try:
+        if stat.S_ISLNK(os.lstat(base).st_mode):
+            problems.append("symlink .ai-review")
+    except OSError:
+        pass
     for dirpath, dirnames, filenames in os.walk(base, followlinks=False):
         for name in dirnames:
             if stat.S_ISLNK(os.lstat(Path(dirpath) / name).st_mode):
@@ -370,6 +432,8 @@ def after_check(prepared: codex_worker_tree.Prepared, layout: codex_worker_sandb
                 continue
             if manifest[rel]["sha256"] != digest:
                 problems.append(f"input {rel} changed")
+            elif manifest[rel]["mode"] != f"{stat.S_IMODE(info.st_mode):o}":
+                problems.append(f"input {rel} changed mode")
     if seen != set(manifest):
         problems.append(f".ai-review holds {sorted(seen ^ set(manifest))} beyond or short of the inputs")
     return problems

@@ -648,8 +648,10 @@ nothing is routed to Codex unless an operator selects it.
   Three cases are left to the Workflow or to you, by choice, not by oversight:
   - *State values.* `state_touched` bounds which fields of the item's entry a checkpoint commit may change, not what they hold
     (`phase`, `checkpoints` and the checkpoint ids). The Workflow's `reconcile` judges the landed state, and an `invalid` answer
-    ends the job `FAILED` with `reconcile_invalid`. After that ending read the clone's commits, restore the state file from the
-    base commit with the Workflow's own commands or `git`, and run again.
+    ends the job `FAILED` with `reconcile_invalid`. After that ending read the landed commits in the managed repository (the clean clone is
+    already removed): `git log <base>..HEAD -- docs/ai-workflow/WORKFLOW_STATE.json` on the managed branch, with `<base>` the
+    job record's `codex_worker.clone.base`. Then restore the state file from the base commit with the Workflow's own commands
+    or `git`, and run again.
   - *The `.ai-review/` ignore rule.* The checkpoint invocation writes `.ai-review/runtime/` files in the clone. The
     unfinished-work probe and the surface check count them as changes only when the managed repository does not ignore
     `.ai-review/`. A repository that does not will see a clean run kept as `unfinished_work`; ignore `.ai-review/` there, as the

@@ -25,3 +25,8 @@ All four findings of [#344](https://github.com/RodrigoFAbreu/workflow-controller
 4. **The absent amendment witness: words.** Both pages name the case and its remedy (CP2).
 
 Code for items 2 to 4 would each add a mechanism (a value check, a probe ignore rule, a ported cross-worktree check); each can be its own item if the owner wants it.
+
+## Deviations from the plan
+
+- **D1:** the plan tolerated only the multiple-worktrees refusal; the self-review added the extension-on, no-`config.worktree` refusal (Git's own `status` treats a missing file as nothing set). The pull request description states it too.
+- **D2:** the plan said to read "the clone's commits" after `reconcile_invalid`. The landing removes a clean clone before the Workflow's `reconcile` runs, so both pages say to read the landed commits in the managed repository (`git log <base>..HEAD -- docs/ai-workflow/WORKFLOW_STATE.json`, `<base>` the job record's `codex_worker.clone.base`).

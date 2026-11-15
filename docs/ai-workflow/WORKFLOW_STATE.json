@@ -74513,7 +74513,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-lt1-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-lt1-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 4,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -74622,7 +74622,114 @@
           "workflow_release": "2.29.3"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "4f2d4b29d816d25f231a7375f27a083743391d4820be00bbd6810a244e310d28",
+        "approved_review_content_id": "f363e2d858d7a82dd8db167e5d7aac52613bcbf182022afeda76f4ebfde1968a",
+        "review_content_manifest": [
+          {
+            "path": "CLAUDE.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a8152ea4179a9d9967119652140d57a938bd65e1"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-lt1-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b0e502aab38314222564d5113629e8e131b0c83e"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2dfdb100b4c19906eac74ff21b6e3190f8ca93f4"
+          },
+          {
+            "path": "docs/guide/milestone-branches.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2ff2f38b806f93c75f0901ce58ca8a7f8941b9a7"
+          },
+          {
+            "path": "docs/guide/workers.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ffa10876880c63486f6a2469507a098acdfa6791"
+          },
+          {
+            "path": "tests/test_docs.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "36bbc2789922a1b10ced3fd2fb462aa5f3ffb378"
+          }
+        ],
+        "reviewed_content_commit": "53a78d7f1f8ed417aad918405cf4b0ddee334915",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-15T12:00:00Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "f363e2d858d7a82dd8db167e5d7aac52613bcbf182022afeda76f4ebfde1968a",
+            "ledger": {
+              "local": {
+                "bundle_id": "4f2d4b29d816d25f231a7375f27a083743391d4820be00bbd6810a244e310d28",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "d3e20648668b8230161a811b3956b9e72c8306e531afc7f81f6e68c1ab868d05",
+                "ledger_entry_sha256": "dc55568c7c97e0afc64b20d233280f9d648d1c9c1d5bac815f8a1a2b83d83b0b",
+                "run_ref": "session:local .ai-review/workflow-controller-lt1/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "4f2d4b29d816d25f231a7375f27a083743391d4820be00bbd6810a244e310d28",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "d03cd9de4fff0895fca84aac1298a3138fa1fc31285755e3cf6e7a48393fc496",
+                "ledger_entry_sha256": "3e4b499516608bc70c07fb17c817b359c47fbe667cbf24569867fdd5ab22b3b0",
+                "run_ref": "codex:20261115T110701Z-485866d7",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-15T12:00:00Z",
+          "workflow_release": "2.29.3"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "654d50b7257bb928d2a8b1e2161581ded5931179b0db8c9ea5b86c341872370e",
@@ -74653,12 +74760,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 21,
-      "last_transition": "2026-11-15T11:03:02Z",
+      "state_revision": 24,
+      "last_transition": "2026-11-15T12:00:00Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -74795,6 +74902,69 @@
               "at": "2026-11-15T10:52:16Z"
             }
           ]
+        },
+        "F-84f0116b2c1c": {
+          "digest": "84f0116b2c1c031ea5ef76646518fd6d1ab07953616864dd687a151b8165db64",
+          "text": "**O1. \"Shared code\" is undefined in the guide.** `docs/guide/development.md` \"Verification policy\" allows the one local full run \"only when the diff touches shared code\" but does not say what shared code is, and it drops the plan's D3 tie-breaker (\"otherwise the checkpoint selections plus D2 decide whether shared code was touched\"). The self-review in this bundle used \"nothing under `controller/` or `tools/`\" as its test, which is written nowhere. A worker whose diff is `code` by `tools/ci_changes.py` but touches only `tests/` cannot tell from the page whether to run the full suite. Suggested: state the D3 tie-breaker, or name the paths that count as shared code, in that bullet.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "f363e2d858d7a82dd8db167e5d7aac52613bcbf182022afeda76f4ebfde1968a",
+              "verdict": "APPROVE",
+              "at": "2026-11-15T11:06:41Z"
+            }
+          ]
+        },
+        "F-330953e9e2dc": {
+          "digest": "330953e9e2dc33c5fdbb15d7e8aeb6766672a5992752ef7bcc656d51e285ea16",
+          "text": "**O2. Double blank line in `docs/ACTIVE_MILESTONE.md`.** The new `## Previous milestone (NS1)` heading is followed by two blank lines (the old heading's blank line was kept below the inserted one). Cosmetic.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "f363e2d858d7a82dd8db167e5d7aac52613bcbf182022afeda76f4ebfde1968a",
+              "verdict": "APPROVE",
+              "at": "2026-11-15T11:06:41Z"
+            }
+          ]
+        },
+        "F-25a31ca79a98": {
+          "digest": "25a31ca79a98db7d1c5b5f8f0fc91dcec3ad8dde5c0978911a58385e476798e8",
+          "text": "`docs/guide/development.md:174`: The process pattern handles `-u` and `-B`, but misses interpreter options with separate values, such as `python3 -X dev tools/run_tests.py`. Consider supporting these forms or documenting the supported invocation forms.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "f363e2d858d7a82dd8db167e5d7aac52613bcbf182022afeda76f4ebfde1968a",
+              "verdict": "APPROVE",
+              "at": "2026-11-15T11:09:46Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "f363e2d858d7a82dd8db167e5d7aac52613bcbf182022afeda76f4ebfde1968a",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "4f2d4b29d816d25f231a7375f27a083743391d4820be00bbd6810a244e310d28",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-15T11:06:41Z",
+          "verdict_sha256": "d3e20648668b8230161a811b3956b9e72c8306e531afc7f81f6e68c1ab868d05",
+          "run_ref": "session:local .ai-review/workflow-controller-lt1/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "4f2d4b29d816d25f231a7375f27a083743391d4820be00bbd6810a244e310d28",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-15T11:09:46Z",
+          "verdict_sha256": "d03cd9de4fff0895fca84aac1298a3138fa1fc31285755e3cf6e7a48393fc496",
+          "run_ref": "codex:20261115T110701Z-485866d7",
+          "reviewer_model": "openai/gpt-6.1-sol"
         }
       }
     }

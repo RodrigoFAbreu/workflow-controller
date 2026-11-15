@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-ts1",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -75204,6 +75204,235 @@
         },
         "evaluated_at": "2026-11-15T12:33:50Z",
         "workflow_release": "2.29.3"
+      }
+    },
+    "workflow-controller-ts1": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-ts1",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_TS1_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-ts1-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ts1-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 4,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "707daa924c92e011c7817046f3d4a4e17c30fd86",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "4d1efc7a0197e3a8a4098eb70aa9a7f5c35fcb58536f3a3221e9621dae23f548",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "4d1efc7a0197e3a8a4098eb70aa9a7f5c35fcb58536f3a3221e9621dae23f548",
+        "approved_review_content_id": "16e8b5200eadcd81679aaea863c3e111b36210aec967d1d4119c8881db62b869",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_TS1_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "74d580eb02024db92baea35b53ee8a9994eecbbe"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-ts1-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9139562f409a73938c02d675542fba8e896dd428"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-ts1-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0c9284f69f6133ec54cdb61c540f50d528c60c62"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-15T14:28:04Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "16e8b5200eadcd81679aaea863c3e111b36210aec967d1d4119c8881db62b869",
+            "ledger": {
+              "local": {
+                "bundle_id": "4d1efc7a0197e3a8a4098eb70aa9a7f5c35fcb58536f3a3221e9621dae23f548",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "bc3ef9577513ec4162c7cf66ca0c57a2d57fda01a4bc6c0826b3af487f8524f1",
+                "ledger_entry_sha256": "79c7cd06bd7dc40a9146e5e977f386f2360139ba52bdde7fe8c73904d2af9def",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-ts1/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "4d1efc7a0197e3a8a4098eb70aa9a7f5c35fcb58536f3a3221e9621dae23f548",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "4a0d22fa0e8a729d0dd8239a6b3cd64fa77022c46b40c5f3081a3257aeca984d",
+                "ledger_entry_sha256": "37917ed67de1a6846a1e74a24a6f4b25a6124c39838cbec3f0b4f95d271289ef",
+                "run_ref": "codex:20261115T142316Z-0c018ed4",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-15T14:28:04Z",
+          "workflow_release": "2.29.3"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "16e8b5200eadcd81679aaea863c3e111b36210aec967d1d4119c8881db62b869",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "4d1efc7a0197e3a8a4098eb70aa9a7f5c35fcb58536f3a3221e9621dae23f548",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-11-15T13:51:22Z",
+          "verdict_sha256": "bc3ef9577513ec4162c7cf66ca0c57a2d57fda01a4bc6c0826b3af487f8524f1",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-ts1/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "4d1efc7a0197e3a8a4098eb70aa9a7f5c35fcb58536f3a3221e9621dae23f548",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-11-15T14:25:03Z",
+          "verdict_sha256": "4a0d22fa0e8a729d0dd8239a6b3cd64fa77022c46b40c5f3081a3257aeca984d",
+          "run_ref": "codex:20261115T142316Z-0c018ed4",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 4,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 15,
+      "last_transition": "2026-11-15T14:28:04Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-15T13:48:46Z",
+        "consumed": {
+          "review_content_id": "11910e8acc8c1e8587d65819b20d4850ee19ae037ee4b7cb2b765958c795951d",
+          "plan_revision": 3,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "16e8b5200eadcd81679aaea863c3e111b36210aec967d1d4119c8881db62b869",
+          "plan_revision": 4
+        },
+        "bound": {
+          "review_content_id": "16e8b5200eadcd81679aaea863c3e111b36210aec967d1d4119c8881db62b869",
+          "bundle_id": "4d1efc7a0197e3a8a4098eb70aa9a7f5c35fcb58536f3a3221e9621dae23f548",
+          "plan_revision": 4
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "0d690dbc525387e0a20f71339ce3fb4474eebb203c0ef5bdba48f86601338c11",
+        "11910e8acc8c1e8587d65819b20d4850ee19ae037ee4b7cb2b765958c795951d",
+        "9325f741f5a919dae471d2c7baac618d6f543c85cfb8f7320d56abdc216988bd"
+      ],
+      "optional_findings": {
+        "F-df488e98e52c": {
+          "digest": "df488e98e52cca2125822b0b8c9552cceed875a9210e31520e174ede352101e5",
+          "text": "**O1.** D2's last sentence says `tests.test_functional_review` \"keeps its equality assertion between the shared slice and the Codex list\". No such equality exists. `test_the_row_37_note_shares_the_limits` (`tests/test_functional_review.py:1535-1544`) asserts `SHARED_SANDBOX_LIMITS == SANDBOX_LIMITS[:5]` and checks each shared limit for membership in `codex_bridge.SANDBOX_LIMITS`. Restate it as the slice-equality and membership checks CP1 updates to `[:6]`/`[6:]`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "9325f741f5a919dae471d2c7baac618d6f543c85cfb8f7320d56abdc216988bd",
+              "verdict": "REVISE",
+              "at": "2026-11-15T13:39:18Z"
+            }
+          ]
+        },
+        "F-9067e17d9cab": {
+          "digest": "9067e17d9cabc1db06f26a45380b738c747a8ff2a65643f89281cf081adc8432",
+          "text": "**O2.** CP1's `**Tests:**` paragraph leaves out the modules that read `sandbox_limits_note()` through the row-37 launch: `tests.test_protocol_decision` (line 499), `tests.test_protocol_job` (line 1230) and `tests.test_worker` (line 337, which runs the user-only scan over the task with the note). They compare against the function, so they should still pass. The new sentence names `tools/run_tests.py` and `unshare`, though, and a selected run would show that the longer note does not trip the user-only token scan or the task-text checks. Add the three modules to CP1's selection.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "9325f741f5a919dae471d2c7baac618d6f543c85cfb8f7320d56abdc216988bd",
+              "verdict": "REVISE",
+              "at": "2026-11-15T13:39:18Z"
+            }
+          ]
+        },
+        "F-71b28311e649": {
+          "digest": "71b28311e649d9e375c77367ada6f9b4b2bb2d79f8b49f168569a68f8a6c5732",
+          "text": "**O1. The evidence rule's `namespace: isolated` also matches a run that wrapped no shard.** When the probe succeeds but the selection holds namespace-unsafe modules, `resolve_namespace` prints `namespace: isolated for N of M shards (unwrapped: …)` (`tools/run_tests.py:128`). A full or `--serial` run prints `namespace: isolated for 0 of 8 shards` and wraps nothing (`docs/guide/development.md:283`). That text starts with the literal `namespace: isolated` that D2 accepts as evidence. Today's sandboxes refuse the launcher, so the line cannot appear in them. A later sandbox that admits the launcher could give a false pass. Consider having D2 and CP1's test say the evidence is the exact line `namespace: isolated`, or `isolated for N of M` where the flow's module is in a wrapped shard, and never `for 0 of`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "11910e8acc8c1e8587d65819b20d4850ee19ae037ee4b7cb2b765958c795951d",
+              "verdict": "REVISE",
+              "at": "2026-11-15T13:47:23Z"
+            }
+          ]
+        },
+        "F-b7cd2cc9afa4": {
+          "digest": "b7cd2cc9afa46d16ebb9086de2289bc4d80032512edf5182184118834c4d6895",
+          "text": "**O2. The shared limit names this repository's own runner and test in a text every managed product's tester reads.** `SHARED_SANDBOX_LIMITS` goes into every functional round's prompt and every row-37 note, whatever the product. The D2 sentence quotes `tools/run_tests.py`, `namespace: isolated` and `NamespaceKillProofTest`, all specific to the Controller repository. The text is right for this repository and does no harm elsewhere. Phrasing the Controller-specific forms as examples (\"for example, in the Controller's own test runner …\") would keep the limit general and shorter.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "11910e8acc8c1e8587d65819b20d4850ee19ae037ee4b7cb2b765958c795951d",
+              "verdict": "REVISE",
+              "at": "2026-11-15T13:47:23Z"
+            }
+          ]
+        }
       }
     }
   }

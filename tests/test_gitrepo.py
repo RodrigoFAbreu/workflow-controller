@@ -906,6 +906,41 @@ class FilterAndStatusTest(unittest.TestCase):
         with self.assertRaises(GitOperationError):
             gitrepo.filter_disabling_config(self.repo)
 
+    def worktree_read_stub(self, returncode: int, stderr: bytes, stdout: bytes = b""):
+        """A runner that really runs the ``--local`` read and answers the ``--worktree`` one as given."""
+        real = gitrepo.subprocess_runner()
+
+        def runner(argv):
+            if "--worktree" in argv:
+                return subprocess.CompletedProcess(list(argv), returncode, stdout, stderr)
+            return real(argv)
+
+        return runner
+
+    def test_another_failure_of_the_worktree_read_alone_raises(self) -> None:
+        # The ``--local`` read succeeds here, so this reaches the second read's narrowing (fail-closed).
+        runner = self.worktree_read_stub(128, b"fatal: unknown error occurred while reading the configuration files\n")
+        with self.assertRaises(GitOperationError):
+            gitrepo.filter_disabling_config(self.repo, runner=runner)
+        runner = self.worktree_read_stub(1, b"fatal: --worktree cannot be used with multiple working trees\n")
+        with self.assertRaises(GitOperationError):
+            gitrepo.filter_disabling_config(self.repo, runner=runner)
+
+    def test_each_no_worktree_scope_refusal_gives_the_local_options(self) -> None:
+        self.config("filter.loc.clean", "prog")
+        for stderr in (b"fatal: --worktree cannot be used with multiple working trees unless the config\n"
+                       b"extension worktreeConfig is enabled. Please read \"CONFIGURATION FILE\"\n",
+                       b"fatal: unable to read config file '/r/.git/config.worktree': No such file or directory\n"):
+            options = gitrepo.filter_disabling_config(self.repo, runner=self.worktree_read_stub(128, stderr))
+            self.assertIn("filter.loc.clean=", options)
+            self.assertEqual(len(options), 8)
+
+    def test_a_matching_refusal_with_output_raises(self) -> None:
+        runner = self.worktree_read_stub(128, b"fatal: --worktree cannot be used with multiple working trees\n",
+                                         stdout=b"filter.x.clean\0")
+        with self.assertRaises(GitOperationError):
+            gitrepo.filter_disabling_config(self.repo, runner=runner)
+
     def test_a_worktree_clean_filter_runs_only_without_the_disabling_set(self) -> None:
         marker = self.base_dir / "ran"
         self.plant_attributes()

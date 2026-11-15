@@ -115,7 +115,12 @@ is for the Claude tester only. The Codex tester does not need it: its profile is
 roots), so your home and its own credential copy are not readable at all. The bound on a tester's `summary` and the
 `file://` origin check apply to both testers.
 
-Limits: `/usr`, `/etc` and the Codex and Controller install trees are readable; the stand-in `gh` refuses only by
+Limits: the PID-namespace launcher (`unshare --user ... --pid`) is stated as refused here too, as it is for the Claude
+tester, and the prompt tells the tester to try it once and record a refused flow as `failed` with reason `environment`,
+so the run ends `environment_limited` and an operator runs the flow on the host and records it (see
+[Automation](automation.md#what-the-controller-automates-and-how-it-stays-safe)); the Codex profile's own refusal is
+not measured, so the statement is conditional and a launcher that runs simply lets the flow pass.
+`/usr`, `/etc` and the Codex and Controller install trees are readable; the stand-in `gh` refuses only by
 name (`/usr/bin/gh` fails for lack of credentials and network, not because of the profile). The composed
 configuration is checked by `check_composed` (`controller/codex_sandbox.py`): it reads what Codex composes from the
 tester's home, flags and any managed layer (`codex app-server`, `config/read`, no model request), compares every

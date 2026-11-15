@@ -270,8 +270,11 @@ class PromptTest(BridgeFixture):
         self.assertFalse(bridge.clone.is_relative_to(bridge.layout.scratch))
         joined = " ".join(cb.SANDBOX_LIMITS)
         for fragment in ("no network", "`gh`", "`claude`, `codex` or `ssh`", "`PATH`", "read-only", "scratch area",
-                         "`TMPDIR`", "`HOME` is not writable and not a readable location", "`HOME` inside `TMPDIR`"):
+                         "`TMPDIR`", "`HOME` is not writable and not a readable location", "`HOME` inside `TMPDIR`",
+                         "`unshare --user", "tries the launcher once"):
             self.assertIn(fragment, joined)
+        for shared in fr.SHARED_SANDBOX_LIMITS:
+            self.assertIn(shared, cb.SANDBOX_LIMITS)
         self.assertEqual(set(fr.FAKE_PROGRAMS) >= {"gh", "claude", "codex", "ssh"}, True)
 
 

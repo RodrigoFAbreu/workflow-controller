@@ -1,6 +1,10 @@
 # Active Milestone
 
-## Latest milestone (LT1)
+## Latest milestone (TS1)
+
+**Complete: accepted by policy (`MILESTONE_COMPLETE`).** All checkpoints complete. Plan `docs/ai-workflow/CONTROLLER_TS1_PLAN.md` (revision 4), two checkpoints; it states the PID-namespace launcher as a functional tester sandbox limit. CP1 is complete: `functional_review.SANDBOX_LIMITS` gains the launcher limit as its sixth entry (try the launcher once; if it is refused the flow is `failed` with `reason` `environment` and the message quoted; every observable form of the refusal is named; a namespace-isolation flow is `passed` only on evidence the namespace was used), so `SHARED_SANDBOX_LIMITS` is `SANDBOX_LIMITS[:6]` and the row-37 note carries it; `codex_bridge.SANDBOX_LIMITS` repeats it word for word after its `PATH` entry; the `GATE_FLOWS_NOT_RUNNABLE` text names the launcher and `record-external-result --kind functional_evidence`. `tests.test_functional_review` (new limit and stop tests, the pinned prompt hash) and `tests.test_codex_bridge` follow. Verified with `tests.test_functional_review`, `tests.test_codex_bridge`, `tests.test_protocol_decision`, `tests.test_protocol_job`, `tests.test_worker`, `tests.test_package_structure`, `tests.test_write_containment`, `tests.test_docs` (597 tests, exact coverage, all passing) and `tests.test_codex_tester` on its own (21 tests, passing; its deadline tests flake only when run beside the other modules under load). Next: CP2, the pages and the item record. CP2 is complete: `docs/guide/automation.md`, `docs/guide/harnesses.md` and `docs/guide/development.md` state the limit and the operator hand-off (run the flow on the host, record it with `record-external-result --kind functional_evidence`); the item is retitled to what shipped (backlog entry, page heading, regenerated roadmap row) and `docs/items/workflow-controller-ts1.md` records the status, the mechanism chosen and rejected (D1) and owner decisions O1 and O2. Verified with `tests.test_docs`, `tests.test_plan_document_consistency`, `tools/check_docs.py`, `workflow_backlog.py check` and `preflight-accept`. Self-review (2026-11-15): the whole diff was reviewed and the single local full run made (the diff changes `controller/`): 6638 tests, 8 shards, coverage exact, 2 failures. One was a CP1 defect: `tests.test_protocol_schema` keeps the `record-external-result` operation name in `controller/protocol.py` alone, so the `GATE_FLOWS_NOT_RUNNABLE` remedy now says to record one `functional_evidence` result per flow with the Workflow's protocol script, as `MANUAL_REMEDY` does (a deviation from D5's wording; the pages keep the exact command), and its test follows. The other, `tests.test_fake_codex_contract` `test_mcp_list_reports_the_composed_servers_without_running_them`, is environmental: the fake reads the host's own Codex configuration; nothing in this diff touches it. Also fixed: `docs/guide/automation.md` ("What the sandbox does not claim") lists the launcher among what the sandbox lacks. `docs/common-problems.md`'s `flows_not_runnable` causes do not name the launcher yet: the page is outside the plan's files and its artifact declaration, which cannot classify it without a plan amendment, so the one-phrase edit was backed out and is a follow-up. After the fixes `tests.test_protocol_schema`, `tests.test_functional_review`, `tests.test_codex_bridge`, `tests.test_package_structure`, `tests.test_write_containment`, `tests.test_docs`, `tests.test_plan_document_consistency` (331 tests, exact coverage, all passing) and `tools/check_docs.py` pass. Next: the implementation review.
+
+## Previous milestone (LT1)
 
 **Complete.** Plan `docs/ai-workflow/CONTROLLER_LT1_PLAN.md` (revision 4), two checkpoints, both complete; workers run the tests the plan selects per checkpoint and leave the full suite to CI. CP1 is complete: `docs/guide/development.md` "Verification policy" now states D1-D4 and D7 (the plan's `**Tests:**` paragraph is the selection, the repository-wide guards ride along when the tree changes, at most one local full run at the self-review, the two post-merge modules, the anchored `pgrep` check) and what the two Workflow-managed steps' "full" verification means here (D3); `CLAUDE.md` "Running tests" carries the same rule; `CLAUDE.md` is under the technical approval (`implementation_stage.protected_paths`, already recorded by the approved plan commit); `tests.test_docs.VerificationPolicyTest` pins the marker sentences, the anchored command and the guard modules. Verified with `tests.test_docs`, `tests.test_plan_document_consistency`, `tests.test_ci_changes`, `tests.test_package_structure`, `tests.test_write_containment` (208 tests, exact coverage, all passing) and `python3 tools/check_docs.py`. CP2 is complete: `docs/guide/workers.md` ("What a worker runs at a checkpoint") tells a lane's operator what a worker runs, that the full suite is CI's apart from the two post-merge modules, and the rule between lanes; `docs/guide/milestone-branches.md` says each checkpoint declares `**Tests:**`; `docs/items/workflow-controller-lt1.md` carries the status, plan link, corrected scope (the plan names the modules, no Controller code changes), O1, O2, the D7 trade-off and the verification. Verified with `tests.test_docs`, `tests.test_plan_document_consistency` (108 tests, exact coverage, all passing) and `python3 tools/check_docs.py`. Self-review (2026-11-15): the whole diff was reviewed; fixes: `VerificationPolicyTest` lost an unused `_flat` helper and a `.replace` workaround (it now matches the `CLAUDE.md` sentence as written), and the guide's "full suite is CI's" bullet points at the two post-merge modules and no longer runs two sentences together. Verification under the policy this item writes: the diff changes no shared code (nothing under `controller/` or `tools/`; one test module and documentation), so no local full run; the union of the checkpoint selections plus the guards, `python3 tools/run_tests.py tests.test_docs tests.test_plan_document_consistency tests.test_ci_changes tests.test_package_structure tests.test_write_containment` (208 tests, exact coverage, all passing), and `python3 tools/check_docs.py` (exit 0). CI runs the full suite on the pull request. Next: the implementation review. Accepted by policy (`/satisfy-gate acceptance`); archive `docs/milestones/completed/workflow-controller-lt1.md`.
 
@@ -653,51 +657,54 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-lt1` (LT1), implementation revision 1, plan `docs/ai-workflow/CONTROLLER_LT1_PLAN.md` (revision 4), base commit
-`47abee7`. Two checkpoints: CP1 (the selection rule in `CLAUDE.md` and `docs/guide/development.md` "Verification policy", pinned by
-`tests.test_docs.VerificationPolicyTest`) and CP2 (the pages: `docs/guide/workers.md`, `docs/guide/milestone-branches.md`, the item page).
-This item changes documentation and one test module only; no Controller code. Every flow runs offline: no network, no real `gh` (the
-stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the system directories, and no write inside the
-read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write only to the scratch `TMPDIR`.
-No flow needs a pull request or a forge call, and none runs the full suite.
+Item `workflow-controller-ts1` (TS1), implementation revision 1, plan `docs/ai-workflow/CONTROLLER_TS1_PLAN.md` (revision 4), base commit
+`707daa9`. Two checkpoints: CP1 (the sixth `SANDBOX_LIMITS` entry in `controller/functional_review.py`, repeated in `controller/codex_bridge.py`,
+and the `GATE_FLOWS_NOT_RUNNABLE` text) and CP2 (the pages `docs/guide/automation.md`, `docs/guide/harnesses.md`, `docs/guide/development.md`
+and the item record). The item only states a limit in prompt text; nothing allows or fakes the launcher. Every flow runs offline: no network,
+no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the system directories, and no
+write inside the read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write only to the scratch
+`TMPDIR`. **No flow runs the PID-namespace launcher** (that is the limit under test): none uses `--namespace require`, and none runs the full suite.
 
-Setup: `export TMPDIR=$(mktemp -d)`. No data to seed. Flows 1 to 3 are reading flows; flows 4 and 5 run narrow selections.
+Setup: `export TMPDIR=$(mktemp -d)`. No data to seed. Flows 1 to 3 are one-line Python reads; flows 4 and 5 are reading flows; flow 6 runs narrow selections.
 
-**Flow 1: `CLAUDE.md` "Running tests".**
-Read the "Running tests" section.
-Expected: the worker runs only the modules the plan's `**Tests:**` paragraph names, through `python3 tools/run_tests.py [names]`; the
-repository-wide guards are added when the tree changes; the full suite is CI's, except `tests.test_catalogue_determinism` and
-`tests.test_scenarios_negative`, which run only after the merge; at most one local full run, at the self-review, never two at once; a
-review-fix pass is not rerun with the full suite.
+**Flow 1: the Claude tester's sixth limit.**
+Run `python3 -B -c "from controller import functional_review as f; print(f.SANDBOX_LIMITS[5]); print(f.SHARED_SANDBOX_LIMITS == f.SANDBOX_LIMITS[:6])"`.
+Expected: the text names the launcher (`unshare --user ... --pid`, `python3 tools/run_tests.py --namespace require`); says the tester tries it once and, if refused, records
+the flow `failed` with `reason` `environment`, quotes the message, does not retry or work around it; names the forms of the refusal (`Operation not permitted`,
+`no PID namespace here`, `running the shards without a PID namespace`, `namespace: none (<reason>)`, `no PID namespace on this host`); and says a namespace-isolation
+flow is `passed` only on evidence (`namespace: isolated`, or `isolated for N of M shards` with N above 0, never `isolated for 0 of M shards`). Second line prints `True`.
 
-**Flow 2: `docs/guide/development.md` "Verification policy".**
-Read the section (`grep -n 'Verification policy' docs/guide/development.md`).
-Expected: it states D1 to D4 and D7 (selection named by the plan, guards ride along, one full run at the self-review, two never at once with
-the anchored `pgrep -af '^[^ ]*python[0-9.]*( -[^ ]+)* [^ ]*tools/run_tests\.py'` check, the trade-off), says what `/milestone-implement` step 3
-"full required verification" and `/apply-implementation-review` step 5 "full suite" mean here, and no longer calls the full suite the
-checkpoint verification. The reuse rule, the serial-run rule and the CI-evidence rule are still there.
+**Flow 2: the Codex tester repeats it word for word.**
+Run `python3 -B -c "from controller import functional_review as f, codex_bridge as c; print(f.SANDBOX_LIMITS[5] in c.SANDBOX_LIMITS, c.SANDBOX_LIMITS.index(f.SANDBOX_LIMITS[5]))"`.
+Expected: `True 4` (right after the Codex tuple's `PATH` entry).
 
-**Flow 3: The pages and the item record.**
-Read `docs/guide/workers.md` ("What a worker runs at a checkpoint"), the `**Tests:**` sentence in `docs/guide/milestone-branches.md`, and
-`docs/items/workflow-controller-lt1.md`.
-Expected: the workers page tells a lane's operator what a worker runs, that the full suite is CI's apart from the two post-merge modules, and the
-rule between lanes; the item page carries status, plan link, corrected scope (no Controller code changes), O1, O2 and the D7 trade-off.
+**Flow 3: the checklist writer's note and the stop's words.**
+Run `python3 -B -c "from controller import functional_review as f; n=f.sandbox_limits_note(); print('unshare' in n, 'namespace: isolated' in n); print(f.gate_text(f.GATE_FLOWS_NOT_RUNNABLE, flows='1', detail='d'))"`.
+Expected: `True True`; the gate text lists "no PID-namespace launcher (`unshare`)" among what the sandbox lacks and its remedy says to run the flows by hand on the host and record
+one `functional_evidence` result per flow with the Workflow's protocol script (it does not name the `record-external-result` operation; the pages do).
 
-**Flow 4: The guard test and the checkpoint selections pass.**
-Run `python3 -B tools/run_tests.py tests.test_docs tests.test_plan_document_consistency tests.test_ci_changes tests.test_package_structure tests.test_write_containment; echo rc=$?`.
-Expected: `# Test run: PASS`, exact coverage, `rc=0` (about 208 tests).
+**Flow 4: `docs/guide/automation.md` and `docs/guide/harnesses.md`.**
+Run `grep -n -i 'launcher\|environment_limited' docs/guide/automation.md docs/guide/harnesses.md` and read the hits ("What the sandbox does not claim", the `environment_limited`
+paragraph, "The Codex tester sandbox").
+Expected: both pages say the launcher is refused in both testers' sandboxes, a flow needing it ends `environment_limited`, an operator runs it on the host and records it with
+`record-external-result --kind functional_evidence`; the Codex statement is conditional (not measured; a launcher that runs lets the flow pass). Links resolve (flow 6).
 
-**Flow 5: Docs check, and the guard fails on a lost rule.**
-Run `python3 -B tools/check_docs.py; echo rc=$?` (expected `rc=0`). Then, in a scratch copy only (`git worktree` is not allowed; use
-`cp -r . "$TMPDIR/c" && cd "$TMPDIR/c"`), delete the "at most one" full-run sentence from `CLAUDE.md` and run
-`python3 -B tools/run_tests.py tests.test_docs.VerificationPolicyTest`.
-Expected: the unmodified check exits 0; the copy's run fails naming the missing marker sentence.
+**Flow 5: `docs/guide/development.md` "Namespace" and the item page.**
+Read the "In a functional tester's sandbox" bullet (`grep -n "functional tester's sandbox" docs/guide/development.md`) and `docs/items/workflow-controller-ts1.md`.
+Expected: the bullet calls such a flow an operator flow; the item page is retitled "State that the functional tester sandbox refuses the PID-namespace launcher" (also in
+`docs/backlog.yaml` and the `docs/ROADMAP.md` row) and carries what shipped, mechanisms chosen and rejected (D1), owner decisions O1 and O2 (the `workflow-manager` tester `PATH` is O2) and the verification.
 
-**Known limitations / out of scope.** No Controller code or runner change: the rule is documentation plus a documentation-level test. Two
-full suites never overlapping is a documented rule, not a lock (O1); a helper mapping a changed path to the modules that read it is not built (O2).
-A regression outside the selection surfaces in CI on the pull request, except the two post-merge modules, which can fail the release gate (D7).
-The full suite is not a flow; three `tests.test_fake_codex_contract` tests fail where `~/.codex` config is read (environmental).
+**Flow 6: the checkpoint selections and the docs checks pass.**
+Run `python3 -B tools/run_tests.py tests.test_functional_review tests.test_codex_bridge tests.test_protocol_schema tests.test_package_structure tests.test_write_containment tests.test_docs tests.test_plan_document_consistency; echo rc=$?`
+(no `--namespace require`; the default is fine, and a `namespace: none` line is expected in this sandbox), then `python3 -B tools/check_docs.py; echo rc=$?`,
+`python3 -B scripts/workflow_backlog.py check; echo rc=$?` and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-ts1; echo rc=$?`.
+Expected: `# Test run: PASS`, exact coverage, every `rc=0`.
+
+**Known limitations / out of scope.** The limit is stated, not probed (D3): the Controller does not test the launcher before a launch, so a later harness build that admits it lets a flow
+that ran it pass. Allowing or faking the launcher is rejected (D1, O1); `workflow-manager` on the tester `PATH` is a separate item (D6, O2). Existing checklists are not rewritten (D4).
+`docs/common-problems.md`'s `flows_not_runnable` causes do not name the launcher yet (outside the plan's files; recorded follow-up). The full suite is not a flow; the single local full run at
+the self-review failed only the environmental `tests.test_fake_codex_contract` mcp-list test (the fake reads the host's `~/.codex` config) after the fixed `tests.test_protocol_schema` guard.
 
 ## Next action
 
-`/milestone-plan` for `workflow-controller-ts1` (Let the functional tester sandbox run the PID-namespace launcher (unshare)), the item `python3 scripts/workflow_backlog.py next` returns.
+`/milestone-plan` for `workflow-controller-cx1` (Review follow-ups of the Codex worker items H4e2, H4e3 and H4e3b (#320, #339, #341)), ready for `PLANNING`.

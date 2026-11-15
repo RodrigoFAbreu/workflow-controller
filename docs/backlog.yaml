@@ -517,8 +517,8 @@ items:
     depends_on: []
     detail: docs/items/workflow-controller-lt1.md
   - id: workflow-controller-ts1
-    title: "Let the functional tester sandbox run the PID-namespace launcher (unshare)"
-    status: next
+    title: "State that the functional tester sandbox refuses the PID-namespace launcher"
+    status: done
     order: 89
     depends_on: []
     detail: docs/items/workflow-controller-ts1.md

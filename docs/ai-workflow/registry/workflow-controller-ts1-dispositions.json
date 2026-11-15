@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ts1",
+  "dispositions": {
+    "F-166efd7c81df": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/361"
+    },
+    "F-3b0c73a6f9ee": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/361"
+    },
+    "F-4fec6d007fa4": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/361"
+    },
+    "F-71b28311e649": {
+      "disposition": "fixed",
+      "note": "The namespace-launcher limit in controller/functional_review.py (and codex_bridge.SANDBOX_LIMITS) now states the evidence as exactly `namespace: isolated`, or `isolated for N of M shards` with N above 0 and the flow's module in a wrapped shard, never `isolated for 0 of M shards`, and a test pins those needles."
+    },
+    "F-9067e17d9cab": {
+      "disposition": "fixed",
+      "note": "CP1's Tests paragraph in CONTROLLER_TS1_PLAN.md now lists tests.test_protocol_decision, tests.test_protocol_job and tests.test_worker, which read sandbox_limits_note()."
+    },
+    "F-b0f5f20f201e": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/361"
+    },
+    "F-b7cd2cc9afa4": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/361"
+    },
+    "F-df488e98e52c": {
+      "disposition": "fixed",
+      "note": "The plan's D2 no longer claims an equality assertion in tests.test_functional_review; the sentence was restated in a later plan revision and the plan was approved."
+    }
+  }
+}

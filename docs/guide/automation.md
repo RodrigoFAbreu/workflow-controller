@@ -526,7 +526,14 @@ Workflow answers them first and the Controller launches `/prepare-functional-rev
    link to each (so the settings never allow a write below a denied path, whichever precedence a Claude build applies, and Claude Code 2.1.304 and later can be verified; a tool that deletes and recreates a linked folder is refused, an `environment` fault, not a product `defect`); no network and no Unix socket; the
    product files, the checklist and `.git` are read-only). It writes `RESULTS.json`, one entry per
    flow, each with a log file and, for a failure, the reason `defect` (the product did not behave as
-   the flow expects) or `environment` (the flow could not run in the sandbox);
+   the flow expects) or `environment` (the flow could not run in the sandbox). The sandbox also **refuses the
+   PID-namespace launcher** (`unshare --user --map-current-user --pid --fork --kill-child --mount-proc`, so
+   `python3 tools/run_tests.py --namespace require` and a test that proves a namespace's isolation): both testers'
+   prompts and the checklist writer's note state this limit. A flow that needs the launcher tries it once; if it is
+   refused (`Operation not permitted`, `no PID namespace here`, or silently: `--namespace auto` goes on unwrapped
+   with `namespace: none (<reason>)`, a namespace test skips with `no PID namespace on this host`) the flow is `failed`
+   with reason `environment`, its summary quotes the message, and it is neither retried nor judged a `defect`. Such a
+   flow passes only on evidence that the namespace was used. Nothing allows or fakes the launcher;
 4. checks that the real repository, its origin and the job's private Claude home are unchanged and
    that the clone still matches the candidate the Controller captured, then records **one
    `functional_evidence` result per flow** at the sandbox head with `record-external-result`
@@ -544,7 +551,8 @@ this head and recorded every flow, yet the Workflow still needs evidence, for ex
 detail, no repeated run).
 
 The stops, each with its remedy in the message: `flows_not_runnable` (the `environment_limited`
-case: run those flows by hand and record them, or change the checklist so they run offline),
+case: run those flows by hand on the host and record them with `record-external-result --kind functional_evidence`
+(a flow that needs the PID-namespace launcher is one of them), or change the checklist so they run offline),
 `checklist_unrecognised`, `functional_tester_unavailable` (no `claude` binary, the role refused, `bwrap` or `socat`
 missing, no seccomp filter or a `claude` build not yet verified (run `workflow-controller verify-claude`): these host causes are found before
 any usage is reserved, so the stop is one record with no reservation. The causes that need a job or a built sandbox still arise at launch: the fresh
@@ -590,7 +598,7 @@ read-only to the tester, but it cannot bind which copy of the product the tester
 under the tester's own scratch `TMPDIR` that passes is not detected (the prompt forbids it, and the
 record names the digest, reporter and run reference for an audit). The tester is a model, and the
 Workflow trusts reported evidence, as it does a person's. The sandbox has no network, no real GitHub,
-no real model and no tool outside `PATH`; a pull-request flow therefore **cannot run in the sandbox**
+no real model, no PID-namespace launcher (`unshare`) and no tool outside `PATH`; a pull-request flow therefore **cannot run in the sandbox**
 (the Controller's `controller/forge.py` and the Workflow's `scripts/workflow_forge.py` keep
 refusing a scratch `gh` and a scratch origin, and neither is relaxed): such a flow is `environment`
 and ends at `flows_not_runnable` until a person runs it. The tester runs on Claude Code

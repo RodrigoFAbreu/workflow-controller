@@ -1,0 +1,41 @@
+{
+  "dispositions": {
+    "F-03b2a5481e00": {
+      "disposition": "dropped",
+      "reason": "Whitespace only (one blank line before def filter_disabling_config); editing the approved product file would stale the technical approval for no behaviour change."
+    },
+    "F-13ed46e1ccf2": {
+      "disposition": "fixed"
+    },
+    "F-277e9ff15a5a": {
+      "disposition": "fixed"
+    },
+    "F-34c559455af0": {
+      "disposition": "fixed"
+    },
+    "F-3ca25a0f840e": {
+      "disposition": "fixed"
+    },
+    "F-56008dc23fed": {
+      "disposition": "dropped",
+      "reason": "Moot: the plan's two per-scope reads were replaced by one combined read (CX2-E-I01), so there is no second read to narrow and the runner-stub tests were deleted."
+    },
+    "F-8a1267361c75": {
+      "disposition": "dropped",
+      "reason": "The deviation is recorded on the item page and in ACTIVE_MILESTONE.md; the tolerated refusal it concerns was removed with CX2-E-I01, and the pull request description is written at the PR step."
+    },
+    "F-8d2919eed960": {
+      "disposition": "dropped",
+      "reason": "Wording of a historical item-page bullet (D1) that still names the intermediate form; the Dispositions paragraph and ACTIVE_MILESTONE.md carry the shipped form, and editing reviewed docs now would stale the approval."
+    },
+    "F-952c7c42ba82": {
+      "disposition": "fixed"
+    },
+    "F-ccd3b603d549": {
+      "disposition": "dropped",
+      "reason": "Docstring wording (the global scope is pointed into the job base, not excluded); no safety effect, any driver found there is switched off too."
+    }
+  },
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-cx2"
+}

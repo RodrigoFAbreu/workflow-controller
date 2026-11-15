@@ -94,7 +94,7 @@
 | 88 | [Workers run the selected tests per checkpoint and leave the full suite to CI](items/workflow-controller-lt1.md) `workflow-controller-lt1` | Done | - | - |
 | 89 | [State that the functional tester sandbox refuses the PID-namespace launcher](items/workflow-controller-ts1.md) `workflow-controller-ts1` | Done | - | - |
 | 90 | [Review follow-ups of the Codex worker items H4e2, H4e3 and H4e3b (#320, #339, #341)](items/workflow-controller-cx1.md) `workflow-controller-cx1` | Done | - | - |
-| 91 | [Review follow-ups of the Codex worker item H4f (#344)](items/workflow-controller-cx2.md) `workflow-controller-cx2` | Next | - | - |
+| 91 | [Review follow-ups of the Codex worker item H4f (#344)](items/workflow-controller-cx2.md) `workflow-controller-cx2` | Done | - | - |
 | 92 | [CI follow-ups: the 20-minute PR CI target and the review follow-ups of CI1a-CI1c (#317, #322, #324)](items/workflow-controller-ci2.md) `workflow-controller-ci2` | Next | - | - |
 | 93 | [Controller ACTION_REQUIRED events: SignalHub answers format with choices, one event per gate (no duplicates)](items/workflow-controller-n1.md) `workflow-controller-n1` | Next | - | workflow-controller-h4g |
 | 94 | [The post-acceptance defect loop at the merge flow's \`checks_failing\` stop](items/workflow-controller-c10d-a.md) `workflow-controller-c10d-a` | Next | - | workflow-controller-c10c |

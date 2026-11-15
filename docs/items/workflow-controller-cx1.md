@@ -2,7 +2,15 @@
 
 Item id: `workflow-controller-cx1`.
 
-Not yet planned. Fix the open review follow-ups of three accepted Codex worker items, real defects first. Sources: [#320](https://github.com/RodrigoFAbreu/workflow-controller/issues/320) (H4e2), [#339](https://github.com/RodrigoFAbreu/workflow-controller/issues/339) (H4e3), [#341](https://github.com/RodrigoFAbreu/workflow-controller/issues/341) (H4e3b). Complexity: medium; if the plan needs more than one mechanism, split by issue before its first review.
+Fix the open review follow-ups of three accepted Codex worker items, real defects first. Sources: [#320](https://github.com/RodrigoFAbreu/workflow-controller/issues/320) (H4e2), [#339](https://github.com/RodrigoFAbreu/workflow-controller/issues/339) (H4e3), [#341](https://github.com/RodrigoFAbreu/workflow-controller/issues/341) (H4e3b). Complexity: medium. **Status: implemented on its milestone branch, awaiting review.** Plan: `docs/ai-workflow/CONTROLLER_CX1_PLAN.md`, four checkpoints. It adds no mechanism: every change tightens or words something that exists. Merging it closes #320, #339 and #341.
+
+## What was built
+
+- **#320.** The recorder's commit and every Workflow query run with `commit.gpgsign=false`, `tag.gpgsign=false` and `gpg.program=false`, so a target's `gpg.program` never runs (the real defect). A failed deletion of `last-message.md` is named once in the ending's evidence (`last_message_removal_error`). `after_check` compares the recorded input mode, refuses a symlinked `.ai-review`, lists ignored files and compares tracked paths entry by entry by type, executable bit and raw bytes (a CRLF/LF checkout difference passes). The `ident` and `working-tree-encoding` paths stay a declared false refusal, pinned by a test and worded on [common problems](../common-problems.md#a-codex-review-ended-read_only_violated-on-a-clone-the-worker-did-not-change). The two untested branches (a `.git` input component, a symlink replacing an input) have tests. A tracked file more than twice its blob's size is refused without being read (no conversion the comparison accepts can grow it more), so a worker's sparse giant is never read into memory, and the untracked and ignored paths come from `git ls-files --others`, which reads no content, in place of `status` (found at the self-review).
+- **#341.** The guarded regeneration's `finished` block keeps `ownership_tag`. `_interrupted_publication` accepts, for the plan role only, just the two torn-manifest shapes (the implementation roles keep today's check). The generator's environment drops `BASH_FUNC_*`, `SHELLOPTS` and `BASHOPTS`. The `surface_landing_touched` gate text and the pages say that `explain` and every later Controller step also run the landed `scripts/`.
+- **#339.** Documentation, as the issue offers: a refusal at the check writes nothing and `not_written` then names only the state file; an item whose artifacts file declares more plan-stage protected paths is refused and the operator applies its change by hand; a `run` past `carry_bundle_regeneration_pending` without regenerating is covered by one test. **Deviation from the plan's wording:** the plan expected that run to end as a `FAILED` review job. In the current Workflow the protocol answers first (`bundle_unverified`, or `bundle_generation_mismatch` for the implementation stage), so the job ends `GATE_BLOCKED` on that answer with no review launched and nothing recorded, which is stronger than the issue's claim. The test pins that, and the page says it and keeps the recorder's checks as the backstop.
+
+Pages: [common problems](../common-problems.md) and [harnesses](../guide/harnesses.md).
 
 ## Findings
 
@@ -27,6 +35,6 @@ Not yet planned. Fix the open review follow-ups of three accepted Codex worker i
 
 H4f's follow-ups (CX2), routing any further role, and new Codex worker features.
 
-## Not yet planned
+## Planning notes
 
-Not yet planned. The rules that apply (the sizing rule: at most one new mechanism, releasable alone) are on [Planning rules](../planning-rules.md#next-in-order-and-the-sizing-rules).
+The plan is `docs/ai-workflow/CONTROLLER_CX1_PLAN.md`. The rules that apply (the sizing rule: at most one new mechanism, releasable alone) are on [Planning rules](../planning-rules.md#next-in-order-and-the-sizing-rules).

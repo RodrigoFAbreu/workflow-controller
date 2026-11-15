@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-cx1",
+  "dispositions": {
+    "F-262eec5c109e": {
+      "disposition": "fixed",
+      "note": "controller/codex_review_role._clone_git now decodes with surrogateescape, so a tracked path whose name is not UTF-8 is looked up by its real bytes; test_an_unchanged_clone_with_a_non_utf8_tracked_name_passes pins that an unchanged clone passes."
+    },
+    "F-4688b1f78f90": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/363"
+    },
+    "F-4ac7124fd9aa": {
+      "disposition": "fixed",
+      "note": "_tracked_problems computes each blob id in-process (_blob_id over the file's bytes), so no git hash-object process is started per tracked file."
+    },
+    "F-5d84281372ae": {
+      "disposition": "fixed",
+      "note": "codex_review_role._run adds last_message_removal_error once, to whatever ending the steps returned, so no return path can drop it (controller/codex_review_role.py)."
+    },
+    "F-72bcdfbcf379": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/363"
+    },
+    "F-794f3f5d6474": {
+      "disposition": "dropped",
+      "reason": "TEST_RESULTS.md lives in the generated, git-ignored .ai-review bundle; the revision-2 verification is recorded in IMPLEMENTATION_SUMMARY.md and no further regeneration is planned for this item."
+    },
+    "F-9308495ab518": {
+      "disposition": "fixed",
+      "note": "workflow_contract.interpreter_environment now drops SHELLOPTS and BASHOPTS as well as BASH_ENV and ENV; tests.test_workflow_contract and tests.test_generator_run cover SHELLOPTS=xtrace with a PS4 command substitution."
+    },
+    "F-a94bdde88279": {
+      "disposition": "fixed",
+      "note": "The CP2 paragraph of docs/ACTIVE_MILESTONE.md now says untracked and ignored paths are listed with ls-files -z --others, and no longer says the fresh-index status gains --ignored."
+    },
+    "F-ba3ee5170453": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/363"
+    },
+    "F-c2ad1f0cdc90": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/363"
+    },
+    "F-f0497cd4b597": {
+      "disposition": "dropped",
+      "reason": "TEST_RESULTS.md lives in the generated, git-ignored .ai-review bundle; the revision-2 verification is recorded in IMPLEMENTATION_SUMMARY.md and no further regeneration is planned for this item."
+    }
+  }
+}

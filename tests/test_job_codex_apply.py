@@ -1067,6 +1067,27 @@ else:
         self.assertEqual(resumed["status"], job.STATUS_FINISHED, resumed.get("reconciliation_evidence"))
         self.assert_next_stage_passes(self.ARGUMENT)
 
+    def test_the_finished_block_keeps_the_runs_ownership_tag(self) -> None:
+        # CX1 (D4): `finished` carries the tag `checked` and `started` did, so a kill past `regeneration_finished`
+        # still scans the run's own tag on resume.
+        self.worked()
+        with self.kill_at(job, "_protocol_resolution", after=1), self.assertRaises(KeyboardInterrupt):
+            self.step()
+        record = self.only_record()
+        self.assertEqual(record["regeneration"]["stage"], "finished")
+        tag = record["regeneration"].get("ownership_tag")
+        self.assertTrue(isinstance(tag, str) and tag.startswith(f"{record['job_id']}-regeneration-"), tag)
+        seen_tags: list[object] = []
+        real_scan = job.worker.scan_recorded_owned_processes
+
+        def spy(*args, **kwargs):
+            seen_tags.append(kwargs.get("ownership_tag"))
+            return real_scan(*args, **kwargs)
+
+        with mock.patch.object(job.worker, "scan_recorded_owned_processes", side_effect=spy):
+            self.resume()
+        self.assertIn(tag, seen_tags)
+
     def test_abandon_runs_no_generator(self) -> None:
         self.worked()
         with self.kill_at(job, "_protocol_resolution", after=1), self.assertRaises(KeyboardInterrupt):
@@ -1187,6 +1208,21 @@ class PlanGuardedRunTest(GuardedRunMixin, PlanCase):
         self.assertIn("did not regenerate the bundle (surface_foreign_entry", text)
         self.assertIn(f"scripts/prepare-ai-review.sh", text)
         self.assertTrue(job.validate_record(record, managed_repo=self.target, identity=FAKE_IDENTITY).valid)
+
+    def test_an_unrelated_invalid_reason_ends_the_plan_record_without_a_second_generator_run(self) -> None:
+        # CX1 (D4): a resumed plan-role record past `regeneration_started` whose first reconcile is `reconcile_invalid`
+        # for a reason that is not a torn manifest (a REJECTED bundle) ends there; the generator is not run again.
+        self.worked()
+        with mock.patch.object(generator_run.workflow_contract, "run_in_place", side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                self.step()
+        self.assertEqual(self.only_record()["regeneration"]["stage"], "started")
+        (self.root / ITEM / "REJECTED").write_text("rejected\n")
+        with mock.patch.object(generator_run.workflow_contract, "run_in_place",
+                               side_effect=AssertionError("the generator ran")) as spy:
+            (resumed,) = self.resume()
+        self.assertEqual(spy.call_count, 0)
+        self.assertNotEqual(resumed["status"], job.STATUS_FINISHED)
 
     def test_a_staging_directory_left_by_a_cut_off_run_is_discarded(self) -> None:
         self.worked()
@@ -1661,6 +1697,19 @@ class SelfReviewSitesTest(unittest.TestCase):
         self.assertIn(f"git log -p {'a' * 40}..{'c' * 40}", text)
         self.assertIn(f"scripts/prepare-ai-review.sh {'b' * 40} implementation wi-1", text)
         self.assertNotIn("post-fix", text)
+
+    def test_the_gate_text_names_the_extra_exposure_only_for_a_landing_that_touched_the_surface(self) -> None:
+        # CX1 (D7): `explain` and every later step run the Workflow's queries over the landed `scripts/`.
+        def text(cause: str | None) -> str:
+            regeneration = None if cause is None else {"cause": cause, "detail": "d"}
+            return job._carry_gate_text(self.ROLE, "wi-1", "b" * 40, "workflow-controller resume",
+                                        carry_base="a" * 40, landed_head="c" * 40, regeneration=regeneration)
+
+        touched = text("surface_landing_touched")
+        self.assertIn("`explain` and every later Controller step", touched)
+        self.assertIn("`scripts/` and `.workflow-manager/` before running any Controller step", touched)
+        for other in (None, "surface_script_modified", "surface_foreign_entry", "generator_failed"):
+            self.assertNotIn("`explain`", text(other), other)
 
     def test_the_landing_profile_is_the_roles_and_the_checkpoint_roles_otherwise(self) -> None:
         self.assertIs(job._landing_state_profile({"codex_carry": {"role": self.ROLE}}),

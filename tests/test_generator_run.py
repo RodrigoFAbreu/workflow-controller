@@ -324,6 +324,20 @@ class RunTest(Fixture):
         self.assertEqual(probe["exe"], os.path.realpath(sys.executable))
         self.assertFalse(list((self.root / "scripts").glob("__pycache__/*")))
 
+    def test_an_exported_function_and_shell_options_of_the_controllers_environment_run_nothing(self) -> None:
+        # CX1 (D5): `BASH_FUNC_python3%%` would shadow the private `bin/python3` pin and `SHELLOPTS=xtrace` with a `PS4`
+        # holding a command substitution would run it at the generator's first command.
+        marker = self.root.parent / "poison-marker"
+        marker.unlink(missing_ok=True)
+        poisoned = {"BASH_FUNC_python3%%": f"() {{ echo ran >> {marker}; return 1; }}",
+                    "SHELLOPTS": "xtrace", "PS4": f"$(echo ran >> {marker})"}
+        with mock.patch.dict(os.environ, poisoned):
+            result = self.run_it()
+        self.assertEqual(result.returncode, 0)
+        self.assertFalse(marker.exists(), "the generator ran something of the exported bash environment")
+        probe = json.loads((self.root / ".ai-review/probe.json").read_text())
+        self.assertEqual(probe["exe"], os.path.realpath(sys.executable))
+
     def test_a_refusal_before_the_run_does_not_start_the_generator(self) -> None:
         write(self.root, "scripts/sitecustomize.py", "x")
         seen: list[str] = []

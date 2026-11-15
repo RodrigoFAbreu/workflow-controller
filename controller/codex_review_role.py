@@ -308,11 +308,73 @@ def compose_verdict(values: Mapping[str, Any], status: str, scope: str | None, b
 # ---------------------------------------------------------------------------
 
 
-def _clone_git(clone: Path, runner: Any, *args: str) -> str:
+def _clone_git_bytes(clone: Path, runner: Any, *args: str) -> bytes:
     result = runner(["git", "-C", str(clone), *args])
     if result.returncode != 0:
         raise OSError(f"git {' '.join(args)} failed: {result.stderr.decode('utf-8', 'replace').strip()}")
-    return result.stdout.decode("utf-8", "replace")
+    return result.stdout
+
+
+def _clone_git(clone: Path, runner: Any, *args: str) -> str:
+    # ``surrogateescape`` keeps a path whose name is not UTF-8 reversible (``os.fsencode`` gives the bytes back).
+    return _clone_git_bytes(clone, runner, *args).decode("utf-8", "surrogateescape")
+
+
+def _blob_id(data: bytes, width: int) -> str:
+    """The Git object id of ``data`` as a blob, for an id ``width`` hex digits long (SHA-1 or SHA-256 repository);
+    the value ``git hash-object --no-filters --stdin`` prints, computed without running a program."""
+    algorithm = hashlib.sha256 if width == 64 else hashlib.sha1
+    return algorithm(b"blob %d\0" % len(data) + data).hexdigest()
+
+
+def _lf(data: bytes) -> bytes:
+    """``data`` with each ``\\r\\n`` read as ``\\n``."""
+    return b"\n".join(data.split(b"\r\n"))
+
+
+def _tracked_problems(clone: Path, runner: Any, tree: str) -> list[str]:
+    """Why a tracked path of the clone differs from the base tree's ``ls-tree -r -l -z`` listing ``tree`` (CX1, D3):
+    by ``lstat`` type, executable bit and raw bytes. No attribute, filter or program is consulted. A regular file
+    passes when its raw bytes hash to the entry's id or when both sides are equal after each CRLF becomes LF (a
+    checkout conversion in either direction); ``ident`` and ``working-tree-encoding`` paths are a declared false
+    refusal. A file larger than twice its blob cannot pass either way, so it is refused without being read: the
+    worker's file is never an unbounded read."""
+    problems: list[str] = []
+    for entry in (e for e in tree.split("\0") if e):
+        head, _, rel = entry.partition("\t")
+        mode, _, oid, size = head.split()
+        if rel == ".ai-review" or rel.startswith(".ai-review/"):
+            continue
+        path = clone / rel
+        try:
+            if not size.isdigit() and mode in ("100644", "100755"):
+                raise OSError("unreadable blob")  # ``ls-tree -l`` prints ``-`` or ``BAD`` for a size it cannot read
+            info = os.lstat(path)
+        except OSError:
+            problems.append(f"changed or new path {rel}")
+            continue
+        kind = stat.S_IFMT(info.st_mode)
+        if mode == "160000":
+            same = kind == stat.S_IFDIR
+        elif mode == "120000":
+            same = kind == stat.S_IFLNK and _blob_id(os.readlink(bytes(path)), len(oid)) == oid
+        elif mode in ("100644", "100755"):
+            same = (kind == stat.S_IFREG and bool(info.st_mode & stat.S_IXUSR) == (mode == "100755")
+                    and info.st_size <= 2 * int(size))
+            if same:
+                try:
+                    data = path.read_bytes()
+                    same = _blob_id(data, len(oid)) == oid
+                    if not same:
+                        blob = _clone_git_bytes(clone, runner, "cat-file", "blob", oid)
+                        same = _blob_id(blob, len(oid)) == oid and _lf(data) == _lf(blob)
+                except OSError:
+                    same = False
+        else:
+            same = False
+        if not same:
+            problems.append(f"changed or new path {rel}")
+    return problems
 
 
 def after_check(prepared: codex_worker_tree.Prepared, layout: codex_worker_sandbox.WorkerLayout,
@@ -329,11 +391,15 @@ def after_check(prepared: codex_worker_tree.Prepared, layout: codex_worker_sandb
             env = {**review._git_env(layout.base), "GIT_INDEX_FILE": str(Path(scratch) / "index")}
             fresh = gitrepo.subprocess_runner(env)
             _clone_git(clone, fresh, "read-tree", prepared.base)
-            listing = _clone_git(clone, fresh, "status", "--porcelain=v1", "-z", "--untracked-files=all")
-        for record in (r for r in listing.split("\0") if r):
-            path = record[3:]
+            # Every path the fresh index does not hold, untracked and ignored alike (no exclude file is read), so a
+            # worker's ``.gitignore`` of ``*`` hides nothing. Tracked content is compared per entry below (CX1, D3):
+            # ``status`` would refuse an unchanged line-ending-normalised file and would hash a worker's sparse giant.
+            listing = _clone_git(clone, fresh, "ls-files", "-z", "--others")
+            tree = _clone_git(clone, runner, "ls-tree", "-r", "-l", "-z", "--full-tree", prepared.base)
+        for path in (r for r in listing.split("\0") if r):
             if not (path == ".ai-review" or path.startswith(".ai-review/")):
                 problems.append(f"changed or new path {path}")
+        problems.extend(_tracked_problems(clone, runner, tree))
         refs = _clone_git(clone, runner, "for-each-ref", "--format=%(refname) %(objectname)").splitlines()
         if refs != [f"refs/heads/{prepared.branch} {prepared.base}"]:
             problems.append(f"refs are {refs}")
@@ -346,6 +412,11 @@ def after_check(prepared: codex_worker_tree.Prepared, layout: codex_worker_sandb
     # the run left it, so whatever the worker did to it is D2's refusal, never an exception or an unbounded read.
     seen: set[str] = set()
     base = clone / ".ai-review"
+    try:
+        if stat.S_ISLNK(os.lstat(base).st_mode):
+            problems.append("symlink .ai-review")
+    except OSError:
+        pass
     for dirpath, dirnames, filenames in os.walk(base, followlinks=False):
         for name in dirnames:
             if stat.S_ISLNK(os.lstat(Path(dirpath) / name).st_mode):
@@ -370,6 +441,8 @@ def after_check(prepared: codex_worker_tree.Prepared, layout: codex_worker_sandb
                 continue
             if manifest[rel]["sha256"] != digest:
                 problems.append(f"input {rel} changed")
+            elif manifest[rel]["mode"] != f"{stat.S_IMODE(info.st_mode):o}":
+                problems.append(f"input {rel} changed mode")
     if seen != set(manifest):
         problems.append(f".ai-review holds {sorted(seen ^ set(manifest))} beyond or short of the inputs")
     return problems
@@ -466,10 +539,22 @@ def _not_started(cause: str, message: str, **evidence: Any) -> Ending:
     return Ending(NOT_STARTED, cause, None, {"message": message, **evidence})
 
 
-def _run(managed_repo: Any, *, runtime_root: Path, job_id: str, operator_home: Path, stage: str, work_item_id: str,
-         base: str, model: str, effort: str, state_identity: str, timeout: float, brief: str | None,
-         progress: Callable[[dict], None], launch: Callable[..., worker.WorkerResult],
-         launch_options: dict, clock: Callable[[], str]) -> Ending:
+def _run(managed_repo: Any, **kwargs: Any) -> Ending:
+    """:func:`_run_steps`, then (CX1, D2) the failure of removing ``last-message.md``, if there was one, named once as
+    ``last_message_removal_error`` in whatever ending the steps returned, so no return path can drop it. The outcome
+    is unchanged: a retained message is a leak to report, not a reason to change the verdict."""
+    removal_errors: list[str] = []
+    ending = _run_steps(managed_repo, removal_errors=removal_errors, **kwargs)
+    if removal_errors:
+        ending = Ending(ending.code, ending.cause, ending.worker,
+                        {**ending.evidence, "last_message_removal_error": removal_errors[0]})
+    return ending
+
+
+def _run_steps(managed_repo: Any, *, runtime_root: Path, job_id: str, operator_home: Path, stage: str,
+               work_item_id: str, base: str, model: str, effort: str, state_identity: str, timeout: float,
+               brief: str | None, progress: Callable[[dict], None], launch: Callable[..., worker.WorkerResult],
+               launch_options: dict, clock: Callable[[], str], removal_errors: list[str]) -> Ending:
     root = Path(managed_repo.root)
     layout = codex_worker_sandbox.WorkerLayout(runtime_root, job_id)
     progress({"read_only": True, "stage": "preparing"})
@@ -523,8 +608,8 @@ def _run(managed_repo: Any, *, runtime_root: Path, job_id: str, operator_home: P
     # the Workflow's feedback) are its only retained copies (review I1).
     try:
         runtime.remove_tree(runtime_root, layout.rel("last-message.md"))
-    except (OSError, ControllerError):
-        pass
+    except (OSError, ControllerError) as exc:
+        removal_errors.append(f"{type(exc).__name__}: {exc}")
     if _worker_output_holds_armour(raw, result):
         return Ending(REFUSED, "credential_in_verdict", _emptied(result), {
             "message": "the role's output holds a private-key armour line; nothing was recorded",

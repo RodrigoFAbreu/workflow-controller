@@ -128,9 +128,54 @@ they create their own tags.
 
 ## Verification policy
 
-- Full-suite verification uses the sharded default,
-  `python3 tools/run_tests.py`. Its coverage check proves every planned
-  test ran exactly once.
+- A checkpoint is verified by the tests its plan selects, not by the full
+  suite. Every checkpoint section of a plan ends with a `**Tests:**`
+  paragraph that lists, in backticks, the test modules or classes that
+  cover the changed code and the tests the checkpoint adds. The worker runs
+  `python3 tools/run_tests.py <those names>`; the runner's coverage check
+  proves every selected test ran exactly once. A checkpoint with no code or
+  test change (documentation only, as `tools/ci_changes.py` classifies it)
+  runs `python3 tools/check_docs.py`. A worker that finds the paragraph
+  missing runs the modules of the files it changed plus the guards below,
+  says so in `docs/ACTIVE_MILESTONE.md`, and never falls back to the full
+  suite.
+- The repository-wide guards ride along when the tree changes. A checkpoint
+  that adds, moves or removes a file under `controller/`, `tools/`, `tests/`
+  or `docs/` also runs `tests.test_package_structure`,
+  `tests.test_write_containment` and `tests.test_docs`; one that changes
+  `tools/ci_changes.py` or a path it classifies also runs
+  `tests.test_ci_changes`. A checkpoint that edits a path
+  `tools/ci_changes.py` keeps as code because a test reads it (its
+  `NOT_DOCUMENTATION` table) also runs the readers that table names; any
+  `docs/guide/` edit runs at least `tests.test_plan_document_consistency`,
+  which parses every guide's invocation lines against the live CLI parser.
+- The full suite is CI's. CI runs it on every pull request (about 19
+  minutes), at most one local full run happens, at the self-review of the
+  whole diff and only when the diff touches shared code (a diff
+  `tools/ci_changes.py` classifies as `docs` needs none), and never at a
+  checkpoint or in a review-fix pass.
+- In this repository "the full required verification" of
+  `/milestone-implement` step 3 means that single self-review run (or
+  `python3 tools/check_docs.py` when the diff is documentation only), and
+  "the full suite" of `/apply-implementation-review` step 5 is not rerun in
+  a fix pass: a fix pass runs its fixes' selections plus the guards above
+  and leaves the full suite to CI on the pushed pull request.
+- Two exceptions run after the merge, not on the pull request:
+  `tests.test_catalogue_determinism` and `tests.test_scenarios_negative`
+  run in `main.yml` and gate the release (pull request validation uses
+  `--ci-placement`, `tools/test_shards.py`). A regression that only one of
+  them detects can therefore pass the pull request and surface after the
+  merge as a failed release gate; a change that touches the scenario
+  catalogue or its runner selects both in its `**Tests:**` paragraph. This
+  is the accepted cost of leaving the full suite to CI.
+- Two full suites never run at once. Before a full run, check that no other
+  run is live with
+  `pgrep -af '^[^ ]*python[0-9.]*( -[^ ]+)* [^ ]*tools/run_tests\.py'`
+  (exit 0 means a run is live, exit 1 means none), and wait or ask the
+  orchestrator if one is. The pattern is anchored to an interpreter running
+  the runner: the unanchored `pgrep -af 'tools/run_tests.py'` matches the
+  caller's own shell wrapper and always reports a live run. This is a
+  rule, not a lock.
 - A serial run (`--serial`, `--jobs 1`, `--shards 1`) is reference
   evidence for an exceptional question, such as whether a failure depends
   on co-residency. It is not a routine confidence rerun.

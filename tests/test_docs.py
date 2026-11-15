@@ -593,6 +593,97 @@ class HarnessTableRuleTest(TreeTestCase):
         self.assertTrue(any("not current" in p for p in problems))
 
 
+class VerificationPolicyTest(unittest.TestCase):
+    """The checkpoint-verification selection rule (LT1) is pinned: the worker
+    instructions and the development guide keep its marker sentences."""
+
+    PGREP = "pgrep -af '^[^ ]*python[0-9.]*( -[^ ]+)* [^ ]*tools/run_tests\\.py'"
+    UNANCHORED = "pgrep -af 'tools/run_tests.py'"
+    GUARDS = (
+        "tests.test_package_structure",
+        "tests.test_write_containment",
+        "tests.test_docs",
+        "tests.test_ci_changes",
+        "tests.test_plan_document_consistency",
+    )
+    POST_MERGE = ("tests.test_catalogue_determinism", "tests.test_scenarios_negative")
+
+    @staticmethod
+    def _flat(path: str) -> str:
+        return " ".join((REPO_ROOT / path).read_text(encoding="utf-8").split())
+
+    def _policy(self) -> str:
+        text = (REPO_ROOT / "docs" / "guide" / "development.md").read_text(encoding="utf-8")
+        start = text.index("## Verification policy")
+        return " ".join(text[start:text.index("\n## ", start + 1)].split())
+
+    def _claude(self) -> str:
+        text = (REPO_ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+        start = text.index("## Running tests")
+        return " ".join(text[start:text.index("\n## ", start + 1)].split())
+
+    def test_the_policy_selects_per_checkpoint_and_leaves_the_full_suite_to_ci(self) -> None:
+        policy = self._policy()
+        for marker in (
+            "A checkpoint is verified by the tests its plan selects, not by the full suite.",
+            "`**Tests:**` paragraph",
+            "never falls back to the full suite",
+            "The full suite is CI's.",
+            "and never at a checkpoint or in a review-fix pass",
+            "Two full suites never run at once.",
+        ):
+            self.assertIn(marker, policy)
+        self.assertNotIn("Full-suite verification uses the sharded default", policy)
+
+    def test_the_policy_names_the_guards_and_the_guide_reader(self) -> None:
+        policy = self._policy()
+        for module in self.GUARDS:
+            self.assertIn(f"`{module}`", policy)
+        self.assertIn("any `docs/guide/` edit runs at least `tests.test_plan_document_consistency`", policy)
+
+    def test_every_module_the_guard_list_names_exists(self) -> None:
+        for module in self.GUARDS + self.POST_MERGE:
+            self.assertTrue((REPO_ROOT / (module.replace(".", "/") + ".py")).is_file(), module)
+
+    def test_the_live_run_check_is_the_anchored_pgrep(self) -> None:
+        policy = self._policy()
+        self.assertIn(f"`{self.PGREP}`", policy)
+        # The unanchored form is named once, as the thing not to use.
+        self.assertEqual(policy.count(self.UNANCHORED), 1)
+        self.assertIn(f"the unanchored `{self.UNANCHORED}` matches", policy)
+
+    def test_the_policy_says_what_the_managed_steps_full_verification_means_here(self) -> None:
+        policy = self._policy()
+        self.assertIn(
+            '"the full required verification" of `/milestone-implement` step 3 means that single '
+            "self-review run", policy)
+        self.assertIn(
+            '"the full suite" of `/apply-implementation-review` step 5 is not rerun in a fix pass',
+            policy)
+
+    def test_the_policy_says_two_modules_run_after_the_merge(self) -> None:
+        policy = self._policy()
+        for module in self.POST_MERGE:
+            self.assertIn(f"`{module}`", policy)
+        self.assertIn("run in `main.yml` and gate the release", policy)
+        self.assertIn("can therefore pass the pull request", policy)
+
+    def test_the_worker_instructions_carry_the_rule(self) -> None:
+        claude = self._claude()
+        for marker in (
+            "run only the test modules the plan's `**Tests:**` paragraph names",
+            "The full suite is CI's on the pull request",
+            "run only after the merge and can fail the release gate for an unselected regression",
+            "at most once, at the self-review, and never two at once",
+            "`/milestone-implement` step 3's \"full required verification\" is that single self-review run",
+            "`/apply-implementation-review` step 5's \"full suite\" is not rerun in a fix pass",
+            "never use a bare `python3 -m unittest` for a signal-sending test",
+        ):
+            self.assertIn(marker, claude.replace("At a checkpoint run only", "run only"))
+        for module in self.POST_MERGE:
+            self.assertIn(f"`{module}`", claude)
+
+
 def check_docs_harness_table():
     return harness_table
 

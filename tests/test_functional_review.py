@@ -1502,7 +1502,7 @@ class PromptTest(unittest.TestCase):
             checklist_blob="b", writable=("build",), refused=(fr.RefusedPattern("*.pyc", "a glob"),),
             timeout_seconds=60)
         self.assertEqual(hashlib.sha256(text.encode()).hexdigest(),
-                         "126f26958ef022bd85f1eef1ef172eae8ca4a9106210ba508c2991527c933068")
+                         "04e39b4f2d8851ed76a1c8fbd32984246dae5347061778b3cb6b6ec2012c95f1")
 
     def test_given_limits_replace_the_sandbox_limits(self) -> None:
         text = self.prompt(limits=("only this limit",))
@@ -1535,13 +1535,36 @@ class PromptTest(unittest.TestCase):
     def test_the_row_37_note_shares_the_limits(self) -> None:
         from controller import codex_bridge
         note = fr.sandbox_limits_note()
-        self.assertEqual(fr.SHARED_SANDBOX_LIMITS, fr.SANDBOX_LIMITS[:5])
+        self.assertEqual(fr.SHARED_SANDBOX_LIMITS, fr.SANDBOX_LIMITS[:6])
         for limit in fr.SHARED_SANDBOX_LIMITS:
             self.assertIn(limit, note)
             self.assertIn(limit, codex_bridge.SANDBOX_LIMITS)
-        for limit in fr.SANDBOX_LIMITS[5:]:
+        for limit in fr.SANDBOX_LIMITS[6:]:
             self.assertNotIn(limit, note)
         self.assertIn("offline", note)
+
+    def test_the_namespace_launcher_limit_is_stated_try_first_with_every_refusal_form(self) -> None:
+        from controller import codex_bridge
+        limit = fr.SANDBOX_LIMITS[5]
+        self.assertIn("`unshare --user", limit)
+        self.assertIn("tries the launcher once", limit)
+        for forbidden in ("skip the launcher", "without trying", "do not run", "never run"):
+            self.assertNotIn(forbidden, limit)
+        for needle in ("refused", "`environment`", "Operation not permitted", "no PID namespace here",
+                       "running the shards without a PID namespace", "namespace: none",
+                       "no PID namespace on this host", "`namespace: isolated`", "isolated for N of M shards",
+                       "N above 0", "never `isolated for 0 of M shards`", "ran and was not skipped"):
+            self.assertIn(needle, limit)
+        self.assertIn(limit, codex_bridge.SANDBOX_LIMITS)
+        for shared in fr.SHARED_SANDBOX_LIMITS:
+            self.assertIn(shared, codex_bridge.SANDBOX_LIMITS)
+        self.assertIn(limit, fr.sandbox_limits_note())
+        self.assertIn(limit, self.prompt())
+
+    def test_the_flows_not_runnable_stop_names_the_launcher_and_the_recording_command(self) -> None:
+        text = fr.gate_text(fr.GATE_FLOWS_NOT_RUNNABLE, flows=("flow-1",), detail="d")
+        self.assertIn("PID-namespace launcher (`unshare`)", text)
+        self.assertIn("record-external-result --kind functional_evidence", text)
 
 
 class ConstantsTest(unittest.TestCase):

@@ -126,16 +126,28 @@ SANDBOX_LIMITS: tuple[str, ...] = (
     "no real `claude`, `codex` or `ssh`: each is a stand-in that refuses and logs",
     "a `PATH` of the sandbox's `bin/` and the system directories, with no other tool",
     "the product clone is read-only: no flow may write inside it, except the writable locations listed",
+    "the launcher that makes a new user or PID namespace (`unshare --user ... --pid`; for example, in the "
+    "Controller's own test runner, `python3 tools/run_tests.py --namespace require`) has been refused in this "
+    "sandbox: a flow that needs it tries the launcher once, and if it is refused the flow is `failed` with "
+    "`reason` `environment`, its summary quotes the launcher's message, and the tester neither retries it nor "
+    "works around it (an operator runs the flow on the host). The refusal shows as `Operation not permitted` from "
+    "`unshare`, as `no PID namespace here` from `--namespace require`, or silently: the default `--namespace auto` "
+    "prints `running the shards without a PID namespace` or ends with `namespace: none (<reason>)` and goes on "
+    "unwrapped and green, and a namespace test is skipped with `no PID namespace on this host`. A flow that proves "
+    "a namespace's isolation is `passed` only on evidence that the namespace was used (the run's summary line is "
+    "exactly `namespace: isolated`, or `isolated for N of M shards` with N above 0 and the flow's module in a "
+    "wrapped shard, never `isolated for 0 of M shards`; or the proof test ran and was not skipped); otherwise it is "
+    "`failed` with `reason` `environment` and the message or skip text quoted",
     "a writable location in the clone is a link to a folder outside it: a tool that deletes and recreates the "
     "linked folder (`shutil.rmtree('build')`, `rm -rf build`) is refused on the link, a sandbox limit "
     "(`environment`), not a product `defect`",
     "writes go to the output folder and the scratch `HOME`, `XDG_*` directories and `TMPDIR`",
 )
 
-#: The limits the Claude and the Codex tester's sandboxes both state, word for word (the first five of
+#: The limits the Claude and the Codex tester's sandboxes both state, word for word (the first six of
 #: :data:`SANDBOX_LIMITS`; ``codex_bridge.SANDBOX_LIMITS`` repeats them). The row-37 launch writes the checklist
 #: before any tester is chosen, so its note states only these.
-SHARED_SANDBOX_LIMITS: tuple[str, ...] = SANDBOX_LIMITS[:5]
+SHARED_SANDBOX_LIMITS: tuple[str, ...] = SANDBOX_LIMITS[:6]
 
 
 class ChecklistUnrecognised(ControllerError):
@@ -2372,10 +2384,12 @@ def gate_text(code: str, **facts: Any) -> str:
         return (f"the Workflow refused a flow's result ({detail}); results accepted before it stand "
                 f"({facts.get('recorded') or 'none'}). Run again, or {MANUAL_REMEDY}")
     if code == GATE_FLOWS_NOT_RUNNABLE:
-        return (f"the flows {flows} cannot run in the sandbox (no network, no real GitHub, no real model, no tool "
-                "outside the sandbox PATH): their results are recorded as failed with the reason `environment`, no "
+        return (f"the flows {flows} cannot run in the sandbox (no network, no real GitHub, no real model, no "
+                "PID-namespace launcher (`unshare`), no tool outside the sandbox PATH): their results are recorded as "
+                "failed with the reason `environment`, no "
                 f"findings were written and the applier was not started ({detail}).{refused_text(facts.get('refused') or ())} "
-                "Run those flows by hand and record them, or change the checklist so they run offline")
+                "Run those flows by hand and record them (`record-external-result --kind functional_evidence`), or "
+                "change the checklist so they run offline")
     if code == GATE_ROUNDS_EXHAUSTED:
         return (f"the tester has failed {facts.get('rounds')} times for this work item (the bound is {ROUND_BOUND}): "
                 f"no further tester run is started. To go on, {MANUAL_REMEDY}")

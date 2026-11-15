@@ -1698,6 +1698,19 @@ class SelfReviewSitesTest(unittest.TestCase):
         self.assertIn(f"scripts/prepare-ai-review.sh {'b' * 40} implementation wi-1", text)
         self.assertNotIn("post-fix", text)
 
+    def test_the_gate_text_names_the_extra_exposure_only_for_a_landing_that_touched_the_surface(self) -> None:
+        # CX1 (D7): `explain` and every later step run the Workflow's queries over the landed `scripts/`.
+        def text(cause: str | None) -> str:
+            regeneration = None if cause is None else {"cause": cause, "detail": "d"}
+            return job._carry_gate_text(self.ROLE, "wi-1", "b" * 40, "workflow-controller resume",
+                                        carry_base="a" * 40, landed_head="c" * 40, regeneration=regeneration)
+
+        touched = text("surface_landing_touched")
+        self.assertIn("`explain` and every later Controller step", touched)
+        self.assertIn("`scripts/` and `.workflow-manager/` before running any Controller step", touched)
+        for other in (None, "surface_script_modified", "surface_foreign_entry", "generator_failed"):
+            self.assertNotIn("`explain`", text(other), other)
+
     def test_the_landing_profile_is_the_roles_and_the_checkpoint_roles_otherwise(self) -> None:
         self.assertIs(job._landing_state_profile({"codex_carry": {"role": self.ROLE}}),
                       job.codex_worker_landing.SELF_REVIEW)

@@ -31,10 +31,11 @@ from unittest import mock
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from controller import generator_run, job  # noqa: E402
+from controller import generator_run, job, routing  # noqa: E402
 from controller import workflow_contract  # noqa: E402
 from controller.errors import WorkflowQueryError  # noqa: E402
 from tests import test_job_codex_apply as base  # noqa: E402
+from tests.test_codex_review_role import message  # noqa: E402
 from tests.test_codex_apply_safety import Safety  # noqa: E402
 
 ITEM = base.ITEM
@@ -373,6 +374,34 @@ else:
         self.assertEqual(_git(self.root, "for-each-ref"), before_refs) if self.ARGUMENT == "plan" else None
         self.no_armour(record)
         self.assertFalse(self.marker.exists())
+
+    def test_a_run_past_the_regeneration_gate_without_regenerating_launches_no_review(self) -> None:
+        """CX1 (D6, #339 item 3): the gate stores nothing, so it holds only for the run that ended on it. Running again
+        without regenerating ends at the Workflow's own bundle gate (``bundle_unverified`` or, for the implementation stage,
+        ``bundle_generation_mismatch``): no review is
+        launched, nothing is recorded and the managed repository is untouched. The recorder's own preconditions stay
+        the backstop behind it (``tests.test_review_recorder``)."""
+        real = generator_run._read_regular
+
+        def absent(root, rel):
+            if rel == generator_run.protocol.INSTALLATION_RECORD:
+                raise FileNotFoundError(rel)
+            return real(root, rel)
+
+        self.worked()
+        with mock.patch.object(generator_run, "_read_regular", absent):
+            gated = self.step()
+        self.assertEqual(self.evidence(gated)["code"], job.CARRY_BUNDLE_GATE_CODE)
+        review_role = routing.REVIEW_PLAN if self.ARGUMENT == "plan" else routing.REVIEW_IMPLEMENTATION
+        options = self.routing_for({self.ROLE: self.entry(), review_role: self.entry()})
+        self.script(message=message("APPROVE"))
+        launched, before = len(self.launched), self.managed_snapshot()
+        record = self.step(routing=options)
+        self.assertEqual(record["status"], job.STATUS_GATE_BLOCKED, record.get("reconciliation_evidence"))
+        self.assertIn(record["protocol_gate"]["reason_code"], ("bundle_unverified", "bundle_generation_mismatch"))
+        self.assertIsNone(record.get("codex_review"))
+        self.assertEqual(len(self.launched), launched, "a review was launched against the stale bundle")
+        self.assertEqual(self.managed_snapshot(), before)
 
     def test_a_poisoned_environment_runs_nothing(self) -> None:
         poison = self.tmp / "poison"

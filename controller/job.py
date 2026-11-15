@@ -9433,6 +9433,15 @@ def _is_expected_stale_bundle(fields: Mapping, record: Mapping, root: Path) -> b
             and bound.get("plan_revision") == revision)
 
 
+#: CX1 (D7): the ``regeneration`` cause whose gate text names the extra exposure of a landing that edited the surface.
+_LANDING_TOUCHED_CAUSE = "surface_landing_touched"
+_LANDING_TOUCHED_EXPOSURE = (
+    ". The generator is not the only thing that runs the landed `scripts/`: `explain` and every later Controller "
+    "step also run the Workflow's queries over them, checked only against the committed "
+    "`.workflow-manager/installation.json`, which the landing can edit together with a script. Restore or verify "
+    "`scripts/` and `.workflow-manager/` before running any Controller step, `explain` included")
+
+
 def _carry_gate_text(role: str, work_item_id: str, base_commit: str | None, resume: str, *,
                      carry_base: str | None, landed_head: str | None,
                      regeneration: Mapping | None = None) -> str:
@@ -9456,7 +9465,10 @@ def _carry_gate_text(role: str, work_item_id: str, base_commit: str | None, resu
     else:
         lead += ", but the Controller regenerated no bundle"
     numbered = "; ".join(f"({index}) {step}" for index, step in enumerate(steps, 1))
-    return f"{lead}. In the managed repository, in order: {numbered}"
+    text = f"{lead}. In the managed repository, in order: {numbered}"
+    if regeneration is not None and regeneration.get("cause") == _LANDING_TOUCHED_CAUSE:
+        text += _LANDING_TOUCHED_EXPOSURE
+    return text
 
 
 def _stored_decision(record: Mapping) -> Decision | None:

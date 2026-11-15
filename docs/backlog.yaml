@@ -518,7 +518,7 @@ items:
     detail: docs/items/workflow-controller-lt1.md
   - id: workflow-controller-ts1
     title: "State that the functional tester sandbox refuses the PID-namespace launcher"
-    status: next
+    status: done
     order: 89
     depends_on: []
     detail: docs/items/workflow-controller-ts1.md

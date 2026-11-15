@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-cx2",
+  "requirements": {
+    "R1": {
+      "description": "The filter enumeration names drivers defined in config.worktree, tolerating only the multiple-worktrees refusal",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The pages state legality, the .ai-review/ assumption and the absent-witness case",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    }
+  }
+}

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-cx2",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -76600,6 +76600,219 @@
         },
         "evaluated_at": "2026-11-15T20:32:55Z",
         "workflow_release": "2.29.3"
+      }
+    },
+    "workflow-controller-cx2": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-cx2",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CX2_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-cx2-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-cx2-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 2,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "2eeb5d4ae366f931de6ed5ee3bcd77b766fbd7c4",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "4521ae974d1f4675fc46f9c2310cc37c558c091eb6c749171d4a6a58c7e27720",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "4521ae974d1f4675fc46f9c2310cc37c558c091eb6c749171d4a6a58c7e27720",
+        "approved_review_content_id": "3d27c94ce7306f296fe3c64f765a16478cbc2ec7c0eddd9d9a54a305c903a30c",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CX2_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "31d4ca9aa6fc31c7c46e0598efc6c63ed2fb31be"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-cx2-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "51a4165d797408a670f470112acfa87a9c0332f0"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-cx2-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "548cf06a2e8de7bb0d540c22d444dc1a8dbdcdcc"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-15T21:16:08Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "3d27c94ce7306f296fe3c64f765a16478cbc2ec7c0eddd9d9a54a305c903a30c",
+            "ledger": {
+              "local": {
+                "bundle_id": "4521ae974d1f4675fc46f9c2310cc37c558c091eb6c749171d4a6a58c7e27720",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "0e495a0ac650f7e3d9ff97c222ab677ae1e514f67f8f0422eba285dcad14f399",
+                "ledger_entry_sha256": "7a87ab7da1d9633f1099daa03bd027cf7fbab7ecc7587ed761e3971a9afd88e7",
+                "run_ref": "session:local .ai-review/workflow-controller-cx2/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "4521ae974d1f4675fc46f9c2310cc37c558c091eb6c749171d4a6a58c7e27720",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "321a43937d4dcb4d84de5d8b007f20509e5290ee02ec123638b9e279a60f3949",
+                "ledger_entry_sha256": "434b3b7afc4e6e79b959f1587bbacc2faddfb2c1bf3f21012237aa49424f3432",
+                "run_ref": "codex:20261115T211113Z-9ba9cf70",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-15T21:16:08Z",
+          "workflow_release": "2.29.3"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "3d27c94ce7306f296fe3c64f765a16478cbc2ec7c0eddd9d9a54a305c903a30c",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "4521ae974d1f4675fc46f9c2310cc37c558c091eb6c749171d4a6a58c7e27720",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-15T21:11:00Z",
+          "verdict_sha256": "0e495a0ac650f7e3d9ff97c222ab677ae1e514f67f8f0422eba285dcad14f399",
+          "run_ref": "session:local .ai-review/workflow-controller-cx2/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "4521ae974d1f4675fc46f9c2310cc37c558c091eb6c749171d4a6a58c7e27720",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-15T21:13:43Z",
+          "verdict_sha256": "321a43937d4dcb4d84de5d8b007f20509e5290ee02ec123638b9e279a60f3949",
+          "run_ref": "codex:20261115T211113Z-9ba9cf70",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 2,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 9,
+      "last_transition": "2026-11-15T21:16:08Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-15T21:08:50Z",
+        "consumed": {
+          "review_content_id": "665fccb15b4bdf4080d8dff9fe38805dea0b834b0c418203ab983a08cb97d106",
+          "plan_revision": 1,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "3d27c94ce7306f296fe3c64f765a16478cbc2ec7c0eddd9d9a54a305c903a30c",
+          "plan_revision": 2
+        },
+        "bound": {
+          "review_content_id": "3d27c94ce7306f296fe3c64f765a16478cbc2ec7c0eddd9d9a54a305c903a30c",
+          "bundle_id": "4521ae974d1f4675fc46f9c2310cc37c558c091eb6c749171d4a6a58c7e27720",
+          "plan_revision": 2
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "665fccb15b4bdf4080d8dff9fe38805dea0b834b0c418203ab983a08cb97d106"
+      ],
+      "optional_findings": {
+        "F-13ed46e1ccf2": {
+          "digest": "13ed46e1ccf208328553373244bd271aa4deaa18b3e6bc25854c93c3e4113739",
+          "text": "CX2-L1-O01: CP1 could add one `tests/test_codex_worker_landing.py` case where `unfinished_work` reads a clone whose `config.worktree` defines a planted clean filter on a racy-stat file, and assert that the marker stays absent. This proves the fix end to end through the only caller, not only at the `gitrepo` seam. `tests.test_codex_worker_landing` is already in CP1's selection.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "665fccb15b4bdf4080d8dff9fe38805dea0b834b0c418203ab983a08cb97d106",
+              "verdict": "REVISE",
+              "at": "2026-11-15T21:08:00Z"
+            }
+          ]
+        },
+        "F-56008dc23fed": {
+          "digest": "56008dc23fed051018de20f7b1eb0dfa38109c66f03ed05f0c8f8667c161c77d",
+          "text": "CX2-L2-O01 (CP1): the planned test \"any other failure of the second read (a malformed `config.worktree`) raises\" never reaches the second read. On git 2.56.1, with `extensions.worktreeConfig=true` and a malformed `.git/config.worktree`, the first read (`git config --local --includes --name-only --list -z`) already exits 128 with `fatal: bad config line 2 in file .git/config.worktree`, because Git parses every configuration file at startup. `git status` fails the same way. So the test passes even if the second read tolerates every failure (fail open), and the narrowing that D1 requires has no test. The plan does not need to change. In CP1 the implementer can prove the narrowing by giving `filter_disabling_config` a `runner` stub that passes the `--local` argv through and answers the `--worktree` argv with exit 128 and some other stderr (expect `GitOperationError`), or with the exact multiple-worktrees stderr (expect the `--local`-only options). The malformed-file case can stay as an end-to-end check.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "3d27c94ce7306f296fe3c64f765a16478cbc2ec7c0eddd9d9a54a305c903a30c",
+              "verdict": "APPROVE",
+              "at": "2026-11-15T21:11:00Z"
+            }
+          ]
+        },
+        "F-34c559455af0": {
+          "digest": "34c559455af07d197b5dd90ff0a0b169ee3751c8251a99a62b9919226c87430c",
+          "text": "**CX2-E-O01 — D2 recovery guidance:** Direct operators to inspect the landed commits in the managed repository. The plan currently says “read the clone’s commits,” but `controller/job.py` removes a clean landed clone before calling reconciliation. The clone will normally be gone when `reconcile_invalid` appears.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "3d27c94ce7306f296fe3c64f765a16478cbc2ec7c0eddd9d9a54a305c903a30c",
+              "verdict": "APPROVE",
+              "at": "2026-11-15T21:13:43Z"
+            }
+          ]
+        }
       }
     }
   }

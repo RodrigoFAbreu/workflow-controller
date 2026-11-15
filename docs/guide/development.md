@@ -128,9 +128,55 @@ they create their own tags.
 
 ## Verification policy
 
-- Full-suite verification uses the sharded default,
-  `python3 tools/run_tests.py`. Its coverage check proves every planned
-  test ran exactly once.
+- A checkpoint is verified by the tests its plan selects, not by the full
+  suite. Every checkpoint section of a plan ends with a `**Tests:**`
+  paragraph that lists, in backticks, the test modules or classes that
+  cover the changed code and the tests the checkpoint adds. The worker runs
+  `python3 tools/run_tests.py <those names>`; the runner's coverage check
+  proves every selected test ran exactly once. A checkpoint with no code or
+  test change (documentation only, as `tools/ci_changes.py` classifies it)
+  runs `python3 tools/check_docs.py`. A worker that finds the paragraph
+  missing runs the modules of the files it changed plus the guards below,
+  says so in `docs/ACTIVE_MILESTONE.md`, and never falls back to the full
+  suite.
+- The repository-wide guards ride along when the tree changes. A checkpoint
+  that adds, moves or removes a file under `controller/`, `tools/`, `tests/`
+  or `docs/` also runs `tests.test_package_structure`,
+  `tests.test_write_containment` and `tests.test_docs`; one that changes
+  `tools/ci_changes.py` or a path it classifies also runs
+  `tests.test_ci_changes`. A checkpoint that edits a path
+  `tools/ci_changes.py` keeps as code because a test reads it (its
+  `NOT_DOCUMENTATION` table) also runs the readers that table names; any
+  `docs/guide/` edit runs at least `tests.test_plan_document_consistency`,
+  which parses every guide's invocation lines against the live CLI parser.
+- The full suite is CI's. CI runs it on every pull request (about 19
+  minutes), apart from the two modules that run after the merge (below).
+  At most one local full run happens: at the self-review of the whole diff,
+  only when the diff touches shared code (a diff `tools/ci_changes.py`
+  classifies as `docs` needs none), and never at a checkpoint or in a
+  review-fix pass.
+- In this repository "the full required verification" of
+  `/milestone-implement` step 3 means that single self-review run (or
+  `python3 tools/check_docs.py` when the diff is documentation only), and
+  "the full suite" of `/apply-implementation-review` step 5 is not rerun in
+  a fix pass: a fix pass runs its fixes' selections plus the guards above
+  and leaves the full suite to CI on the pushed pull request.
+- Two exceptions run after the merge, not on the pull request:
+  `tests.test_catalogue_determinism` and `tests.test_scenarios_negative`
+  run in `main.yml` and gate the release (pull request validation uses
+  `--ci-placement`, `tools/test_shards.py`). A regression that only one of
+  them detects can therefore pass the pull request and surface after the
+  merge as a failed release gate; a change that touches the scenario
+  catalogue or its runner selects both in its `**Tests:**` paragraph. This
+  is the accepted cost of leaving the full suite to CI.
+- Two full suites never run at once. Before a full run, check that no other
+  run is live with
+  `pgrep -af '^[^ ]*python[0-9.]*( -[^ ]+)* [^ ]*tools/run_tests\.py'`
+  (exit 0 means a run is live, exit 1 means none), and wait or ask the
+  orchestrator if one is. The pattern is anchored to an interpreter running
+  the runner: the unanchored `pgrep -af 'tools/run_tests.py'` matches the
+  caller's own shell wrapper and always reports a live run. This is a
+  rule, not a lock.
 - A serial run (`--serial`, `--jobs 1`, `--shards 1`) is reference
   evidence for an exceptional question, such as whether a failure depends
   on co-residency. It is not a routine confidence rerun.
@@ -181,8 +227,8 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   (`tests.test_catalogue_determinism` and `tests.test_scenarios_negative`, see
   [Checks that run after the merge](ci-and-releases.md#checks-that-run-after-the-merge));
   a local full run still runs them, and
-  `python3 tools/run_tests.py main-check MODULE` runs one the way `main.yml`
-  does (it fails on an empty selection, a skip or a failure). `--shards N` pins it, `--jobs J` runs at most `J` at
+  `python3 tools/run_tests.py main-check MODULE` runs one the way `CI` does
+  on `main` (it fails on an empty selection, a skip or a failure). `--shards N` pins it, `--jobs J` runs at most `J` at
   once, and `--target-seconds`, `--min-shards` and `--max-shards`
   override the planning parameters. A shard runs its conformance suites
   in a helper process beside its Controller tests (the same executor in
@@ -212,6 +258,47 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   summary names every failing test with its traceback, its shard's log,
   and two reproduction commands: `python3 -m unittest <id>` alone, and
   `--replay ... --shard <i>` for the exact co-resident order.
+- **Namespace.** A local run starts each shard inside an isolated PID namespace
+  (`unshare --user --map-current-user --pid --fork --kill-child --mount-proc`), so a stray
+  `kill(-1, SIGKILL)` in a test reaches only that shard (#329). `--namespace auto|require|off`
+  sets the strictness; the default is `$CONTROLLER_TEST_NAMESPACE`, else `auto`.
+  - `auto` probes once whether the host allows an unprivileged user namespace
+    (the probe runs the same argv with `true`, so an `unshare` that lacks a flag fails the
+    probe, never a shard). If it fails the run goes on unwrapped with one notice naming the reason.
+  - `require` makes a failed probe a usage error (exit 2), and refuses a selection that holds a
+    namespace-unsafe module (below), because `require` means never unwrapped.
+  - `off` never probes and never wraps. `--plan-only` never probes. The header says
+    `namespace: isolated`, `namespace: none (<reason>)` or
+    `namespace: isolated for N of M shards (unwrapped: <modules>)`.
+  - **Unwrapped shards (the limit).** Wrapping breaks tests that read the lock probe or `/proc`
+    outside the init PID namespace (the probe then answers `unknown`, never `free`), tests that
+    expect a zombie to be reaped (the namespace's init does not reap), and a golden that
+    regenerates the scenario catalogue. `tools/test_shards.NAMESPACE_UNSAFE_MODULES` lists those
+    modules, each with its reason, found by comparing a wrapped and a bare full run (34
+    failures and 44 skips wrapped, 5 failures and 39 skips bare, over 6621 tests in 8 shards),
+    and a shard that holds one runs unwrapped as a whole, with one notice. A module also counts
+    when the namespace makes its tests skip: the init-namespace `free` tests of
+    `tests.test_observe` skip when wrapped, so they would silently stop running; CI is
+    unwrapped and runs them. **The planner spreads a module's atoms over several shards, so a
+    full or `--serial` local run wraps no shard** (`namespace: isolated for 0 of 8 shards`),
+    and `--namespace require` cannot run the full suite. The protection reaches a narrow
+    selection (a test file, a module, a fast loop: what a worker runs). A
+    follow-up item makes the suite namespace-clean and empties the list.
+  - **In a functional tester's sandbox.** Both testers' sandboxes refuse the launcher (TS1). A checklist
+    flow that needs `--namespace require`, or a test that proves the namespace, is an **operator flow**: the
+    tester records it `failed` with reason `environment`, and an operator runs it on the host and records it with
+    `record-external-result --kind functional_evidence`.
+  - **Not wrapped at all:** CI (it calls `exec-shard` directly, on disposable runners), and a bare
+    `python3 -m unittest ...`. Controller workers should run tests through `tools/run_tests.py`.
+  - **Ctrl-C.** The executor is PID 1 of its namespace and the kernel drops a signal from outside
+    to it unless it has a handler, so for a wrapped shard the runner sends SIGKILL to the shard's
+    group at once; `--kill-child` and the namespace's end take every process with it. An
+    unwrapped shard keeps SIGTERM, then SIGKILL after `INTERRUPT_GRACE_SECONDS`.
+  - **Leak signal.** When the namespace's init exits the kernel kills every other process in it, so
+    the runner's post-exit scan of a wrapped shard finds nothing: cleanup is stronger and the
+    leak report weaker. The executor's own in-namespace scan still runs, and CI keeps the full
+    signal, which is where a leak fails a run (see
+    [ADR 0005](../adr/0005-adaptive-test-sharding.md)).
 - **Leaks.** A test must end every process it starts. A process that
   outlives its shard is reported, then killed, and fails the run: the
   shard's verdict is `LEAKED` (exit 1) even if every test passed, unless
@@ -307,6 +394,8 @@ on 2026-11-09. Two layers stop it:
   group `1`, `0` or `-1` with an `AssertionError`. Signal `0` and every other target pass through, and a test that mocks
   `os.kill`/`os.killpg` replaces the guard. A command run through `subprocess` (`kill -9 -1`) is not covered.
 
+A third layer is the PID namespace `tools/run_tests.py` puts a namespace-safe shard in (see
+[The test runner](#the-test-runner), "Namespace" for the setting and its limits).
 A test that must send real signals to a broad target, and any run of a suite you do not trust yet, goes in an isolated
 PID namespace, where a stray `kill(-1)` reaches only the processes inside it:
 

@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-lt1",
+  "requirements": {
+    "R1": {
+      "description": "A worker's checkpoint verification runs only the tests the plan names for that checkpoint plus the repository-wide guards, never the full suite",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    },
+    "R2": {
+      "description": "The full suite is CI's: at most one local run, at the self-review, never in a review-fix pass, and two full runs never overlap (a documented rule)",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "The rule is pinned by a test and recorded with its trade-off and its two open decisions",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    }
+  }
+}

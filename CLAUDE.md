@@ -37,6 +37,22 @@ on update. Add repository-specific guidance below it; it is never touched.
 
 <!-- workflow-manager:end -->
 
+## Running tests
+
+At a checkpoint run only the test modules the plan's `**Tests:**` paragraph
+names, through `python3 tools/run_tests.py [names]`, which starts each
+namespace-safe shard in an isolated PID namespace so a stray `kill(-1)` reaches
+only the run (`docs/guide/development.md`, "The test runner"); never use a bare
+`python3 -m unittest` for a signal-sending test, and add the repository-wide
+guards when the tree changes (`docs/guide/development.md`, "Verification
+policy"). The full suite is CI's on the pull request, except
+`tests.test_catalogue_determinism` and `tests.test_scenarios_negative`, which
+run only after the merge and can fail the release gate for an unselected
+regression; run it locally at most once, at the self-review, and never two at
+once. Here `/milestone-implement` step 3's "full required verification" is that
+single self-review run, and `/apply-implementation-review` step 5's "full suite"
+is not rerun in a fix pass, which runs its fixes' selections plus the guards.
+
 ## Controller documentation
 
 - Documentation map (guides, ADRs, roadmap, history): `docs/README.md`

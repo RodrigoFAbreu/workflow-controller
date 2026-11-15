@@ -3,9 +3,9 @@
 #
 # Report-only reuse (CI_MAIN_REUSE unset, report or an unknown value): logs, in
 # its job summary, whether the merged pull request's CI run could have stood in
-# for main's shards. A workflow apart from main.yml: nothing waits for it, it does
-# not share main-release's concurrency group, and it cannot fail Main. Read-only;
-# the logic is tools/ci_reuse.py, shared with main.yml's reuse job.
+# for main's shards. A workflow apart from ci.yml: nothing waits for it, it does
+# not share main-release's concurrency group, and it cannot fail CI. Read-only;
+# the logic is tools/ci_reuse.py, shared with ci.yml's reuse job.
 name: "Main reuse report"
 "on":
   push:

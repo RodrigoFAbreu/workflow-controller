@@ -115,7 +115,12 @@ is for the Claude tester only. The Codex tester does not need it: its profile is
 roots), so your home and its own credential copy are not readable at all. The bound on a tester's `summary` and the
 `file://` origin check apply to both testers.
 
-Limits: `/usr`, `/etc` and the Codex and Controller install trees are readable; the stand-in `gh` refuses only by
+Limits: the PID-namespace launcher (`unshare --user ... --pid`) is stated as refused here too, as it is for the Claude
+tester, and the prompt tells the tester to try it once and record a refused flow as `failed` with reason `environment`,
+so the run ends `environment_limited` and an operator runs the flow on the host and records it (see
+[Automation](automation.md#what-the-controller-automates-and-how-it-stays-safe)); the Codex profile's own refusal is
+not measured, so the statement is conditional and a launcher that runs simply lets the flow pass.
+`/usr`, `/etc` and the Codex and Controller install trees are readable; the stand-in `gh` refuses only by
 name (`/usr/bin/gh` fails for lack of credentials and network, not because of the profile). The composed
 configuration is checked by `check_composed` (`controller/codex_sandbox.py`): it reads what Codex composes from the
 tester's home, flags and any managed layer (`codex app-server`, `config/read`, no model request), compares every
@@ -404,7 +409,9 @@ the two blocks; **the default is unchanged**: with no routing config, setting or
   verdict and makes the in-place command's write set. The Controller decides no state field. It refuses with one cause each:
   `recorder_branch_unsupported`, `recorder_feedback_foreign`, `recorder_index_dirty`, `recorder_identity_mismatch`,
   `recorder_interface_changed`, `state_identity_changed`, `workflow_release_changed`, `recorder_commit_pending` and
-  `workflow_refused`. The runner's own errors propagate unchanged.
+  `workflow_refused`. The runner's own errors propagate unchanged. Every Workflow query and the recorder's commit run with
+  signing switched off (`commit.gpgsign=false`, `tag.gpgsign=false`, `gpg.program=false`, like the hooks), so a target's own
+  `gpg.program` never runs in one.
 - **The read-only run** (`controller/codex_review_role.py`, `run_review`) runs one of the two roles as a Codex worker in the
   private clone of [a Codex worker's private clone](#a-codex-workers-private-clone-and-its-landing), made with
   `read_only=True`, which skips only the `managed_tree_not_clean` refusal (a read-only job lands nothing; the dirty paths are
@@ -419,7 +426,7 @@ the two blocks; **the default is unchanged**: with no routing config, setting or
   nothing is recorded: `verdict_over_bound` (1 MiB), `verdict_unparsed` (invalid UTF-8, a bad `Status:` or `Review scope:`, extra lines before the first section, or any of the eight protocol sections missing), `credential_in_verdict` (armour in the message, the
   worker's `stdout` or `stderr`, checked first on every result; the result is returned with those fields emptied, though the
   session rollouts stay in `codex-home/sessions` for the usage admission) and `read_only_violated` (the clone is not as the
-  run left it: a changed file, found by comparing the tree with the base commit through a fresh index the worker never touched, so an index flag such as `--skip-worktree` or `--assume-unchanged`, or a rewritten index entry, hides nothing; a new ref, a moved `HEAD`, a changed or extra input).
+  run left it: a changed file, found by comparing the tree with the base commit through a fresh index the worker never touched, so an index flag such as `--skip-worktree` or `--assume-unchanged`, or a rewritten index entry, hides nothing; tracked paths are compared entry by entry by type, executable bit and raw bytes, a file stored with one line ending and checked out with the other passing, and untracked and ignored files are listed too, so a worker's `.gitignore` of `*` hides nothing; a symlinked `.ai-review`; a new ref, a moved `HEAD`, a changed, extra or re-moded input). A path under the `ident` or `working-tree-encoding` attribute is a known false refusal, not computed; see [common problems](../common-problems.md#a-codex-review-ended-read_only_violated-on-a-clone-the-worker-did-not-change). A failure to remove `last-message.md` is not swallowed: the ending's evidence names it once, as `last_message_removal_error`, and the outcome is unchanged.
 - **The endings** (`Ending(code, cause, worker, evidence)`), the clone removed on each: `CodexReviewNotStarted`,
   `CodexReviewWorkerFailed` (`timeout`, `terminated_by_signal`, `usage_limit`, `non_zero_exit`, `no_final_message`,
   `sandbox_breach`), `CodexReviewRefused`, `ReviewStateIdentityChanged`, `workflow_release_changed`,
@@ -504,7 +511,9 @@ A review applier edits files that a clone made from committed state does not hol
 so the job *carries* a closed set of files into the Codex clone and back (`controller/codex_carry.py`):
 
 - **The set.** The plan role's set is derived from the managed state: the plan, the registry, the mapping and the artifacts
-  files of the work item, and the state file. The implementation role has none: the Controller first commits a pending feedback
+  files of the work item, and the state file. An item whose artifacts file declares more `plan_stage.protected_paths` than
+  those five files is refused (`carry_foreign_dirt` in, `carry_out_of_set` out), and the operator applies such an item's plan or
+  review change by hand: reading extra paths from the managed artifacts file would be a new trust decision. The implementation role has none: the Controller first commits a pending feedback
   entry through the Workflow's own writer, so the clone starts from a clean, committed state. Both roles also get the item's
   `feedback/`, `plan-inputs/` and `current/` directories as read-only inputs. What is carried back is the role's
   author-written inputs only: for the plan role `plan-inputs/REVIEW_REQUEST.md`, `TEST_RESULTS.md` and `CONTEXT_FILES.txt`; for
@@ -515,7 +524,8 @@ so the job *carries* a closed set of files into the Codex clone and back (`contr
   private-key armour line; a hardlink is read as bytes, and a member is always written by a rename, never through a link. After the run, before anything is written, the clone is checked: no commit, branch or tag made by the plan role, no
   change to the clone's `.git`, the same intent-to-add set, nothing changed outside the set, and the managed repository's members
   and this work item's own entry of the state file not changed by someone else meanwhile (another item's concurrent entry is
-  deliberately kept). Only the changed members are written, atomically, with the state file
+  deliberately kept). A refusal at this check writes nothing, so `codex_carry.not_written` then names only the state file, and
+  only when it caused the refusal. Only the changed members are written, atomically, with the state file
   last and only this work item's entry replaced, under the Workflow's own state lock (another item's concurrent entry is kept).
 - **The refusals.** One cause each, listed with their remedies in
   [common problems](../common-problems.md#a-codex-apply-was-refused-carry_): `carry_foreign_dirt`,
@@ -542,6 +552,11 @@ with stage `plan` for the plan role and `post-fix` for the implementation role (
 It runs it only when it can show that nothing the worker could have written is on what the interpreter loads or what the
 generator copies, and it never runs anything else of the managed tree (no other script, module, hook or test).
 
+- **What else runs the landed `scripts/`.** The generator is not the only thing: after an implementation-role landing
+  `explain` and every later Controller step run the Workflow's queries over the landed `scripts/`, checked only against the
+  committed `.workflow-manager/installation.json`, which the landing can edit with a script. The `surface_landing_touched` gate
+  says so, and the operator restores or verifies `scripts/` and `.workflow-manager/` before any Controller step, `explain`
+  included. The landing check described next runs before the job's own queries, but only for the job that landed.
 - **The checks before the run** (`controller/generator_run.py`):
   1. *The landing.* The implementation role's landed range (`carry base..landed head`, read as name-status records with renames
      split) may touch nothing under `scripts/` or `.workflow-manager/`, whatever the status letter. A range that cannot be read,
@@ -562,7 +577,7 @@ generator copies, and it never runs anything else of the managed tree (no other 
 - **The environment.** The generator runs with `PYTHONSAFEPATH=1`, `PYTHONNOUSERSITE=1`, `PYTHONDONTWRITEBYTECODE=1`, a private
   empty `PYTHONPYCACHEPREFIX` (no cached bytecode is read, forged or not) and a private empty `PYTHONPATH` (so the generator's
   own `scripts/:$PYTHONPATH` has no empty element, which Python would read as the working directory). Every other `PYTHON*`
-  variable, `BASH_ENV` and `ENV` are removed, and a private `bin/` first on `PATH` holds one `python3` link to the Controller's
+  variable, `BASH_ENV`, `ENV`, `SHELLOPTS`, `BASHOPTS` and every exported bash function (`BASH_FUNC_*`) are removed, and a private `bin/` first on `PATH` holds one `python3` link to the Controller's
   own interpreter. Git runs with hooks, filters, fsmonitor and transports off. The run is bounded to 600 seconds and keeps the
   last 4 KiB of each stream, withheld whole if the stream holds a private-key armour line or the kept part a closing one.
 - **After the run** the tree and the copy sources are checked again; one that no longer passes ends the run, because the
@@ -580,8 +595,13 @@ generator copies, and it never runs anything else of the managed tree (no other 
   or already at the carried revision, the first `reconcile` calls it invalid, and `resume` still regenerates (a second
   invalid `reconcile` after that run is the ending, as for a first run). The generator and everything it starts carry a tag of
   their own, recorded in the `regeneration` block before the run starts, so one that outlives a killed Controller is found by `resume` and
-  ended, with the previous worker's group, before the generator runs again. A refusal is not a cut-off run: its job is
-  `GATE_BLOCKED`, which `resume` reports and does not retry, so after a refusal you run the generator by hand.
+  ended, with the previous worker's group, before the generator runs again. The `finished` block keeps that tag too, so a
+  kill after the run ended still scans for a descendant that outlived it. For the plan role, the one role whose stale-bundle check
+  reads a carried revision, `resume` reruns the generator for a first `reconcile_invalid` only when the manifest is missing or
+  already at the carried-out entry's revision (the two torn shapes), never for a `REJECTED` bundle or another reason; the two
+  implementation roles keep the stage-only rule. A refusal is not a cut-off run: its job is
+  `GATE_BLOCKED`, which `resume` reports and does not retry, so after a refusal you run the generator by hand. A `run` made
+  again without regenerating ends at the Workflow's own bundle gate and launches no review.
 - **Still not done:** the Controller runs no other script, module, hook or test of the managed tree, commits, amends and
   writes no generation record beyond what the generator itself writes under `.ai-review/`, and it does not run the next
   stage (`/review-plan`, `/review-implementation`, an approval).

@@ -528,6 +528,21 @@ class ImplementationStageTest(RecorderCase):
         self.assertIsNone(again.values["committed"])
         self.assertEqual(fixtures.current_head(self.root), committed)
 
+    def test_commit_pending_runs_no_signing_program_from_the_targets_configuration(self) -> None:
+        """CX1, D1 (#320): a target's own `commit.gpgsign` and `gpg.program` start nothing; the commit is unsigned."""
+        marker = self.root.parent / f"{self.root.name}-gpg-ran"
+        program = self.root.parent / f"{self.root.name}-gpg.sh"
+        program.write_text(f"#!/bin/sh\necho ran >> {marker}\nexit 1\n")
+        program.chmod(0o755)
+        _git(self.root, "config", "commit.gpgsign", "true")
+        _git(self.root, "config", "gpg.program", str(program))
+        self._pending_revise()
+        result = review_recorder.commit_pending(self.root, WID, digests=self.check().values["digests"])
+        self.assertTrue(result.ok, result)
+        self.assertEqual(result.values["committed"], fixtures.current_head(self.root))
+        self.assertFalse(marker.exists())
+        self.assertNotIn("gpgsig", _git(self.root, "cat-file", "-p", "HEAD"))
+
     def test_commit_pending_after_a_controller_recorded_revise_has_nothing_to_commit(self) -> None:
         values = self.check().values
         self.record(self.compose(values, "REVISE"), values)

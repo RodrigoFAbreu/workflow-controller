@@ -90,33 +90,34 @@
 | 84 | [Codex worker, step 7](items/workflow-controller-h4g.md) `workflow-controller-h4g` | Done | - | workflow-controller-h4f |
 | 85 | [Fix the timing flakes: OrphanWatchdogTest readiness waits (#246) and the Ctrl-C test under load (#342); owner priority](items/workflow-controller-fx1.md) `workflow-controller-fx1` | Done | - | - |
 | 86 | [Move this repository to Workflow 2.29.3](items/workflow-controller-w1.md) `workflow-controller-w1` | Done | - | - |
-| 87 | [Run worker test commands in an isolated PID namespace (#329)](items/workflow-controller-ns1.md) `workflow-controller-ns1` | Next | - | - |
-| 88 | [Workers run the selected tests per checkpoint and leave the full suite to CI](items/workflow-controller-lt1.md) `workflow-controller-lt1` | Next | - | - |
-| 89 | [Let the functional tester sandbox run the PID-namespace launcher (unshare)](items/workflow-controller-ts1.md) `workflow-controller-ts1` | Next | - | - |
-| 90 | [List the Codex models in use instead of one fixed model](items/workflow-controller-cm1.md) `workflow-controller-cm1` | Next | - | - |
-| 91 | [Review follow-ups of the Codex worker items H4e2, H4e3 and H4e3b (#320, #339, #341)](items/workflow-controller-cx1.md) `workflow-controller-cx1` | Next | - | - |
+| 87 | [Run worker test commands in an isolated PID namespace (#329)](items/workflow-controller-ns1.md) `workflow-controller-ns1` | Done | - | - |
+| 88 | [Workers run the selected tests per checkpoint and leave the full suite to CI](items/workflow-controller-lt1.md) `workflow-controller-lt1` | Done | - | - |
+| 89 | [State that the functional tester sandbox refuses the PID-namespace launcher](items/workflow-controller-ts1.md) `workflow-controller-ts1` | Done | - | - |
+| 90 | [Review follow-ups of the Codex worker items H4e2, H4e3 and H4e3b (#320, #339, #341)](items/workflow-controller-cx1.md) `workflow-controller-cx1` | Done | - | - |
+| 91 | [List the Codex models in use instead of one fixed model](items/workflow-controller-cm1.md) `workflow-controller-cm1` | Next | - | - |
 | 92 | [Review follow-ups of the Codex worker item H4f (#344)](items/workflow-controller-cx2.md) `workflow-controller-cx2` | Next | - | - |
-| 93 | [CI follow-ups: the 20-minute PR CI target and the review follow-ups of CI1a-CI1c (#317, #322, #324)](items/workflow-controller-ci2.md) `workflow-controller-ci2` | Next | - | - |
-| 94 | [Controller ACTION_REQUIRED events: SignalHub answers format with choices, one event per gate (no duplicates)](items/workflow-controller-n1.md) `workflow-controller-n1` | Next | - | workflow-controller-h4g |
-| 95 | [The post-acceptance defect loop at the merge flow's \`checks_failing\` stop](items/workflow-controller-c10d-a.md) `workflow-controller-c10d-a` | Next | - | workflow-controller-c10c |
-| 96 | [The same report at a \`CHANGES_REQUESTED\` decision](items/workflow-controller-c10d-b.md) `workflow-controller-c10d-b` | Next | - | workflow-controller-c10d-a |
-| 97 | [Retention of finished work-item files](items/workflow-controller-cl1a.md) `workflow-controller-cl1a` | Next | - | - |
-| 98 | [A \`verify\` check that warns and then fails above a limit](items/workflow-controller-cl1b.md) `workflow-controller-cl1b` | Next | - | workflow-controller-cl1a |
-| 99 | [A safe prune command](items/workflow-controller-cl1c.md) `workflow-controller-cl1c` | Next | - | workflow-controller-cl1b |
-| 100 | [A notification](items/workflow-controller-cl1d.md) `workflow-controller-cl1d` | Next | - | workflow-controller-cl1b |
-| 101 | [An opt-in automatic cleanup after acceptance, off by default](items/workflow-controller-cl1e.md) `workflow-controller-cl1e` | Next | - | workflow-controller-cl1c |
-| 102 | [Self-recovery, part 1](items/workflow-controller-c12b.md) `workflow-controller-c12b` | Next | - | workflow-controller-c10d-a, workflow-controller-c10d-b |
-| 103 | [Self-recovery, part 2](items/workflow-controller-c12c.md) `workflow-controller-c12c` | Next | - | workflow-controller-c12b |
-| 104 | [Self-recovery, part 3](items/workflow-controller-c12d.md) `workflow-controller-c12d` | Next | - | workflow-controller-c12c |
-| 105 | [Per-repository caps and per-lane budget files](items/workflow-controller-c8c.md) `workflow-controller-c8c` | Next | - | workflow-controller-c8 |
-| 106 | [The kanban runner](items/workflow-controller-c11.md) `workflow-controller-c11` | Idea | - | workflow-controller-c8, workflow-controller-c10d-a, workflow-controller-c10d-b, workflow-controller-c12b, workflow-controller-c12c, workflow-controller-c12d |
-| 107 | [Backlog refinement, the measurement part](items/workflow-controller-a3.md) `workflow-controller-a3` | Idea | - | workflow-controller-a1, workflow-controller-a2a, workflow-controller-a2b |
-| 108 | [The tracker interface](items/workflow-controller-a4.md) `workflow-controller-a4` | Idea | - | workflow-controller-a2a, workflow-controller-a2b, workflow-controller-c11 |
-| 109 | [Escalation record](items/workflow-controller-o1.md) `workflow-controller-o1` | Idea | - | workflow-controller-c11 |
-| 110 | [Answer channel](items/workflow-controller-o2.md) `workflow-controller-o2` | Idea | - | workflow-controller-o1 |
-| 111 | [The decider](items/workflow-controller-o3.md) `workflow-controller-o3` | Idea | - | workflow-controller-o1, workflow-controller-o2 |
-| 112 | [Roadmap intake and progress reports](items/workflow-controller-o4.md) `workflow-controller-o4` | Idea | - | workflow-controller-o3 |
-| 113 | [Upgrades: install the Controller's own new releases safely](items/workflow-controller-o5.md) `workflow-controller-o5` | Idea | - | workflow-controller-o3 |
-| 114 | [Many repositories](items/workflow-controller-o6.md) `workflow-controller-o6` | Idea | - | workflow-controller-o5 |
-| 115 | [The control room](items/workflow-controller-o7.md) `workflow-controller-o7` | Idea | - | workflow-controller-o2, workflow-controller-o6 |
-| 116 | [Make the full test suite pass inside the PID namespace (follow-up of ns1)](items/workflow-controller-ns2.md) `workflow-controller-ns2` | Next | - | workflow-controller-ns1 |
+| 93 | [Move this repository to Workflow 2.29.6](items/workflow-controller-w2.md) `workflow-controller-w2` | Next | - | - |
+| 94 | [CI follow-ups: the 20-minute PR CI target and the review follow-ups of CI1a-CI1c (#317, #322, #324)](items/workflow-controller-ci2.md) `workflow-controller-ci2` | Next | - | - |
+| 95 | [Controller ACTION_REQUIRED events: SignalHub answers format with choices, one event per gate (no duplicates)](items/workflow-controller-n1.md) `workflow-controller-n1` | Next | - | workflow-controller-h4g |
+| 96 | [The post-acceptance defect loop at the merge flow's \`checks_failing\` stop](items/workflow-controller-c10d-a.md) `workflow-controller-c10d-a` | Next | - | workflow-controller-c10c |
+| 97 | [The same report at a \`CHANGES_REQUESTED\` decision](items/workflow-controller-c10d-b.md) `workflow-controller-c10d-b` | Next | - | workflow-controller-c10d-a |
+| 98 | [Retention of finished work-item files](items/workflow-controller-cl1a.md) `workflow-controller-cl1a` | Next | - | - |
+| 99 | [A \`verify\` check that warns and then fails above a limit](items/workflow-controller-cl1b.md) `workflow-controller-cl1b` | Next | - | workflow-controller-cl1a |
+| 100 | [A safe prune command](items/workflow-controller-cl1c.md) `workflow-controller-cl1c` | Next | - | workflow-controller-cl1b |
+| 101 | [A notification](items/workflow-controller-cl1d.md) `workflow-controller-cl1d` | Next | - | workflow-controller-cl1b |
+| 102 | [An opt-in automatic cleanup after acceptance, off by default](items/workflow-controller-cl1e.md) `workflow-controller-cl1e` | Next | - | workflow-controller-cl1c |
+| 103 | [Self-recovery, part 1](items/workflow-controller-c12b.md) `workflow-controller-c12b` | Next | - | workflow-controller-c10d-a, workflow-controller-c10d-b |
+| 104 | [Self-recovery, part 2](items/workflow-controller-c12c.md) `workflow-controller-c12c` | Next | - | workflow-controller-c12b |
+| 105 | [Self-recovery, part 3](items/workflow-controller-c12d.md) `workflow-controller-c12d` | Next | - | workflow-controller-c12c |
+| 106 | [Per-repository caps and per-lane budget files](items/workflow-controller-c8c.md) `workflow-controller-c8c` | Next | - | workflow-controller-c8 |
+| 107 | [The kanban runner](items/workflow-controller-c11.md) `workflow-controller-c11` | Idea | - | workflow-controller-c8, workflow-controller-c10d-a, workflow-controller-c10d-b, workflow-controller-c12b, workflow-controller-c12c, workflow-controller-c12d |
+| 108 | [Backlog refinement, the measurement part](items/workflow-controller-a3.md) `workflow-controller-a3` | Idea | - | workflow-controller-a1, workflow-controller-a2a, workflow-controller-a2b |
+| 109 | [The tracker interface](items/workflow-controller-a4.md) `workflow-controller-a4` | Idea | - | workflow-controller-a2a, workflow-controller-a2b, workflow-controller-c11 |
+| 110 | [Escalation record](items/workflow-controller-o1.md) `workflow-controller-o1` | Idea | - | workflow-controller-c11 |
+| 111 | [Answer channel](items/workflow-controller-o2.md) `workflow-controller-o2` | Idea | - | workflow-controller-o1 |
+| 112 | [The decider](items/workflow-controller-o3.md) `workflow-controller-o3` | Idea | - | workflow-controller-o1, workflow-controller-o2 |
+| 113 | [Roadmap intake and progress reports](items/workflow-controller-o4.md) `workflow-controller-o4` | Idea | - | workflow-controller-o3 |
+| 114 | [Upgrades: install the Controller's own new releases safely](items/workflow-controller-o5.md) `workflow-controller-o5` | Idea | - | workflow-controller-o3 |
+| 115 | [Many repositories](items/workflow-controller-o6.md) `workflow-controller-o6` | Idea | - | workflow-controller-o5 |
+| 116 | [The control room](items/workflow-controller-o7.md) `workflow-controller-o7` | Idea | - | workflow-controller-o2, workflow-controller-o6 |
+| 117 | [Make the full test suite pass inside the PID namespace (follow-up of ns1)](items/workflow-controller-ns2.md) `workflow-controller-ns2` | Next | - | workflow-controller-ns1 |

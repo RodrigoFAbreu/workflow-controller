@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ts1",
+  "requirements": {
+    "R1": {
+      "description": "Both testers' prompts and the checklist writer's note state that the PID-namespace launcher is refused in the sandbox and that such a flow is environment, from one shared text; nothing is allowed or faked",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The environment_limited stop names the launcher and the way to run and record the flow by hand",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "The pages and the item record say the limit, the mechanism chosen and rejected, and the two owner decisions; the item's title (backlog entry, page heading, roadmap row) says what shipped, not the rejected mechanism",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    }
+  }
+}

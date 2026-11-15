@@ -73750,7 +73750,7 @@
         }
       },
       "technical_approval": {
-        "status": "CURRENT",
+        "status": "STALE",
         "basis": "POLICY_SATISFIED",
         "reviewed_bundle_id": "845c1b5318f6012fe69404ead6795159b6c4dc425427b580f28d57fcb04cf7e1",
         "approved_review_content_id": "9719a21dcfd252bf47d8ef0dd6841213ce98b6eae9932e7cedad678df8f90e9c",
@@ -73897,8 +73897,8 @@
           "external": 1
         }
       },
-      "state_revision": 31,
-      "last_transition": "2026-11-14T22:00:32Z",
+      "state_revision": 32,
+      "last_transition": "2026-11-15T02:03:09Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -74212,6 +74212,124 @@
           "verdict_sha256": "bcd356d1b054bcb236e6727bd1577ad38effedbd94a213c617b808a6af3f615c",
           "run_ref": "codex:20261114T215553Z-a5bc658b",
           "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "gate_evidence": {
+        "functional": {
+          "flow-1": {
+            "flow_id": "flow-1",
+            "status": "passed",
+            "head": "b17ce6d404aec01ff505e01f80a7edd24b97bd77",
+            "ran_at": "2026-11-14T22:45:00Z",
+            "summary": {
+              "checklist_blob": "a5fca3cb83f0249e451e35b8e0114930ed7ab624",
+              "text": "Operator host run: 'namespace: isolated', '# Test run: PASS', rc=0."
+            },
+            "log_digest": "eb57e3eba248c3a9d826033948c1dcde368c63bc7b0c1801c7964b4f3c5033d2",
+            "run_ref": "operator-host: /tmp/tmp.Or01ITIeMf/f1.log",
+            "reporter": "operator",
+            "identity": "9719a21dcfd252bf47d8ef0dd6841213ce98b6eae9932e7cedad678df8f90e9c",
+            "recorded_at": "2026-11-14T22:34:04Z"
+          },
+          "flow-2": {
+            "flow_id": "flow-2",
+            "status": "failed",
+            "head": "b17ce6d404aec01ff505e01f80a7edd24b97bd77",
+            "ran_at": "2026-11-14T22:03:10Z",
+            "summary": {
+              "checklist_blob": "a5fca3cb83f0249e451e35b8e0114930ed7ab624",
+              "reason": "environment",
+              "text": "--namespace require exits 2 because the unshare probe fails in the sandbox; kill(-1) proof could not run. The shell stayed alive."
+            },
+            "log_digest": "bdbe1cfe044289b9ef8399b1eb267ff8f41c66ce492a44fb7149fb8cba06c5c6",
+            "run_ref": "controller:20261114T220213Z-4f267da7",
+            "reporter": "workflow-controller 1.31.1",
+            "identity": "9719a21dcfd252bf47d8ef0dd6841213ce98b6eae9932e7cedad678df8f90e9c",
+            "recorded_at": "2026-11-14T22:03:10Z"
+          },
+          "flow-3": {
+            "flow_id": "flow-3",
+            "status": "passed",
+            "head": "b17ce6d404aec01ff505e01f80a7edd24b97bd77",
+            "ran_at": "2026-11-14T22:03:10Z",
+            "summary": {
+              "checklist_blob": "a5fca3cb83f0249e451e35b8e0114930ed7ab624",
+              "text": "--namespace off and CONTROLLER_TEST_NAMESPACE=off both print 'namespace: none (off)' and PASS rc=0; --namespace bogus is a usage error, rc=2."
+            },
+            "log_digest": "951e28431c6bfb9bac64247fc224aad8a5c29dd4c7ebc003f3575465af3850bf",
+            "run_ref": "controller:20261114T220213Z-4f267da7",
+            "reporter": "workflow-controller 1.31.1",
+            "identity": "9719a21dcfd252bf47d8ef0dd6841213ce98b6eae9932e7cedad678df8f90e9c",
+            "recorded_at": "2026-11-14T22:03:11Z"
+          },
+          "flow-4": {
+            "flow_id": "flow-4",
+            "status": "failed",
+            "head": "b17ce6d404aec01ff505e01f80a7edd24b97bd77",
+            "ran_at": "2026-11-14T22:03:11Z",
+            "summary": {
+              "checklist_blob": "a5fca3cb83f0249e451e35b8e0114930ed7ab624",
+              "reason": "environment",
+              "text": "With tests.test_lock, require exited 2 but for the failed unshare probe, not the unsafe module, so the D9 refusal text could not be judged. auto ran bare with a notice and PASS (36 tests), as expected."
+            },
+            "log_digest": "e71b0d9965386a8d029e6ddb09e436e3f9c884b214376a372217ebd9f42a7522",
+            "run_ref": "controller:20261114T220213Z-4f267da7",
+            "reporter": "workflow-controller 1.31.1",
+            "identity": "9719a21dcfd252bf47d8ef0dd6841213ce98b6eae9932e7cedad678df8f90e9c",
+            "recorded_at": "2026-11-14T22:03:11Z"
+          },
+          "flow-5": {
+            "flow_id": "flow-5",
+            "status": "passed",
+            "head": "b17ce6d404aec01ff505e01f80a7edd24b97bd77",
+            "ran_at": "2026-11-14T22:03:11Z",
+            "summary": {
+              "checklist_blob": "a5fca3cb83f0249e451e35b8e0114930ed7ab624",
+              "text": "--namespace require --plan-only printed the plan (6629 tests, 8 shards), no refusal, rc=0."
+            },
+            "log_digest": "13674c19517e9332347fcbc5d0f0db24c1d81a881e804394f89387548f74cf9f",
+            "run_ref": "controller:20261114T220213Z-4f267da7",
+            "reporter": "workflow-controller 1.31.1",
+            "identity": "9719a21dcfd252bf47d8ef0dd6841213ce98b6eae9932e7cedad678df8f90e9c",
+            "recorded_at": "2026-11-14T22:03:11Z"
+          },
+          "flow-6": {
+            "flow_id": "flow-6",
+            "status": "passed",
+            "head": "b17ce6d404aec01ff505e01f80a7edd24b97bd77",
+            "ran_at": "2026-11-14T22:45:00Z",
+            "summary": {
+              "checklist_blob": "a5fca3cb83f0249e451e35b8e0114930ed7ab624",
+              "text": "Operator host run: --namespace require header 'namespace: isolated', PASS, rc=0; --namespace off header 'namespace: none (off)', PASS, rc=0."
+            },
+            "log_digest": "294ee67d1b3f74f092c9250aa81d26d2cead1e3287eb168d442500f0b34c1396",
+            "run_ref": "operator-host: /tmp/tmp.Or01ITIeMf/f6.log",
+            "reporter": "operator",
+            "identity": "9719a21dcfd252bf47d8ef0dd6841213ce98b6eae9932e7cedad678df8f90e9c",
+            "recorded_at": "2026-11-14T22:34:04Z"
+          },
+          "flow-7": {
+            "flow_id": "flow-7",
+            "status": "passed",
+            "head": "b17ce6d404aec01ff505e01f80a7edd24b97bd77",
+            "ran_at": "2026-11-14T22:03:11Z",
+            "summary": {
+              "checklist_blob": "a5fca3cb83f0249e451e35b8e0114930ed7ab624",
+              "text": "check_docs rc=0. development.md Namespace section states the three settings, full/--serial run unwrapped until follow-up, and D-consequences; the item page lists D6-D9 and O1/O2 as open owner decisions; CLAUDE.md has the test-running paragraph. development.md itself does not name O1/O2 (the item page does)."
+            },
+            "log_digest": "93ff7811a209e2a8479230bbb9b6bc19f7f311d3af383ec350c1db2a7e7d5494",
+            "run_ref": "controller:20261114T220213Z-4f267da7",
+            "reporter": "workflow-controller 1.31.1",
+            "identity": "9719a21dcfd252bf47d8ef0dd6841213ce98b6eae9932e7cedad678df8f90e9c",
+            "recorded_at": "2026-11-14T22:03:11Z"
+          }
+        },
+        "pr": null,
+        "pr_reported": null,
+        "pr_keys": {
+          "reopened_for": [],
+          "applied": [],
+          "ingest_seq": 0
         }
       }
     }

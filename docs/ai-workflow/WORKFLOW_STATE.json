@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-cx1",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -75865,6 +75865,277 @@
         },
         "evaluated_at": "2026-11-15T15:47:39Z",
         "workflow_release": "2.29.3"
+      }
+    },
+    "workflow-controller-cx1": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-cx1",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CX1_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-cx1-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-cx1-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 4,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "cd294d57452a16ac7e4e3d63e073fa4988cfa39d",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "74b93dbe0ec5f9b2e691f8c71aa3f48dda79bc13225820ddb2257443a2c93aec",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "74b93dbe0ec5f9b2e691f8c71aa3f48dda79bc13225820ddb2257443a2c93aec",
+        "approved_review_content_id": "2a49388eb3c60046a6aab2d379cc0814799a00ff74b3a1dbdd85d584a155f0c8",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CX1_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b85779f6b70e005c58419148a740862fdffa3838"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-cx1-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4e8210f9abd578eb4e04e2c512c41a13a54c4b9d"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-cx1-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "30be6cc41c0a1de10c3bcc68312e6fcdbc48590b"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-15T16:59:55Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "2a49388eb3c60046a6aab2d379cc0814799a00ff74b3a1dbdd85d584a155f0c8",
+            "ledger": {
+              "local": {
+                "bundle_id": "74b93dbe0ec5f9b2e691f8c71aa3f48dda79bc13225820ddb2257443a2c93aec",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "15b6199a50c1fe556c810df5319bf2cb99592bd88818e9505e15bf5d34406024",
+                "ledger_entry_sha256": "1248649ae3150c9fc27ce0c27ade34753ab666becc7832dca3ecbef924cf147d",
+                "run_ref": "session:local .ai-review/workflow-controller-cx1/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "74b93dbe0ec5f9b2e691f8c71aa3f48dda79bc13225820ddb2257443a2c93aec",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "ac0ebdaebcde907793ff789d0a05385f4d2963ae62082f3c97d7d393576cab7b",
+                "ledger_entry_sha256": "9934426d9c8483033f4ab078d1de634e817e434b4daba6fd7b76ade8042e458e",
+                "run_ref": "codex:20261115T165535Z-71a3f95d",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-15T16:59:55Z",
+          "workflow_release": "2.29.3"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "2a49388eb3c60046a6aab2d379cc0814799a00ff74b3a1dbdd85d584a155f0c8",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "74b93dbe0ec5f9b2e691f8c71aa3f48dda79bc13225820ddb2257443a2c93aec",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-11-15T16:55:06Z",
+          "verdict_sha256": "15b6199a50c1fe556c810df5319bf2cb99592bd88818e9505e15bf5d34406024",
+          "run_ref": "session:local .ai-review/workflow-controller-cx1/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "74b93dbe0ec5f9b2e691f8c71aa3f48dda79bc13225820ddb2257443a2c93aec",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-11-15T16:58:24Z",
+          "verdict_sha256": "ac0ebdaebcde907793ff789d0a05385f4d2963ae62082f3c97d7d393576cab7b",
+          "run_ref": "codex:20261115T165535Z-71a3f95d",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 4,
+          "external": 2
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 16,
+      "last_transition": "2026-11-15T16:59:55Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-15T16:53:36Z",
+        "consumed": {
+          "review_content_id": "5f2350f5291184b3543bb3a4a7c5558ff11b61de9bfd7555e69e774a9e49e2d2",
+          "plan_revision": 3,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "2a49388eb3c60046a6aab2d379cc0814799a00ff74b3a1dbdd85d584a155f0c8",
+          "plan_revision": 4
+        },
+        "bound": {
+          "review_content_id": "2a49388eb3c60046a6aab2d379cc0814799a00ff74b3a1dbdd85d584a155f0c8",
+          "bundle_id": "74b93dbe0ec5f9b2e691f8c71aa3f48dda79bc13225820ddb2257443a2c93aec",
+          "plan_revision": 4
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "30446f9dc0112d0b3ac7cacf9e813899177e8686f76da782e5c269d2f3ae57bb",
+        "5f2350f5291184b3543bb3a4a7c5558ff11b61de9bfd7555e69e774a9e49e2d2",
+        "d2fadd6b64c44400cadd6aa6fcc7de91e1686680e32e06fb83b152a014c6e452"
+      ],
+      "optional_findings": {
+        "F-5d84281372ae": {
+          "digest": "5d84281372ae7fbaf9f073d5a977ec753dd6c6f2f30701cbb5068df7af85fc2a",
+          "text": "**CX1-L1-O1 (D2): say where `last_message_removal_error` is attached.** `_run` has many `Ending` return paths after the removal (the credential refusal, `WORKER_FAILED`, `read_only_violated`, the recorded endings). Naming one place, the way `run_review` adds `clone_removal_error` once to whatever ending `_run` returned, keeps a later return path from dropping the key; the test could then check it on two different endings.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "d2fadd6b64c44400cadd6aa6fcc7de91e1686680e32e06fb83b152a014c6e452",
+              "verdict": "REVISE",
+              "at": "2026-11-15T16:41:33Z"
+            }
+          ]
+        },
+        "F-9308495ab518": {
+          "digest": "9308495ab518c7a61fde06732d290398abcc9dfcf9df950aba79a12e431f3c56",
+          "text": "**CX1-L1-O2 (D5): `SHELLOPTS` and `BASHOPTS` are the same class of inherited bash configuration.** A bash generator reads `SHELLOPTS` from its environment at startup, so `SHELLOPTS=xtrace` with a `PS4` holding a command substitution runs a program, as `BASH_ENV` does. Not in #341; record it as a follow-up if it is not dropped here.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "d2fadd6b64c44400cadd6aa6fcc7de91e1686680e32e06fb83b152a014c6e452",
+              "verdict": "REVISE",
+              "at": "2026-11-15T16:41:33Z"
+            }
+          ]
+        },
+        "F-c2ad1f0cdc90": {
+          "digest": "c2ad1f0cdc9030c6099d28af573a71f18c83ddf8431db2c5d603e7c9ee5c1a5a",
+          "text": "**CX1-L2-O1 (D3, CP2): the per-entry comparison should refuse a symlinked leading directory itself, not rely on `status`.** `lstat` follows every component but the last. Checked in a scratch repository: a tracked directory `a/` replaced by a symlink to an identical copy gives `lstat('a/f')` a regular file whose `hash-object --no-filters` equals the `ls-tree` blob, so the per-entry check passes it. Today it is still refused, but only because the fresh-index `status` lists `?? a` (and ` D a/f`, a tracked record D3 no longer reads). A check that a tracked path has no symlinked parent (an `lstat` of each parent component, or the gitlink-style \"still a directory\" test applied to every parent) keeps the tracked comparison complete on its own. A CP2 test of this swap would pin it either way.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "30446f9dc0112d0b3ac7cacf9e813899177e8686f76da782e5c269d2f3ae57bb",
+              "verdict": "APPROVE",
+              "at": "2026-11-15T16:46:08Z"
+            }
+          ]
+        },
+        "F-4ac7124fd9aa": {
+          "digest": "4ac7124fd9aa74fb0dcbea1f81a2c234ac8188be60e159a80a0b45a5d44a0b69",
+          "text": "**CX1-L2-O2 (D3, CP2): hash the regular files in one Git call.** One `git hash-object --no-filters <path>` per tracked entry starts one process per tracked file, which gets slow on a large target. `git hash-object --no-filters --stdin-paths` with only the entries whose `lstat` is a regular file (links are hashed from their `readlink` text, as D3 says) gives the same ids in one process.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "30446f9dc0112d0b3ac7cacf9e813899177e8686f76da782e5c269d2f3ae57bb",
+              "verdict": "APPROVE",
+              "at": "2026-11-15T16:46:08Z"
+            }
+          ]
+        },
+        "F-4688b1f78f90": {
+          "digest": "4688b1f78f9004217510d1790b9ce1cfe8096204ab541a3235b2949b71dd9dbf",
+          "text": "**CX1-L3-O1 (D3): \"an edit which changes only line endings ... changes no content\" holds only for text.** The `\\r\\n` → `\\n` accommodation applies to every regular tracked path, including one the base marks `binary` or `-text`. For such a file, adding or removing a CR before an LF changes its content, yet D3 would accept it. A read-only clone is discarded, so the harm is small. Limit the accommodation to paths the base's attributes mark `text` (or that Git's own heuristic treats as text), or reword the cost sentence so it says that binary files are covered too.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "5f2350f5291184b3543bb3a4a7c5558ff11b61de9bfd7555e69e774a9e49e2d2",
+              "verdict": "REVISE",
+              "at": "2026-11-15T16:52:10Z"
+            }
+          ]
+        },
+        "F-ba3ee5170453": {
+          "digest": "ba3ee51704539913d3115cf4712573316776c6a5aa599d3409490eb39b9ba522",
+          "text": "**CX1-L4-O1 (D3, CP2, CP4): the known false refusal covers only paths whose bytes checkout actually changes.** D3 says \"a path under the `ident` attribute ... is refused ... even in an unchanged clone\". That holds only when checkout changes the bytes. Probe on this machine (Git 2.56.1, `HOME` scrubbed, `GIT_CONFIG_NOSYSTEM=1`, `--no-checkout` clone then checkout): `*.c ident` with `x $Id$` and `*.u working-tree-encoding=UTF-16LE text` with `hello` both fail the raw and the newline-normalised comparison, which confirms the declared refusal. A file under `ident` that holds no `$Id$` keeps raw bytes equal to its blob and passes. A `working-tree-encoding` whose output equals the stored bytes (ASCII content under `ISO-8859-1`, for example) also passes. In CP2, give the `ident` fixture a `$Id$` keyword, or the pinning test sees a pass. In the `docs/common-problems.md` entry, say \"a file whose checkout expands `$Id$` or re-encodes its content\" rather than every path carrying the attribute. Also, \"`input`-style `read_only_violated`\" in D3 is a tracked-path problem, not an `input <path>` one: name the problem text the after-check will give.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "2a49388eb3c60046a6aab2d379cc0814799a00ff74b3a1dbdd85d584a155f0c8",
+              "verdict": "APPROVE",
+              "at": "2026-11-15T16:55:06Z"
+            }
+          ]
+        },
+        "F-72bcdfbcf379": {
+          "digest": "72bcdfbcf379d669ea7ebd9572dc2a01f4c951f8cfaa04dbf3cf7eadabe9fc01",
+          "text": "In CP2, specify that the `ident` fixture contains `$Id$`. The attribute alone leaves files without that keyword unchanged, so they pass D3’s comparison. Similarly, describe the documented limitation as affecting files whose checkout actually changes their bytes.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "2a49388eb3c60046a6aab2d379cc0814799a00ff74b3a1dbdd85d584a155f0c8",
+              "verdict": "APPROVE",
+              "at": "2026-11-15T16:58:24Z"
+            }
+          ]
+        }
       }
     }
   }

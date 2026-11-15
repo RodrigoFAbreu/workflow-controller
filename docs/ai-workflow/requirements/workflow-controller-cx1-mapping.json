@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-cx1",
+  "requirements": {
+    "R1": {
+      "description": "The recorder's commit runs no signing program from the target's configuration (#320, a real defect), proved by a hostile-configuration test",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "A failed deletion of last-message.md is named in the evidence, and the two untested branches are tested (#320)",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "after_check compares the mode, refuses a symlinked .ai-review and ignored files, compares tracked paths by type, mode and bytes (newline-normalised where checkout converted them), no longer refuses an unchanged line-ending-normalised (either direction) or symlink-holding clone, and states, with a pinning test and a page entry, that ident and working-tree-encoding paths remain a known false refusal (#320)",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "The finished block keeps the ownership tag, _interrupted_publication accepts only the two torn-manifest states for the plan role (the implementation roles unchanged, tested), and BASH_FUNC_*, SHELLOPTS and BASHOPTS are dropped from the generator's environment with a poisoned-environment test (#341 items 1 to 3)",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R5": {
+      "description": "The gate text and pages say what the landing exposes (#341 item 4), what not_written and the carry's named set mean and what a run past the regeneration gate does (#339), and one test pins that run's refusal",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    }
+  }
+}

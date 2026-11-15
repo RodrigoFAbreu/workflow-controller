@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-cx1",
+  "plan_revision": 4,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "The recorder's commit signs nothing and the review role names a failed deletion",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "The after-check compares the mode, links, ignored files and raw bytes",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "The regeneration record keeps its tag, resumes narrowly and the generator's environment has no exported functions",
+      "depends_on": [
+        "CP2"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "The gate text, the pages and the item record",
+      "depends_on": [
+        "CP3"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    }
+  ]
+}

@@ -76611,7 +76611,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-cx2-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-cx2-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 2,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -76751,12 +76751,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
+          "local": 1,
           "external": 0
         }
       },
-      "state_revision": 14,
-      "last_transition": "2026-11-15T21:39:53Z",
+      "state_revision": 15,
+      "last_transition": "2026-11-15T21:43:00Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -76819,6 +76819,20 @@
               "review_content_id": "3d27c94ce7306f296fe3c64f765a16478cbc2ec7c0eddd9d9a54a305c903a30c",
               "verdict": "APPROVE",
               "at": "2026-11-15T21:13:43Z"
+            }
+          ]
+        },
+        "F-8a1267361c75": {
+          "digest": "8a1267361c75572cad114fa9aa36380086c6ff58d133a1be479d5733ff531028",
+          "text": "**CX2-I-L1-O01:** R1 in the plan's requirement map still reads \"tolerating only the multiple-worktrees refusal\". The self-review's second tolerated refusal (extension on, no `config.worktree`) is right: Git's own `status` treats a missing file as nothing set, and so does a dangling symlink, which I checked on git 2.56.1 (`git config --worktree --list` exits 128 with the same ENOENT message, while `git status` exits 0). The deviation is recorded on the item page and in `docs/ACTIVE_MILESTONE.md`. The pull request description should state it too, so the acceptance check against R1 does not read it as a miss.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "8d9b23415eddaa209d06faef61f71c028e55826397ad45f58b8a59cdff4cec1f",
+              "verdict": "REVISE",
+              "at": "2026-11-15T21:43:00Z"
             }
           ]
         }

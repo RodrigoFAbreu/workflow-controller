@@ -506,7 +506,7 @@ items:
     detail: docs/items/workflow-controller-w1.md
   - id: workflow-controller-ns1
     title: "Run worker test commands in an isolated PID namespace (#329)"
-    status: next
+    status: done
     order: 87
     depends_on: []
     detail: docs/items/workflow-controller-ns1.md

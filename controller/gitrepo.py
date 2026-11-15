@@ -1004,12 +1004,15 @@ def diff_raw(repo_root: Path, base: str, tip: str, *, runner: Runner | None = No
 _FILTER_KEY = re.compile(r"^filter\.(?P<name>.+)\.(?P<variable>[^.]+)$")
 
 def filter_disabling_config(repo_root: Path, *, runner: Runner | None = None) -> tuple[str, ...]:
-    """The ``-c`` options that switch off every filter driver ``repo_root``'s own configuration names
+    """The ``-c`` options that switch off every filter driver the configuration ``repo_root`` is read in names
     (``workflow-controller-h4f``, D6b): each driver's ``process``, ``clean`` and ``smudge`` set empty, which Git reads
     as no filter, and ``required`` false, so a status of a tree whose stat data is racy runs no program of the tree's
     configuration. One read, ``git config --includes --name-only --list -z``, in the combined context ``git status``
     itself uses: ``.git/config``, ``config.worktree`` (``extensions.worktreeConfig``) and what they include
-    (``workflow-controller-cx2``, D1). Separate per-scope reads cannot resolve an ``includeIf "hasconfig:remote.*.url:"``
+    (``workflow-controller-cx2``, D1). The read also names system, global and ``GIT_CONFIG_PARAMETERS`` drivers whenever
+    the caller's environment lets Git see them; ``codex_worker_landing.unfinished_work`` runs it in the scrubbed
+    environment of ``review._git_env`` (no system file, ``HOME`` the job base), which excludes the first two
+    (``CX2-I-L3-O01``). Separate per-scope reads cannot resolve an ``includeIf "hasconfig:remote.*.url:"``
     condition that another scope satisfies (``CX2-E-I01``), and a missing ``config.worktree`` or a linked worktree
     without the extension is simply no worktree scope there, so no refusal needs tolerating. Any failure raises. The
     names are the clone's, so every one is passed as an argument, never through a shell."""

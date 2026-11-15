@@ -284,6 +284,10 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
     and `--namespace require` cannot run the full suite. The protection reaches a narrow
     selection (a test file, a module, a fast loop: what a worker runs). A
     follow-up item makes the suite namespace-clean and empties the list.
+  - **In a functional tester's sandbox.** Both testers' sandboxes refuse the launcher (TS1). A checklist
+    flow that needs `--namespace require`, or a test that proves the namespace, is an **operator flow**: the
+    tester records it `failed` with reason `environment`, and an operator runs it on the host and records it with
+    `record-external-result --kind functional_evidence`.
   - **Not wrapped at all:** CI (it calls `exec-shard` directly, on disposable runners), and a bare
     `python3 -m unittest ...`. Controller workers should run tests through `tools/run_tests.py`.
   - **Ctrl-C.** The executor is PID 1 of its namespace and the kernel drops a signal from outside

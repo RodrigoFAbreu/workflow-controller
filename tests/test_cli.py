@@ -27,6 +27,7 @@ import contextlib
 import dataclasses
 import errno
 import hashlib
+import inspect
 import io
 import json
 import os
@@ -43,7 +44,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from controller import (  # noqa: E402
-    cli, decision, evidence, identity, job, lock, managed_repo, milestone_branch, notify, observe, review_rounds, routing, runtime, settings,
+    cli, decision, evidence, identity, job, lock, managed_repo, milestone_branch, model_discovery, notify, observe, review,
+    review_rounds, routing, runtime, settings,
     worker,
 )
 from controller.decision import Action, Decision  # noqa: E402
@@ -830,7 +832,7 @@ class RoutingOptionsParserTest(unittest.TestCase):
         args = cli.build_parser().parse_args([
             "--role-harness", "functional-tester=codex", "--role-model", "functional-tester=gpt-6.1-sol",
             "--role-effort", "functional-tester=high", "step", "/target"])
-        route = cli._routing_options(args).resolve("functional-tester")
+        route = cli._routing_options(args, Path("/unused")).resolve("functional-tester")
         self.assertEqual((route.harness, route.model, route.effort), ("codex", "gpt-6.1-sol", "high"))
 
     def test_the_role_harness_option_parses_into_the_routing_options(self) -> None:
@@ -839,7 +841,7 @@ class RoutingOptionsParserTest(unittest.TestCase):
             "step", "/target",
         ])
         self.assertEqual(args.role_harness, {"review-plan": "claude-code", "functional-tester": "claude-code"})
-        self.assertEqual(dict(cli._routing_options(args).cli_role_harnesses), args.role_harness)
+        self.assertEqual(dict(cli._routing_options(args, Path("/unused")).cli_role_harnesses), args.role_harness)
 
     def test_a_local_review_role_parses_with_the_codex_harness(self) -> None:
         # h4e2b (D1): the two local review roles run as `local-reviewer`, which codex declares.
@@ -847,14 +849,14 @@ class RoutingOptionsParserTest(unittest.TestCase):
             args = cli.build_parser().parse_args([
                 "--role-harness", f"{role}=codex", "--role-model", f"{role}=gpt-6.1-sol",
                 "--role-effort", f"{role}=high", "step", "/target"])
-            route = cli._routing_options(args).resolve(role)
+            route = cli._routing_options(args, Path("/unused")).resolve(role)
             self.assertEqual((route.harness, route.model, route.effort), ("codex", "gpt-6.1-sol", "high"))
 
     def test_the_defaults_are_no_overrides(self) -> None:
         args = cli.build_parser().parse_args(["step", "/target"])
         for name in ("model", "effort", "role_model", "role_effort", "role_harness", "routing_config"):
             self.assertIsNone(getattr(args, name), name)
-        self.assertEqual(cli._routing_options(args), routing.NO_OVERRIDES)
+        self.assertEqual(cli._routing_options(args, Path("/unused")), routing.NO_OVERRIDES)
 
     def test_every_malformed_routing_option_exits_2_and_writes_nothing(self) -> None:
         cases = {
@@ -924,6 +926,67 @@ class RoutingOptionsPassThroughTest(_StepFixture, unittest.TestCase):
                 self.assertEqual(dict(options.cli_role_models), {"review-plan": "haiku"})
                 self.assertEqual(dict(options.cli_role_efforts), {"milestone-plan": "low"})
                 self.assertEqual(dict(options.config.roles["review-plan"]), {"effort": "max"})
+
+    def _codex_route_args(self, model: str) -> _Args:
+        return self._args_with(
+            role_harness={"review-plan": "codex"}, role_model={"review-plan": model},
+            role_effort={"review-plan": "high"})
+
+    def _stub_lookup(self, record: routing.ModelDiscovery) -> list:
+        calls: list = []
+
+        def fake_lookup(name, runtime_root, **kwargs):
+            calls.append((name, kwargs))
+            return record
+
+        self.enterContext(unittest.mock.patch.object(model_discovery, "lookup", fake_lookup))
+        return calls
+
+    def test_a_listed_codex_model_is_accepted_through_the_lookup(self) -> None:
+        calls = self._stub_lookup(
+            routing.ModelDiscovery(("gpt-6.1-terra",), routing.SOURCE_DISCOVERED, "2026-11-16T00:00:00Z"))
+        options = cli._routing_options(self._codex_route_args("gpt-6.1-terra"), self.runtime_root)
+        self.assertEqual(options.resolve("review-plan").model, "gpt-6.1-terra")
+        self.assertEqual([(name, kw.get("allow_run", True)) for name, kw in calls], [("codex", True)])
+
+    def test_an_unlisted_codex_model_is_refused_naming_the_reason(self) -> None:
+        self._stub_lookup(routing.ModelDiscovery(source=routing.SOURCE_UNAVAILABLE, reason="codex not found"))
+        with self.assertRaises(RoutingConfigError) as ctx:
+            cli._routing_options(self._codex_route_args("gpt-6.1-terra"), self.runtime_root)
+        self.assertIn("unavailable: codex not found", ctx.exception.message)
+        self.assertEqual(ctx.exception.evidence["field"], "model")
+
+    def test_the_refusal_reaches_exit_20_for_step_and_run(self) -> None:
+        job.execute_step = self._orig_execute_step  # the real one: nothing may reach it
+        self._stub_lookup(routing.ModelDiscovery(source=routing.SOURCE_UNAVAILABLE, reason="codex not found"))
+        for command in (cli.cmd_step, cli.cmd_run):
+            with self.subTest(command=command.__name__):
+                args = self._codex_route_args("gpt-6.1-terra")
+                stderr = io.StringIO()
+                with unittest.mock.patch.object(cli, "_dispatch",
+                                                lambda a, argv: command(args, self.runtime_root, self.ident)), \
+                        contextlib.redirect_stderr(stderr):
+                    self.assertEqual(cli.main(["step", str(self.repo)]), cli.EXIT_FAIL_CLOSED)
+                self.assertIn("unavailable: codex not found", stderr.getvalue())
+                self.assertEqual(list(self.runtime_root.glob("jobs/*.json")), [])
+
+    def test_declared_models_never_call_the_lookup(self) -> None:
+        calls = self._stub_lookup(routing.ModelDiscovery())
+        cli._routing_options(self._codex_route_args("gpt-6.1-sol"), self.runtime_root)
+        cli._routing_options(self._args_with(), self.runtime_root)
+        self.assertEqual(calls, [])
+
+    def test_a_read_only_call_runs_nothing_and_writes_no_catalogue(self) -> None:
+        ran: list = []
+        self.enterContext(unittest.mock.patch.object(review, "run_bounded", lambda *a, **k: ran.append(a)))
+        with self.assertRaises(RoutingConfigError) as ctx:
+            cli._routing_options(self._codex_route_args("gpt-6.1-terra"), self.runtime_root, allow_run=False)
+        self.assertEqual(ran, [])
+        self.assertFalse((self.runtime_root / "model-catalog").exists())
+        self.assertIn("not looked up", ctx.exception.message)
+
+    def test_explain_builds_its_routing_options_read_only(self) -> None:
+        self.assertIn("allow_run=False", inspect.getsource(cli.cmd_explain))
 
     def test_a_namespace_without_the_options_routes_by_the_built_in_table(self) -> None:
         for command in (cli.cmd_step, cli.cmd_run):
@@ -3319,26 +3382,26 @@ class SettingsWiringTest(_StepFixture, unittest.TestCase):
 
     def test_routing_from_the_settings_section_unless_routing_config_replaces_it(self) -> None:
         section = {"routing": {"roles": {"milestone-plan": {"model": "claude-sonnet-5-5"}}}}
-        options = cli._routing_options(self._args(section))
+        options = cli._routing_options(self._args(section), self.runtime_root)
         self.assertEqual((options.config_source, dict(options.config.roles["milestone-plan"])),
                          (routing.CONFIG_SOURCE_SETTINGS, {"model": "claude-sonnet-5-5"}))
         config_path = self.tmp_root / "routing.json"
         config_path.write_text(json.dumps({"schema_version": 1, "roles": {"review-plan": {"effort": "max"}}}))
-        options = cli._routing_options(self._args(routing_config=str(config_path)))
+        options = cli._routing_options(self._args(routing_config=str(config_path)), self.runtime_root)
         # I1: the --routing-config file replaces the section as a whole.
         self.assertEqual(options.config_source, routing.CONFIG_SOURCE_ROUTING_CONFIG)
         self.assertEqual(set(options.config.roles), {"review-plan"})
         self.settings_path.unlink()
-        options = cli._routing_options(self._args(write=False))
+        options = cli._routing_options(self._args(write=False), self.runtime_root)
         self.assertEqual((options.config_source, options.config), (routing.CONFIG_SOURCE_NONE, None))
 
     def test_harness_models_reach_the_routing_options_and_extend_the_accepted_models(self) -> None:
         routed = {"routing": {"roles": {"milestone-plan": {"model": "claude-opus-5-6"}}}}
         with self.assertRaises(RoutingConfigError) as ctx:
-            cli._routing_options(self._args(routed))
+            cli._routing_options(self._args(routed), self.runtime_root)
         self.assertIn("harness.models", ctx.exception.message)
         routed["harness"] = {"models": {"claude-code": ["claude-opus-5-6"]}}
-        options = cli._routing_options(self._args(routed))
+        options = cli._routing_options(self._args(routed), self.runtime_root)
         self.assertEqual(dict(options.harness_models), {"claude-code": ("claude-opus-5-6",)})
 
     def test_the_real_job_records_controller_settings_and_the_routes_source(self) -> None:

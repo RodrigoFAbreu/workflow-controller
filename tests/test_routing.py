@@ -693,5 +693,78 @@ class ModelDiscoveryRecordTest(unittest.TestCase):
             routing.ModelDiscovery(source="guessed")
 
 
+class DiscoveredModelRouteTest(unittest.TestCase):
+    """``RoutingOptions.discovery`` widens the accepted models and names its
+    sources in a refusal (CM1, D2 and D6)."""
+
+    def _options(self, model: str, harness_name: str = "codex", **kwargs) -> routing.RoutingOptions:
+        return routing.RoutingOptions(
+            cli_role_harnesses={"review-plan": harness_name}, cli_role_models={"review-plan": model},
+            cli_role_efforts={"review-plan": "high"}, **kwargs)
+
+    def _refusal(self, **kwargs) -> RoutingConfigError:
+        with self.assertRaises(RoutingConfigError) as ctx:
+            self._options("gpt-6.1-nope", **kwargs)
+        return ctx.exception
+
+    def test_a_discovered_model_passes_and_the_discovery_is_frozen(self) -> None:
+        found = routing.ModelDiscovery(("gpt-6.1-terra",), routing.SOURCE_DISCOVERED, "2026-11-16T00:00:00Z")
+        options = self._options("gpt-6.1-terra", discovery={"codex": found})
+        self.assertEqual(options.resolve("review-plan").model, "gpt-6.1-terra")
+        with self.assertRaises(TypeError):
+            options.discovery["codex"] = found  # type: ignore[index]
+
+    def test_a_pinned_model_passes_with_an_empty_discovery(self) -> None:
+        self._options("gpt-6.1-sol", discovery={"codex": routing.ModelDiscovery()})
+        self._options("gpt-6.1-sol")
+
+    def test_a_model_in_no_list_is_refused_with_the_three_lists_and_the_evidence(self) -> None:
+        found = routing.ModelDiscovery(("gpt-6.1-terra",), routing.SOURCE_DISCOVERED, "2026-11-16T00:00:00Z")
+        exc = self._refusal(discovery={"codex": found}, harness_models={"codex": ("added-1",)})
+        self.assertIn(
+            "(accepted for codex: declared ['gpt-6.1-sol']; discovered ['gpt-6.1-terra']; "
+            "added by harness.models ['added-1'])", exc.message)
+        self.assertTrue(exc.message.endswith("; add a model the harness accepts with the harness.models setting"))
+        self.assertEqual(exc.evidence["field"], "model")
+        self.assertEqual(exc.evidence["accepted"], {
+            "declared": ["gpt-6.1-sol"], "discovered": ["gpt-6.1-terra"], "added": ["added-1"]})
+
+    def test_the_refusal_text_follows_each_discovery_source(self) -> None:
+        cases = {
+            routing.SOURCE_CACHE: (routing.ModelDiscovery(("m1",), routing.SOURCE_CACHE, "T"), "discovered ['m1']"),
+            routing.SOURCE_DISCOVERED: (
+                routing.ModelDiscovery(("m1",), routing.SOURCE_DISCOVERED, "T"), "discovered ['m1']"),
+            routing.SOURCE_NOT_LOOKED_UP: (routing.ModelDiscovery(), "not looked up"),
+            routing.SOURCE_UNAVAILABLE: (
+                routing.ModelDiscovery(source=routing.SOURCE_UNAVAILABLE, reason="no codex"), "unavailable: no codex"),
+            routing.SOURCE_STALE: (
+                routing.ModelDiscovery(("m1",), routing.SOURCE_STALE, "2026-11-15T00:00:00Z"),
+                "stale cache from 2026-11-15T00:00:00Z ['m1']"),
+        }
+        for source, (record, words) in cases.items():
+            with self.subTest(source=source):
+                self.assertIn(f"declared ['gpt-6.1-sol']; {words}; added by", self._refusal(
+                    discovery={"codex": record}).message)
+
+    def test_a_harness_without_a_lookup_leaves_the_discovery_part_out(self) -> None:
+        record = routing.ModelDiscovery(source=routing.SOURCE_UNSUPPORTED, reason="none")
+        for discovery in ({}, {"claude-code": record}):
+            with self.subTest(discovery=bool(discovery)), self.assertRaises(RoutingConfigError) as ctx:
+                routing.RoutingOptions(
+                    cli_model="nonsense", discovery=discovery, harness_models={"claude-code": ("x",)})
+            self.assertIn("routes the model 'nonsense' to the harness 'claude-code'", ctx.exception.message)
+            self.assertIn(" (accepted for claude-code: declared [", ctx.exception.message)
+            self.assertIn("; added by harness.models ['x'])", ctx.exception.message)
+            self.assertNotIn("not looked up", ctx.exception.message)
+            self.assertNotIn("discovered", ctx.exception.message)
+
+    def test_an_effort_refusal_has_no_accepted_list(self) -> None:
+        with self.assertRaises(RoutingConfigError) as ctx:
+            routing.RoutingOptions(cli_role_harnesses={"review-plan": "codex"}, cli_role_models={
+                "review-plan": "gpt-6.1-sol"}, cli_role_efforts={"review-plan": "max"})
+        self.assertEqual(ctx.exception.evidence["field"], "effort")
+        self.assertNotIn("accepted for", ctx.exception.message)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -796,6 +796,9 @@ class RoutingOptions:
     config_source: str | None = None
     #: The ``harness.models`` setting: models added per harness name (H8).
     harness_models: Mapping[str, tuple[str, ...]] = dataclasses.field(default_factory=dict)
+    #: What each harness's own model lookup answered (CM1, D2), by harness
+    #: name; its models add to the declared ones, never replace them.
+    discovery: Mapping[str, ModelDiscovery] = dataclasses.field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.config_source is None:
@@ -813,18 +816,24 @@ class RoutingOptions:
         object.__setattr__(self, "harness_models", MappingProxyType({
             name: tuple(models) for name, models in dict(self.harness_models).items()
         }))
+        object.__setattr__(self, "discovery", MappingProxyType(dict(self.discovery)))
+        allowed_extra = {
+            name: tuple(self.discovery[name].models if name in self.discovery else ())
+            + tuple(self.harness_models.get(name, ()))
+            for name in {*self.harness_models, *self.discovery}
+        }
         for role in sorted(ROLES):
             route = self.resolve(role)
             try:
-                check_route_values(role, route.harness, route.model, route.effort, self.harness_models)
+                check_route_values(role, route.harness, route.model, route.effort, allowed_extra)
             except ValueError as exc:
                 raise RoutingConfigError(
                     f"{exc} (model from {_source_words(route.model_source)}, effort from "
                     f"{_source_words(route.effort_source)}, harness from {_source_words(route.harness_source)})"
-                    + ("; add a model the harness accepts with the harness.models setting"
-                       if "routes the model" in str(exc) else ""),
+                    + self._model_refusal_tail(route.harness, exc),
                     evidence={
                         "role": role, "harness": route.harness, "model": route.model, "effort": route.effort,
+                        **self._refusal_evidence(route.harness, exc),
                         "sources": {
                             "model": route.model_source, "effort": route.effort_source,
                             "harness": route.harness_source,
@@ -833,21 +842,59 @@ class RoutingOptions:
                 ) from exc
             for position, later in enumerate(self.chain(role)[1:], start=1):
                 try:
-                    check_route_values(role, later.harness, later.model, later.effort, self.harness_models)
+                    check_route_values(role, later.harness, later.model, later.effort, allowed_extra)
                 except ValueError as exc:
                     raise RoutingConfigError(
                         f"{exc} (fallback entry {position} of the role's chain)"
-                        + ("; add a model the harness accepts with the harness.models setting"
-                           if "routes the model" in str(exc) else ""),
+                        + self._model_refusal_tail(later.harness, exc),
                         evidence={
                             "role": role, "entry": position, "harness": later.harness, "model": later.model,
                             "effort": later.effort,
+                            **self._refusal_evidence(later.harness, exc),
                             "sources": {
                                 "model": later.model_source, "effort": later.effort_source,
                                 "harness": later.harness_source,
                             },
                         },
                     ) from exc
+
+    def _accepted(self, harness_name: str) -> dict[str, list[str]]:
+        """The three lists a model refusal names (D6): what the adapter
+        declares, what the lookup found and what ``harness.models`` added."""
+        found = self.discovery.get(harness_name)
+        return {
+            "declared": list(harness.get(harness_name).models),
+            "discovered": list(found.models) if found is not None else [],
+            "added": list(self.harness_models.get(harness_name, ())),
+        }
+
+    def _refusal_evidence(self, harness_name: str, exc: ValueError) -> dict[str, Any]:
+        if "routes the model" in str(exc):
+            return {"field": "model", "accepted": self._accepted(harness_name)}
+        return {"field": "effort"}
+
+    def _model_refusal_tail(self, harness_name: str, exc: ValueError) -> str:
+        """For a model refusal: where each accepted model came from, then the
+        setting that adds one (D6). Empty for an effort refusal."""
+        if "routes the model" not in str(exc):
+            return ""
+        lists = self._accepted(harness_name)
+        parts = [f"declared {lists['declared']}"]
+        found = self.discovery.get(harness_name)
+        if found is not None and found.source != SOURCE_UNSUPPORTED:
+            if found.source in (SOURCE_DISCOVERED, SOURCE_CACHE):
+                parts.append(f"discovered {lists['discovered']}")
+            elif found.source == SOURCE_STALE:
+                parts.append(f"stale cache from {found.fetched_at} {lists['discovered']}")
+            elif found.source == SOURCE_UNAVAILABLE:
+                parts.append(f"unavailable: {found.reason}")
+            else:
+                parts.append("not looked up")
+        parts.append(f"added by harness.models {lists['added']}")
+        return (
+            f" (accepted for {harness_name}: {'; '.join(parts)})"
+            "; add a model the harness accepts with the harness.models setting"
+        )
 
     def resolve(self, role: str) -> ResolvedRoute:
         return resolve_route(

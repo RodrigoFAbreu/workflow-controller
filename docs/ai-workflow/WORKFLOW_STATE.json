@@ -77391,7 +77391,7 @@
         }
       },
       "technical_approval": {
-        "status": "CURRENT",
+        "status": "STALE",
         "basis": "POLICY_SATISFIED",
         "reviewed_bundle_id": "3d8c46972d9fe7d8b56d466060a62eca4967ec2aa36e061f964cc1654d7ad35b",
         "approved_review_content_id": "51c80fd4994bdea2faadebfa1210d05d85c66d43c7f45d27cda3722f1d6d8a65",
@@ -77574,8 +77574,8 @@
           "external": 1
         }
       },
-      "state_revision": 27,
-      "last_transition": "2026-11-16T01:23:54Z",
+      "state_revision": 28,
+      "last_transition": "2026-11-16T01:27:39Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -77761,6 +77761,95 @@
           "verdict_sha256": "c2abf4d723e5c1db9fdef31cd5579c03d5e516ee3e29a9944fec7ad1ac585343",
           "run_ref": "codex:20261116T011751Z-802b8fe2",
           "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "gate_evidence": {
+        "functional": {
+          "flow-1": {
+            "flow_id": "flow-1",
+            "status": "passed",
+            "head": "d321a30424cecbf7ea2f8b0c451b05649daae68e",
+            "ran_at": "2026-11-16T01:27:00Z",
+            "summary": {
+              "checklist_blob": "9c2676fa96310dbc1b1caf995bcf9b91d16f98ec",
+              "text": "tests.test_model_discovery: Test run PASS, exact coverage (15 tests), rc=0."
+            },
+            "log_digest": "b1fc7bbbc55d8b63638ab99ea72704d5ec3e9e157d332852355cd55a8d2e6f22",
+            "run_ref": "controller:20261116T012543Z-464a8b62",
+            "reporter": "workflow-controller 1.31.1",
+            "identity": "51c80fd4994bdea2faadebfa1210d05d85c66d43c7f45d27cda3722f1d6d8a65",
+            "recorded_at": "2026-11-16T01:27:00Z"
+          },
+          "flow-2": {
+            "flow_id": "flow-2",
+            "status": "failed",
+            "head": "d321a30424cecbf7ea2f8b0c451b05649daae68e",
+            "ran_at": "2026-11-16T01:27:00Z",
+            "summary": {
+              "checklist_blob": "9c2676fa96310dbc1b1caf995bcf9b91d16f98ec",
+              "reason": "environment",
+              "text": "Test run FAIL, rc=1, coverage exact (256 tests). The only failure is tests.test_cli.VersionFlagTest.test_editable_install_prints_two_lines_and_writes_nothing: its `pip install -e` needs pypi.org (build deps), blocked by the sandbox. All routing/discovery cases otherwise ran without error."
+            },
+            "log_digest": "3c4c2d72e82b0bc777ba7632096753074e8fa402112aff9f4b58bd8db2521d10",
+            "run_ref": "controller:20261116T012543Z-464a8b62",
+            "reporter": "workflow-controller 1.31.1",
+            "identity": "51c80fd4994bdea2faadebfa1210d05d85c66d43c7f45d27cda3722f1d6d8a65",
+            "recorded_at": "2026-11-16T01:27:00Z"
+          },
+          "flow-3": {
+            "flow_id": "flow-3",
+            "status": "passed",
+            "head": "d321a30424cecbf7ea2f8b0c451b05649daae68e",
+            "ran_at": "2026-11-16T01:27:00Z",
+            "summary": {
+              "checklist_blob": "9c2676fa96310dbc1b1caf995bcf9b91d16f98ec",
+              "text": "LOOKUPS is ['codex']; routing.py:895 builds the 'accepted for' message; routing.py imports no model_discovery (only comments at lines 707-709 mention it)."
+            },
+            "log_digest": "810f3aa5f9d5669c9cb50fa811a38c469756b668f1013067441f188f46487f49",
+            "run_ref": "controller:20261116T012543Z-464a8b62",
+            "reporter": "workflow-controller 1.31.1",
+            "identity": "51c80fd4994bdea2faadebfa1210d05d85c66d43c7f45d27cda3722f1d6d8a65",
+            "recorded_at": "2026-11-16T01:27:00Z"
+          },
+          "flow-4": {
+            "flow_id": "flow-4",
+            "status": "failed",
+            "head": "d321a30424cecbf7ea2f8b0c451b05649daae68e",
+            "ran_at": "2026-11-16T01:27:00Z",
+            "summary": {
+              "checklist_blob": "9c2676fa96310dbc1b1caf995bcf9b91d16f98ec",
+              "reason": "defect",
+              "text": "runtime.md has the lookup paragraph (cache, 24 hours, hidden models), common-problems.md has the new refusal text and remedy, and the item page records status, what was built and what is deferred. But docs/guide/commands.md has no mention of the lookup or that explain reads the cache only (the step and explain rows do not mention it; grep finds no hit), and harnesses.md only describes the lookup (line 63) without saying explain reads the cache only."
+            },
+            "log_digest": "5725a9fc821bc34467f0e5261744b53ae8432939c8ce7128b2091ca83f1ce092",
+            "run_ref": "controller:20261116T012543Z-464a8b62",
+            "reporter": "workflow-controller 1.31.1",
+            "identity": "51c80fd4994bdea2faadebfa1210d05d85c66d43c7f45d27cda3722f1d6d8a65",
+            "recorded_at": "2026-11-16T01:27:00Z"
+          },
+          "flow-5": {
+            "flow_id": "flow-5",
+            "status": "failed",
+            "head": "d321a30424cecbf7ea2f8b0c451b05649daae68e",
+            "ran_at": "2026-11-16T01:27:00Z",
+            "summary": {
+              "checklist_blob": "9c2676fa96310dbc1b1caf995bcf9b91d16f98ec",
+              "reason": "environment",
+              "text": "Test run FAIL rc=1 with exact coverage (379 tests); the only failure is the same pip editable-install test needing pypi.org (blocked). check_docs rc=0, workflow_backlog check rc=0, preflight-accept rc=0 with ok true. The namespace: none line was not an issue."
+            },
+            "log_digest": "25c7ade86d3d87ca572ba3ac67791e17a4f5c4698ad8de719a3c501f5bb522e9",
+            "run_ref": "controller:20261116T012543Z-464a8b62",
+            "reporter": "workflow-controller 1.31.1",
+            "identity": "51c80fd4994bdea2faadebfa1210d05d85c66d43c7f45d27cda3722f1d6d8a65",
+            "recorded_at": "2026-11-16T01:27:01Z"
+          }
+        },
+        "pr": null,
+        "pr_reported": null,
+        "pr_keys": {
+          "reopened_for": [],
+          "applied": [],
+          "ingest_seq": 0
         }
       }
     }

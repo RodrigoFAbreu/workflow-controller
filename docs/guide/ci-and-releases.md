@@ -15,7 +15,7 @@ be run by hand:
 pull request, push to main, manual run
   └─ ci.yml  "CI"
        ├─ reuse                         (main only, CI_MAIN_REUSE=on)
-       ├─ validate ── validate.yml  "Validate"
+       ├─ validate ── tests.yml  "Tests"
        │                ├─ changes, docs-tests (shared python-tests.yml), docs
        │                └─ plan, tests (<i>), tests-result, package
        ├─ after-merge-determinism, after-merge-mutations   (not on a pull request)
@@ -24,10 +24,10 @@ pull request, push to main, manual run
                              release-plan, release-target-*, build, publish
 ```
 
-`.github/workflows/validate.yml` is the single definition of required
-validation. `CI` calls it, a manually dispatched `build-publish.yml` calls
-it, and it can be dispatched by hand on any branch (a manual run never reuses
-another run's results). It has seven jobs, each on `ubuntu-latest` with
+`.github/workflows/tests.yml` is the single definition of required
+validation. `CI` calls it, and it can be dispatched by hand on any branch (a
+manual run never reuses another run's results). `build-publish.yml` does not
+call it: test orchestration belongs to `CI`. It has seven jobs, each on `ubuntu-latest` with
 Python 3.12 and read-only permissions (`tests-result` also has
 `actions: read`, which only the reuse path below uses):
 
@@ -122,7 +122,7 @@ What `CI` does depends on the event:
 `publish` is the only job with write permission (`CI`'s `build-publish`
 job grants `contents: write` because a called workflow can never have more
 than its caller grants, and `build-publish.yml` gives it to `publish` alone),
-and every action outside `validate.yml` is pinned to a commit SHA.
+and every action outside `tests.yml` is pinned to a commit SHA.
 `main.yml`, the separate trunk workflow before `CI` became the one entry
 point, is retired: `python3 tools/ci_workflows.py --check` fails while it
 exists.
@@ -137,14 +137,15 @@ finish, so the wall time of a shard counts.
 `release.yml` is gone: pushing a `v*` tag by hand triggers nothing.
 
 The CI plan uses the `ci` profile: a target of 180 s of work per shard,
-at least 2 and at most 6 shards (`CI_MAX_SHARDS` in `tools/test_shards.py`),
+at least 2 and at most 3 shards (`CI_MAX_SHARDS` in `tools/test_shards.py`),
 from the committed `tools/test_timings.json` only. The maximum wins today, so
-CI runs six shards. The maximum is a runner budget: 6 shards, `package` and the
-managed `workflow-conformance` job hold at most 8 Linux runners for one pull
-request, on an account that shares 20 jobs. A seventh shard would make it 9 and
-is the owner's decision, not the planner's. On the timings refreshed on 2026-11-08
-the planner's longest-shard estimate is about 24 minutes (1439 s) at six shards,
-1288 s at seven and 1233 s at eight (the offline plans of CI1b). Refresh `tools/test_timings.json` (see the development
+CI runs three shards. The maximum is a runner budget, set by CI3 (see
+[The six-runner limit](#the-six-runner-limit)): the owner's standard is at most six
+simultaneous runners per repository, and a higher ceiling is the owner's decision,
+not the planner's. Before CI3 the ceiling was six shards; on the timings refreshed
+on 2026-11-08 the planner's longest-shard estimate was about 24 minutes (1439 s) at
+six shards, 1288 s at seven and 1233 s at eight (the offline plans of CI1b), and
+the same work over three shards takes about 54 minutes by the planner's estimate. Refresh `tools/test_timings.json` (see the development
 guide) when the longest shard drifts well past that estimate; it was refreshed on
 2026-11-08 from the real six-shard runs of CI, and drifts within days as the acceptance matrix and the
 scenario tests grow. A stale or missing entry costs wall time
@@ -173,10 +174,46 @@ check outside the shard estimate is `tests.test_catalogue_determinism.CatalogueD
 tests that held a shard up were split along their test methods in CI1b, and a ratchet in
 `tests.test_test_shards` keeps a multi-test class from growing back past 200 s.
 
+### The six-runner limit
+
+The owner's standard is at most six simultaneous runners per repository
+(CI3). `RUNNER_LIMIT = 6` in `tools/ci_workflows.py` is that number, and
+`tests.test_ci_workflows.RunnerLimitTest` proves it from the generated
+workflow models, with no assumption about how long a job runs: it flattens the
+called workflows into one job graph, takes the heaviest set of jobs with no
+`needs` path between them, and adds the runners outside that graph for every
+event and every `CI_MAIN_REUSE` mode (the managed `workflow-conformance` job,
+`PR title` on a pull request, and `reuse-report` of `main-reuse-report.yml` on a
+push to `main` where its condition holds). The mechanisms:
+
+- the shard matrix always carries `max-parallel: 3` (`TEST_MAX_PARALLEL`), and
+  `CI_MAX_SHARDS` is 3, so three shards are planned and three run at once; a test
+  ties the two (`TEST_MAX_PARALLEL <= CI_MAX_SHARDS`, read from the planner);
+- `docs-tests`, `docs` and `package` are one lane: `docs` needs `docs-tests`
+  and `package` needs `docs` and runs on `!cancelled()`, so an upstream result
+  never skips the required `validate / package` check;
+- the two `after-merge-*` jobs wait for `validate`, so they no longer run beside the
+  shards.
+
+The count of `docs-tests` as one runner is an assumption: it calls
+`RodrigoFAbreu/action-workflows/.github/workflows/python-tests.yml@main`, a
+workflow on a mutable ref that this repository does not pin and the test cannot
+read offline (it has one job today). The test pins the `uses` value so a change of
+the called workflow is a visible edit. The limit is per run: GitHub has no
+cross-run runner limit in workflow files, so several open pull requests, or a pull
+request beside a `main` run, add up (the Controller opens one milestone pull
+request at a time).
+
+The cost is wall time: the pull request's checks take about 54 minutes by the
+planner's estimate (the measured run is in the
+[item page](../items/workflow-controller-ci3.md#measured-run)), against the
+15 to 20 minute target. [CI2](../items/workflow-controller-ci2.md) starts from
+that figure.
+
 ### Documentation-only pull requests
 
 A pull request whose every changed path is documentation skips `plan` and
-the six `tests` shards, about 24 minutes of the roughly 25 a pull request
+the `tests` shards, about 24 minutes of the roughly 25 a pull request
 took. It still runs `docs-tests`, `docs` and `package`, and the required check
 `tests-result` still reports. The decision is a job, never a `paths` or
 `paths-ignore` filter on the workflow: a filtered workflow would leave the
@@ -244,12 +281,15 @@ commit they publish: the `after-merge-*` jobs when the release target is the pus
 commit, or `release-target-determinism` and `release-target-mutations` when a
 `RESUME` targets an ancestor (those run on the target after `release-plan`).
 `CI` hands the `after-merge-*` results to `build-publish.yml` as inputs, so
-`build-publish` starts once both checks and `validate` have finished; a
-manually dispatched `build-publish.yml` runs the two checks itself. A
+`build-publish` starts once both checks and `validate` have finished (the two
+checks wait for `validate`, so the release comes after both in sequence; a
+directly dispatched `build-publish.yml` runs neither check and cannot publish). A
 missing, pending, failed, cancelled or skipped covering job, or a success for a
 different commit, prevents the release. **Timing:** an ordinary release publishes
-after the slower of `validate` (11.8 to 22.1 minutes across the six shards when it
-runs the full plan, much less under `CI_MAIN_REUSE=on`) and the `after-merge-*` jobs
+after `validate` (11.8 to 22.1 minutes across six shards before CI3, much less
+under `CI_MAIN_REUSE=on`) and then the `after-merge-*` jobs, which since CI3 run after
+`validate` instead of beside it, so an ordinary release now waits the whole duration of
+`validate` plus about 15 to 17 minutes for the slower of them
 (measured on the first run with them, at 37c80b6, when the two passes ran one after
 the other: determinism 32.1 minutes, mutations 17.3; since the passes run at the same
 time, the first `main` run after that change, at cbb8d11, measured determinism 17.4 minutes and mutations 14.9), plus
@@ -366,7 +406,7 @@ GitHub re-runs it. The same command works locally:
 `python3 tools/release.py check-title "fix: a typo in the gate text"`
 reads the policy committed at `HEAD`.
 
-The workflow files `ci.yml`, `validate.yml`, `build-publish.yml`,
+The workflow files `ci.yml`, `tests.yml`, `build-publish.yml`,
 `main-reuse-report.yml` and `pr-title.yml` are generated. Edit the model in
 `tools/ci_workflows.py`, then run `python3 tools/ci_workflows.py --write`;
 `python3 tools/ci_workflows.py --check` (and a test) fails when a
@@ -387,25 +427,25 @@ requires.
 Each of the three can be started from the Actions tab or with `gh`
 (`gh workflow run <file> --ref <branch>`); none takes inputs.
 
-- **`CI`** on `main` is the usual manual release run: it validates the tip
+- **`CI`** on `main` is the manual publish route: it validates the tip
   of `main` once and, if that succeeds, calls `build-publish.yml` exactly
-  as a push does. On another branch it validates and runs the after-merge
+  as a push does, so a manual CI dispatch from `main` also publishes. On another branch it validates and runs the after-merge
   checks, and publishes nothing.
-- **`Build and publish`** (`build-publish.yml`) on `main` is a manual
-  publication that cannot skip a gate: dispatched, it has no results handed
-  in, so it calls `validate.yml` (the full shards, never reused) and runs
-  both after-merge checks itself, and `release-plan`, `build` and `publish`
-  need them exactly as they need `CI`'s results. It takes the `main-release`
-  slot, so it never runs beside a `CI` run on `main`. On another branch it
-  validates and publishes nothing (`release-plan` runs only on `main`).
-- **`Validate`** (`validate.yml`) runs the required validation alone, on any
+- **`Build and publish`** (`build-publish.yml`) only builds and publishes. A
+  direct dispatch hands it no validation result, so `build`, `publish` and the
+  `release-target-*` jobs never run (each requires the caller's
+  `validate-result` to be `success`); `release-plan` on `main` classifies the
+  commit and writes a notice naming the CI dispatch that publishes. To publish
+  by hand, dispatch `CI` from `main`.
+- **`Tests`** (`tests.yml`) runs the required validation alone, on any
   branch, with `changes` reporting `code=true` (a manual run is never
   documentation-only).
 
 `build-publish.yml` trusts a result only from its inputs, which only a
 calling workflow can set: `workflow_dispatch` declares none, so a manual run
 cannot claim a validation it did not run. A called run has a concurrency
-group of its own, because its caller already holds `main-release`.
+group of its own (`build-publish-<run id>`), because its caller already holds
+`main-release`.
 
 ### Reusing a pull request's results on `main` (`CI_MAIN_REUSE`)
 

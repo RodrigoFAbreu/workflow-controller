@@ -718,6 +718,8 @@ Expected: `# Test run: PASS`, exact coverage, every `rc=0`, `preflight-accept` `
 command, the unpriced report and an effort lookup are deferred. A live `codex debug models` call is not a flow (no real `codex` in the sandbox; the opt-in
 live check is the owner's). The full suite is CI's on the pull request; it is not a flow.
 
+Functional review round 1 (automated tester, head `d321a30`): flow 4 failed as a missing requirement -- `docs/guide/commands.md` and `docs/guide/harnesses.md` did not say that `explain` reads the model lookup cache only. Fixed (bounded, docs only): the `explain` row and the `step` row of the commands guide and the lookup paragraph of the harnesses guide now say so (`python3 tools/check_docs.py` passes). Nothing was deferred to a remediation child. Flow 2's one failure (`VersionFlagTest.test_editable_install_prints_two_lines_and_writes_nothing`, `pip install -e` needs pypi.org) is the sandbox's, not a finding. Needs re-testing: flow 4, and flow 5's docs checks, at the new head.
+
 ## Next action
 
 `/milestone-plan` for `workflow-controller-ci2` (CI follow-ups: the 20-minute PR CI target and the review follow-ups of CI1a-CI1c (#317, #322, #324)), ready for `PLANNING`.

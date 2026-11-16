@@ -102,7 +102,7 @@
 | 96 | [A manifest.json version source for the version_change release trigger](items/workflow-controller-vs1.md) `workflow-controller-vs1` | Next | - | - |
 | 97 | [A short form for a disabled release: release {enabled: false}](items/workflow-controller-rf1.md) `workflow-controller-rf1` | Next | - | - |
 | 98 | [Move this repository to Workflow 2.29.6](items/workflow-controller-w2.md) `workflow-controller-w2` | Next | - | - |
-| 99 | [CI follow-ups: the 20-minute PR CI target and the review follow-ups of CI1a-CI1c (#317, #322, #324)](items/workflow-controller-ci2.md) `workflow-controller-ci2` | Next | - | - |
+| 99 | [CI follow-ups: the 20-minute PR CI target, the test suites and the review follow-ups of CI1a-CI1c (#317, #322, #324)](items/workflow-controller-ci2.md) `workflow-controller-ci2` | Next | - | - |
 | 100 | [Controller ACTION_REQUIRED events: SignalHub answers format with choices, one event per gate (no duplicates)](items/workflow-controller-n1.md) `workflow-controller-n1` | Next | - | workflow-controller-h4g |
 | 101 | [The post-acceptance defect loop at the merge flow's \`checks_failing\` stop](items/workflow-controller-c10d-a.md) `workflow-controller-c10d-a` | Next | - | workflow-controller-c10c |
 | 102 | [The same report at a \`CHANGES_REQUESTED\` decision](items/workflow-controller-c10d-b.md) `workflow-controller-c10d-b` | Next | - | workflow-controller-c10d-a |

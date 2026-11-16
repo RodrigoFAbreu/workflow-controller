@@ -577,7 +577,7 @@ items:
     depends_on: []
     detail: docs/items/workflow-controller-w2.md
   - id: workflow-controller-ci2
-    title: "CI follow-ups: the 20-minute PR CI target and the review follow-ups of CI1a-CI1c (#317, #322, #324)"
+    title: "CI follow-ups: the 20-minute PR CI target, the test suites and the review follow-ups of CI1a-CI1c (#317, #322, #324)"
     status: next
     order: 99
     depends_on: []

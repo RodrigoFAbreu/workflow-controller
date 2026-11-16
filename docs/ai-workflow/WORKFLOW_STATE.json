@@ -77277,7 +77277,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-cm1-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-cm1-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 4,
       "implementation_revision": 3,
       "functional_review_round": null,
@@ -77570,12 +77570,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 2,
-          "external": 1
+          "local": 3,
+          "external": 2
         }
       },
-      "state_revision": 29,
-      "last_transition": "2026-11-16T01:28:01Z",
+      "state_revision": 31,
+      "last_transition": "2026-11-16T01:34:32Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -77740,28 +77740,48 @@
               "at": "2026-11-16T01:22:19Z"
             }
           ]
+        },
+        "F-1ca9fa596c6a": {
+          "digest": "1ca9fa596c6a01a5d92cc8d31ab1459015f804b1767231f0fac999181bc35bb5",
+          "text": "**O1. `explain`'s read-only behaviour is still pinned by a source-text check, not by behaviour.** Carried over from rounds 1 and 2, not applied. `test_explain_builds_its_routing_options_read_only` asserts that `\"allow_run=False\"` appears in `inspect.getsource(cli.cmd_explain)`. The pages now state this behaviour in two places, which makes a behavioural test (run `explain` on a route naming an unlisted Codex model with `review.run_bounded` patched to record calls; assert no call, no `model-catalog/` and exit 0) more worth having.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "5ae9f251b304179aeeb6ee6bebc2db7f486832de655a1d054937723be0469234",
+              "verdict": "APPROVE",
+              "at": "2026-11-16T01:30:12Z"
+            }
+          ]
+        },
+        "F-77c360aa1eb4": {
+          "digest": "77c360aa1eb446f6b48ed4b162f9de4bb5fd41e9d2fd2c02d6d5713e52207eee",
+          "text": "**O1 — Previous finding remains open:** the `cmd_explain` test still checks source text rather than invoking the command and checking its behavior.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "5ae9f251b304179aeeb6ee6bebc2db7f486832de655a1d054937723be0469234",
+              "verdict": "REVISE",
+              "at": "2026-11-16T01:34:32Z"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "51c80fd4994bdea2faadebfa1210d05d85c66d43c7f45d27cda3722f1d6d8a65",
+        "review_content_id": "5ae9f251b304179aeeb6ee6bebc2db7f486832de655a1d054937723be0469234",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "3d8c46972d9fe7d8b56d466060a62eca4967ec2aa36e061f964cc1654d7ad35b",
+          "bundle_id": "7294c551d825f7f59a462c58207572ade68819abdecf604def3f57a86e179afc",
           "verdict": "APPROVE",
-          "round": 2,
-          "completed_at": "2026-11-16T01:17:16Z",
-          "verdict_sha256": "de711f85a6103c8f74553079fcb375b8fdd9a6784fc8cbc7f1ac3916e2385257",
+          "round": 3,
+          "completed_at": "2026-11-16T01:30:12Z",
+          "verdict_sha256": "60deec219ce6c725ebcd5f34bda8d181a86dba5ff2e77751860c8a71a913a0f9",
           "run_ref": "session:local .ai-review/workflow-controller-cm1/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
-        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "3d8c46972d9fe7d8b56d466060a62eca4967ec2aa36e061f964cc1654d7ad35b",
-          "verdict": "APPROVE",
-          "round": 2,
-          "completed_at": "2026-11-16T01:22:19Z",
-          "verdict_sha256": "c2abf4d723e5c1db9fdef31cd5579c03d5e516ee3e29a9944fec7ad1ac585343",
-          "run_ref": "codex:20261116T011751Z-802b8fe2",
-          "reviewer_model": "openai/gpt-6.1-sol"
-        }
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       },
       "gate_evidence": {
         "functional": {

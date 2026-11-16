@@ -1,6 +1,12 @@
 # Active Milestone
 
-## Latest milestone (CM1)
+## Latest milestone (AO1)
+
+**Complete: accepted by policy (`MILESTONE_COMPLETE`).** Plan `docs/ai-workflow/CONTROLLER_AO1_PLAN.md` (revision 2), two checkpoints; it opts this repository in to the Controller's auto-merge. CP1 is complete: `.workflow-controller/policy.json`'s `pull_request` block gains `"auto_merge": true` and `"release_workflow": "ci.yml"` (the retired `main.yml` is the parser default). Tests: the new `test_the_committed_policy_opts_in_to_a_real_publishing_workflow` in `tests.test_repo_policy` (the committed policy parses with both keys, `ci.yml` is a model of `tools/ci_workflows.py`, and its `build-publish` job calls `build-publish.yml`); `test_absent_means_off_and_main_yml` keeps its fixture half only, and `test_the_reference_file_is_one_plans_exact_content` compares the committed policy with a plan block after removing exactly the two AO1 keys and asserts their values. Verified with `tests.test_repo_policy`, `tests.test_ci_workflows`, `tests.test_version_authority`, `tests.test_milestone_branch` (281 tests, exact coverage, all passing). CP2 is complete: `docs/guide/ci-and-releases.md` (Repository settings) and `docs/guide/milestone-branches.md` (the reference-configuration paragraph) state the opt-in and the `ci.yml` release workflow, with the caveat that a milestone bound before the change never auto-merges; the generic `main.yml` example stays (it shows the parser's default); `docs/items/workflow-controller-ao1.md` records the status, what was done and the first later milestone as the live check. Verified with `tests.test_docs`, `tests.test_plan_document_consistency` (108 tests, exact coverage, all passing), `tools/check_docs.py`, `workflow_backlog.py check` and `preflight-accept`. **Self-review:** one wording defect fixed: the reference-configuration paragraph of `docs/guide/milestone-branches.md` had two parentheticals back to back; the opt-in is now its own sentence. The single full run (`python3 tools/run_tests.py`, 6730 tests, exact coverage) failed 5 tests, none in code this item touches: three in `tests.test_fake_codex_contract` are the known leak of the operator's `~/.codex/config.toml` into the fake Codex's parent walk (the module passes in a clone under `/tmp`, 20 tests), and `tests.test_job_codex_worker` (a timeout recorded as `terminated_by_signal`) and `tests.test_job_codex_worker_interrupt` (a process with its ownership tag from another shard) pass when rerun alone (33 tests, exact coverage). `tools/check_docs.py` passes. Accepted by policy from the functional review evidence and the pull request fact (#369).
+
+Next action: `/milestone-plan` for `workflow-controller-ci3` (Align CI with the agreed standard: CI, Tests and Build and publish), the item `python3 scripts/workflow_backlog.py next` returns.
+
+## Previous milestone (CM1)
 
 **Complete: accepted by policy (`MILESTONE_COMPLETE`).** Plan `docs/ai-workflow/CONTROLLER_CM1_PLAN.md` (revision 4), three checkpoints; it makes a route naming a model the adapter does not declare ask the Codex CLI what it lists (`codex debug models`), cache the answer, and accept any listed model. CP1 is complete: new `controller/model_discovery.py` holds `lookup` (a fresh 24-hour cache under `model-catalog/<harness>.json` answers without running `codex`; a stale or absent one runs `codex debug models` through `review.run_bounded` under a 20 second deadline with a minimal environment of `PATH`, `HOME`, `CODEX_HOME` and a unique ownership tag; only `visibility: "list"` slugs count; every failure is a `routing.ModelDiscovery` record with a reason, never an exception; `allow_run=False` runs and writes nothing) and the one-entry `LOOKUPS` registry. `controller/routing.py` gains the frozen `ModelDiscovery` record and the six `SOURCE_*` names (so `routing` never imports `model_discovery`); the module is added to `controller/__init__.py` and `DEPENDENCY_ORDER`. Tests: the new `tests.test_model_discovery` (hermetic: runner and resolver are parameters) and the record cases in `tests.test_routing`. Verified with `tests.test_model_discovery`, `tests.test_routing`, `tests.test_package_structure`, `tests.test_write_containment` (101 tests, exact coverage, all passing) and `tests.test_docs`. One deviation from the plan's wording: the time stamp is parsed with a `%z` suffix rather than `.replace(tzinfo=...)`, because `tests.test_write_containment` flags any `.replace()` call outside `runtime.py`. CP2 is complete: `routing.RoutingOptions` gains the frozen `discovery` mapping (harness name to `ModelDiscovery`); its models are unioned with `harness.models` for the route check, and a model refusal now ends `(accepted for <harness>: declared [...]; <discovered | not looked up | unavailable: <reason> | stale cache from <time>>; added by harness.models [...])` before the `harness.models` hint, with `field` and `accepted` (declared, discovered, added) in the evidence (an effort refusal carries `field: "effort"` only). `cli._routing_options(args, runtime_root, *, allow_run=True)` builds the options without a lookup first and, on a model refusal for a harness not yet looked up, calls `model_discovery.lookup` and builds again, so a configuration of declared or added models never launches `codex`; `cmd_explain` passes `allow_run=False` (cache only, nothing run or written). Tests: `DiscoveredModelRouteTest` in `tests.test_routing`; in `tests.test_cli` the accepted listed model, the refusal with the reason (also as exit 20 for `step` and `run`), no lookup for declared models, the read-only call and the `explain` pin. Verified with `tests.test_routing`, `tests.test_routing_chain`, `tests.test_cli`, `tests.test_model_discovery`, `tests.test_write_containment`, `tests.test_package_structure` (293 tests, exact coverage, all passing). CP3 is complete: `docs/guide/runtime.md` (the Codex model lookup paragraph in the routing section), `docs/guide/harnesses.md`, `docs/guide/commands.md` and `docs/common-problems.md` describe the lookup, the 24-hour cache, hidden models, `explain` reading the cache only and the refusal's new text; `docs/items/workflow-controller-cm1.md` records the status, what was built and what is deferred (the read-only command, the unpriced report, the effort lookup). Verified with `tests.test_docs`, `tests.test_plan_document_consistency` (108 tests, exact coverage, all passing), `tools/check_docs.py`, `workflow_backlog.py check` and `preflight-accept`. **Self-review:** no defect found; the docstring of `cli._routing_options` is reworded so it no longer reads as if every lookup were cache-only (`allow_run=False` is `explain`'s case alone).
 
@@ -671,55 +677,48 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-cm1` (CM1), implementation revision 5, plan `docs/ai-workflow/CONTROLLER_CM1_PLAN.md` (revision 4), base commit
-`9f73ca7`. Three checkpoints, all complete: CP1 (`controller/model_discovery.py`: `lookup`, the 24-hour cache under `model-catalog/<harness>.json`,
-`codex debug models` under a 20 second deadline, only `visibility: "list"` slugs), CP2 (`routing.RoutingOptions.discovery`, the refusal text naming
-declared, discovered and added models, `cli._routing_options` retrying with a lookup, `explain` reading the cache only), CP3 (the guides, common
-problems and the item page). Revision 2 holds the fix of review finding I1 (a deeply nested answer or cache is unreadable, not an exception). Revisions 3 to 5 hold the functional round 1 docs fix and the review fixes: `explain` shows no lookup status or refusal when there is no model cache, its read-only lookup is pinned through a seam the lookup uses (`tests.test_cli`, `tests.test_review_job`), and the `step` and `run` refusals no longer list `not looked up`.
+Item `workflow-controller-ao1` (AO1), implementation revision 1, plan `docs/ai-workflow/CONTROLLER_AO1_PLAN.md` (revision 2), base commit
+`7eb15d2`. Two checkpoints, both complete: CP1 (`.workflow-controller/policy.json`'s `pull_request` block gains `"auto_merge": true` and
+`"release_workflow": "ci.yml"`, with a test in `tests.test_repo_policy` that keeps the named workflow real and publishing) and CP2 (the opt-in and the
+`ci.yml` release workflow stated in `docs/guide/ci-and-releases.md` and `docs/guide/milestone-branches.md`, and the item page).
 Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the
 system directories, and no write inside the read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write only
-to the scratch `TMPDIR`. No flow needs a pull request, a forge call or a model turn (the lookup is exercised with stub runners), and none runs the full suite.
+to the scratch `TMPDIR`. No flow needs a pull request or a forge call, and none runs the full suite.
 
-Setup: `export TMPDIR=$(mktemp -d)`. No data to seed; the tests build their own scratch directories and stub the `codex` runner.
+Setup: `export TMPDIR=$(mktemp -d)`. No data to seed.
 
-**Flow 1: the lookup and its cache.**
-Run `python3 -B tools/run_tests.py tests.test_model_discovery; echo rc=$?`.
-Expected: `# Test run: PASS`, exact coverage, `rc=0`. Cases to look for with `-v`: only listed models are kept and cached; unreadable answers and failures are
-`unavailable` with a reason, never an exception; a fresh cache runs nothing; a stale cache re-runs and is rewritten; a failed lookup with a stale cache answers
-`stale`; a deeply nested answer or cache is unreadable (I1); a `fetched_at` in the future is stale; the environment holds only `PATH`, `HOME`, `CODEX_HOME`
-and a unique tag; `allow_run=False` runs and writes nothing; an unwritable cache does not raise; a harness without a lookup is unsupported.
+**Flow 1: the committed policy.**
+Run `python3 -B -c "import json; print(json.load(open('.workflow-controller/policy.json'))['pull_request'])"`.
+Expected: the printed block holds `'auto_merge': True` and `'release_workflow': 'ci.yml'`; the rest of the file is otherwise unchanged
+(`git diff 7eb15d2 -- .workflow-controller/policy.json` shows only those two keys added).
 
-**Flow 2: the route check and the CLI.**
-Run `python3 -B tools/run_tests.py tests.test_routing tests.test_routing_chain tests.test_cli; echo rc=$?`.
-Expected: `# Test run: PASS`, exact coverage, `rc=0`. Cases (`DiscoveredModelRouteTest`, and the CLI cases): a route naming a discovered model is accepted;
-a model in no list is refused with `accepted for <harness>: declared [...]; <discovered | not looked up | unavailable: <reason> | stale cache from <time>>;
-added by harness.models [...]` before the `harness.models` hint, as exit 20 for `step` and `run`; a configuration of declared or added models never calls the
-lookup; `explain` never runs the runner and writes no `model-catalog` file; the `claude-code` refusal has no discovery part.
+**Flow 2: the policy test and its neighbours.**
+Run `python3 -B tools/run_tests.py tests.test_repo_policy tests.test_ci_workflows tests.test_version_authority tests.test_milestone_branch; echo rc=$?`.
+Expected: `# Test run: PASS`, exact coverage, `rc=0`. A `namespace: none` line is expected in this sandbox. Look for
+`test_the_committed_policy_opts_in_to_a_real_publishing_workflow` (policy parses with both keys, `ci.yml` is a model of `tools/ci_workflows.py`, its
+`build-publish` job calls `build-publish.yml`).
 
-**Flow 3: the refusal text, by hand.**
-Run `python3 -B -c "from controller import model_discovery as m; print(sorted(m.LOOKUPS))"` and `grep -n "accepted for" controller/routing.py`.
-Expected: `['codex']` (one entry); the message built in `routing.py` from the `discovery` record, with `routing` importing no `model_discovery`
-(`grep -n "^import\|^from" controller/routing.py` lists no `model_discovery`; the two `model_discovery` mentions are comments).
+**Flow 3: the release workflow is real.**
+Run `ls .github/workflows/ci.yml .github/workflows/build-publish.yml; grep -n "build-publish" .github/workflows/ci.yml`.
+Expected: both files exist and `ci.yml` has a job that calls `build-publish.yml`.
 
 **Flow 4: the pages and the item record.**
-Run `grep -n -i "debug models\|model-catalog\|24-hour\|hidden" docs/guide/runtime.md docs/guide/harnesses.md docs/guide/commands.md docs/common-problems.md`,
-then read `docs/items/workflow-controller-cm1.md`.
-Expected: the runtime guide's routing section has the Codex model lookup paragraph (cache, 24 hours, hidden models); the harnesses and commands guides
-describe the lookup and that `explain` reads the cache only; common problems gives the refusal's new text and the remedy; the item page records the
-status, what was built and what is deferred (the read-only command, the unpriced report, the effort lookup).
+Run `grep -n -i "auto_merge\|release_workflow\|ci.yml" docs/guide/ci-and-releases.md docs/guide/milestone-branches.md`, then read
+`docs/items/workflow-controller-ao1.md`.
+Expected: the Repository settings section of the CI guide and the reference-configuration paragraph of the milestone-branches guide state the opt-in
+(its own sentence) and the `ci.yml` release workflow, with the caveat that a milestone bound before the change never auto-merges; the generic `main.yml`
+example stays (it shows the parser's default); the item page records the status, what was done and the first later milestone as the live check.
 
-**Flow 5: the guards and the docs checks.**
-Run `python3 -B tools/run_tests.py tests.test_model_discovery tests.test_routing tests.test_cli tests.test_write_containment tests.test_package_structure tests.test_docs tests.test_plan_document_consistency; echo rc=$?`
-(a `namespace: none` line is expected in this sandbox), then `python3 -B tools/check_docs.py; echo rc=$?`, `python3 -B scripts/workflow_backlog.py check; echo rc=$?`
-and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-cm1; echo rc=$?`.
+**Flow 5: the docs checks.**
+Run `python3 -B tools/run_tests.py tests.test_docs tests.test_plan_document_consistency; echo rc=$?`, `python3 -B tools/check_docs.py; echo rc=$?`,
+`python3 -B scripts/workflow_backlog.py check; echo rc=$?` and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-ao1; echo rc=$?`.
 Expected: `# Test run: PASS`, exact coverage, every `rc=0`, `preflight-accept` `"ok": true`.
 
-**Known limitations / out of scope.** Only the Codex harness has a lookup; `claude-code` keeps declared models only. The lookup is not a read-only
-command, the unpriced report and an effort lookup are deferred. A live `codex debug models` call is not a flow (no real `codex` in the sandbox; the opt-in
-live check is the owner's). The full suite is CI's on the pull request; it is not a flow.
-
-Functional review round 1 (automated tester, head `d321a30`): flow 4 failed as a missing requirement -- `docs/guide/commands.md` and `docs/guide/harnesses.md` did not say that `explain` reads the model lookup cache only. Fixed (bounded, docs only): the `explain` row and the `step` row of the commands guide and the lookup paragraph of the harnesses guide now say so (`python3 tools/check_docs.py` passes). Nothing was deferred to a remediation child. Flow 2's one failure (`VersionFlagTest.test_editable_install_prints_two_lines_and_writes_nothing`, `pip install -e` needs pypi.org) is the sandbox's, not a finding. Needs re-testing: flow 4, and flow 5's docs checks, at the new head. Re-test at head `141335b` (implementation revision 5): flows 1-5 unchanged; flow 4 also covers the `explain` and refusal wording in `docs/guide/commands.md`, `docs/guide/harnesses.md` and `docs/guide/runtime.md`.
+**Known limitations / out of scope.** The opt-in takes effect only for a milestone bound after this change; the live auto-merge is checked by the first
+later milestone, not here (no real `gh`, no pull request in the sandbox). The full suite is CI's on the pull request; the self-review run's five
+failures (three `tests.test_fake_codex_contract` cases from the operator's `~/.codex/config.toml`, two timing/ownership cases that pass alone) are in
+code this item does not touch and are not flows.
 
 ## Next action
 
-`/milestone-plan` for `workflow-controller-ao1` (Opt this repository in to the Controller's auto-merge), ready for `PLANNING`.
+Manual functional review of `workflow-controller-ao1` (Opt this repository in to the Controller's auto-merge): see the checklist above.

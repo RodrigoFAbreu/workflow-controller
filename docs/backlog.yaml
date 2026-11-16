@@ -542,7 +542,7 @@ items:
     detail: docs/items/workflow-controller-cx2.md
   - id: workflow-controller-ao1
     title: "Opt this repository in to the Controller's auto-merge"
-    status: next
+    status: done
     order: 93
     depends_on: []
     detail: docs/items/workflow-controller-ao1.md

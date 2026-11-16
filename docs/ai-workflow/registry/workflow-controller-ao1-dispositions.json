@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ao1",
+  "dispositions": {
+    "F-0b5d3e38cabf": {"disposition": "dropped", "reason": "Wording nit on a sentence in ci-and-releases.md; the sentence is accurate (merge.auto defaults to true and setting it false turns the merge off). Editing now would stale the technical approval for no behavioural gain."},
+    "F-0e494cc0fa33": {"disposition": "dropped", "reason": "Wording nit: 'its opt-in' follows a sentence about this repository's policy in milestone-branches.md. Editing now would stale the technical approval for no behavioural gain."},
+    "F-24714994db26": {"disposition": "fixed", "reason": "CP2 of the plan now states that the generic example near line 386 stays as it is."},
+    "F-79cb2a05fe9b": {"disposition": "fixed", "reason": "Plan D4 now says the test reads the workflow models of tools/ci_workflows.py the way tests/test_ci_workflows.py does, with no YAML parser or substring match."},
+    "F-837703dad905": {"disposition": "fixed", "reason": "CP1's Tests paragraph and prose now both list the four modules."},
+    "F-9d4d990a6bb6": {"disposition": "dropped", "reason": "Imprecise rationale wording in the approved plan; the plan is a historical record and the module is run regardless."},
+    "F-eadac39a7d0a": {"disposition": "dropped", "reason": "Same imprecise rationale wording in the approved plan; running tests.test_milestone_branch remains appropriate and the plan is a historical record."}
+  }
+}

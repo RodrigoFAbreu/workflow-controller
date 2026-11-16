@@ -906,12 +906,18 @@ configuration from the [cutover](#cutover-from-the-version-file-model) on.
   authenticated as. The policy's `release_workflow` (default `main.yml`)
   names the workflow whose trunk run publishes the release the Controller
   then waits for. In this repository that is `ci.yml` (its `build-publish`
-  job calls `build-publish.yml` within the same run), so an opt-in here must
-  set `"release_workflow": "ci.yml"`. A repository that requires a **merge queue** is not
+  job calls `build-publish.yml` within the same run), so an opt-in here sets
+  `"release_workflow": "ci.yml"`. A repository that requires a **merge queue** is not
   supported: the queue writes its own squash message, and the merge then
-  fails verification (`MERGED_REWRITTEN`). This repository's policy does
-  not opt in yet; the opt-in is a `chore:` pull request after 1.6.0 is
-  installed.
+  fails verification (`MERGED_REWRITTEN`). This repository's policy opts
+  in: `.workflow-controller/policy.json` sets `"auto_merge": true` and
+  `"release_workflow": "ci.yml"` beside `merge_method: "squash"` and
+  `ready_requires_green_checks: true`, and a test keeps the named workflow
+  real and publishing. The policy is read from the snapshot taken when a
+  milestone's branch was bound, so a milestone bound before the opt-in
+  never auto-merges and waits for a human; the first milestone bound after
+  it is the live check. The operator switch `merge.auto` in the settings
+  file (default true) still turns the merge off.
 - **Do not press "Update branch"** on a milestone pull request. It
   pushes a merge commit the next Controller step refuses (see
   [Milestone branches and pull requests](milestone-branches.md)).

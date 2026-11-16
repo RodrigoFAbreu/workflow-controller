@@ -2,7 +2,7 @@
 
 Item id: `workflow-controller-ao1`.
 
-Not yet planned. Owner decision 2026-11-15. Priority: high. Complexity: low. Follows [CX2](workflow-controller-cx2.md) in order.
+Status: implemented, awaiting review (plan [revision 2](../ai-workflow/CONTROLLER_AO1_PLAN.md)). Owner decision 2026-11-15. Priority: high. Complexity: low. Follows [CX2](workflow-controller-cx2.md) in order.
 
 ## Why
 
@@ -27,3 +27,13 @@ One mechanism: add `"auto_merge": true` and `"release_workflow": "ci.yml"` to th
 An opted-in binding stops after close-out, so the lane still restarts between items. A milestone bound before the change never auto-merges.
 
 The sizing rule (at most one new mechanism, releasable alone) is on [Planning rules](../planning-rules.md#next-in-order-and-the-sizing-rules).
+
+## What was done
+
+- `.workflow-controller/policy.json` sets `"auto_merge": true` and `"release_workflow": "ci.yml"` in the `pull_request` block. Nothing else in the policy changed.
+- `tests.test_repo_policy` keeps the opt-in coherent: the committed policy parses with `auto_merge` true, and `ci.yml` is a workflow model of `tools/ci_workflows.py` whose `build-publish` job calls `build-publish.yml`. The two tests that pinned the absent keys now state the rule "a plan block plus exactly the AO1 opt-in".
+- The Repository settings section of [CI and releases](../guide/ci-and-releases.md) and the reference-configuration paragraph of [Milestone branches](../guide/milestone-branches.md) state the opt-in. The generic example in "Auto-merge and the release wait" keeps `main.yml`: it shows the parser's default.
+
+## Verification of the opt-in
+
+The policy is read from the snapshot taken at bind time, so a milestone bound before this change never auto-merges, and AO1's own pull request is merged by the owner. The first milestone bound after AO1 is merged is the live check: it should merge itself, wait for the `ci.yml` run and close out (a `chore:` or `docs:` milestone settles as `NO_CHANGE`).

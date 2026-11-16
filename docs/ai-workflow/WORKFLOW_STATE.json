@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-ci3",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -78669,6 +78669,290 @@
         },
         "evaluated_at": "2026-11-16T06:41:54Z",
         "workflow_release": "2.29.3"
+      }
+    },
+    "workflow-controller-ci3": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-ci3",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CI3_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-ci3-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci3-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 3,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "31663052b4e874d610ae8e49d08dd88d1f61e0db",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "bdd20b90a04f6d9604b1987afa141be9b8fca69cb3636f4c074a760fa58354cb",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "bdd20b90a04f6d9604b1987afa141be9b8fca69cb3636f4c074a760fa58354cb",
+        "approved_review_content_id": "e9f86369e3d191250466a1ad7d8fbcda261eca43db50873b58055b7948703121",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CI3_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f989536a0d5d0958bcf5e14e5c05ba8c9e3ea840"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-ci3-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6f5fcf43870eda840c31ea2e443269ed8c0ca0d4"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-ci3-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6c5c4df2a9982b009c1c3636f5e20e01e9ea08cd"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-16T09:43:27Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "e9f86369e3d191250466a1ad7d8fbcda261eca43db50873b58055b7948703121",
+            "ledger": {
+              "local": {
+                "bundle_id": "bdd20b90a04f6d9604b1987afa141be9b8fca69cb3636f4c074a760fa58354cb",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "2d7d975b0d716a346078d820906129ad227d89bebc286c8621b722667aa4ddfc",
+                "ledger_entry_sha256": "1369247090829dee632b9cc1496b6221f7003879aedf28e0812b02d2fd4cbe06",
+                "run_ref": "session:local .ai-review/workflow-controller-ci3/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "bdd20b90a04f6d9604b1987afa141be9b8fca69cb3636f4c074a760fa58354cb",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "6295768a810bc33aac00a79e310e3f138635e7e8034553e92d9dd20d64dddfba",
+                "ledger_entry_sha256": "70522cca823e440548dee526b84537a36a06e19536a9c82e2460bbddfde4789c",
+                "run_ref": "codex:20261116T093823Z-bb865f0d",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-16T09:43:27Z",
+          "workflow_release": "2.29.3"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "e9f86369e3d191250466a1ad7d8fbcda261eca43db50873b58055b7948703121",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "bdd20b90a04f6d9604b1987afa141be9b8fca69cb3636f4c074a760fa58354cb",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-11-16T09:37:42Z",
+          "verdict_sha256": "2d7d975b0d716a346078d820906129ad227d89bebc286c8621b722667aa4ddfc",
+          "run_ref": "session:local .ai-review/workflow-controller-ci3/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "bdd20b90a04f6d9604b1987afa141be9b8fca69cb3636f4c074a760fa58354cb",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-11-16T09:41:23Z",
+          "verdict_sha256": "6295768a810bc33aac00a79e310e3f138635e7e8034553e92d9dd20d64dddfba",
+          "run_ref": "codex:20261116T093823Z-bb865f0d",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 3,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 12,
+      "last_transition": "2026-11-16T09:43:27Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-16T09:35:21Z",
+        "consumed": {
+          "review_content_id": "734f1857e3fb37c43157acb138f0f3560852290b5894739d8ed52f3ff93cfe67",
+          "plan_revision": 2,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "e9f86369e3d191250466a1ad7d8fbcda261eca43db50873b58055b7948703121",
+          "plan_revision": 3
+        },
+        "bound": {
+          "review_content_id": "e9f86369e3d191250466a1ad7d8fbcda261eca43db50873b58055b7948703121",
+          "bundle_id": "bdd20b90a04f6d9604b1987afa141be9b8fca69cb3636f4c074a760fa58354cb",
+          "plan_revision": 3
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "4334f7c22b78bc2ee27aade5482555dc2ed301e72b392115768c21cda61c3c8c",
+        "734f1857e3fb37c43157acb138f0f3560852290b5894739d8ed52f3ff93cfe67"
+      ],
+      "optional_findings": {
+        "F-13608add1f75": {
+          "digest": "13608add1f752c93135e967f7ead0bad5478c9db17fe6d2a1573499964764920",
+          "text": "**O1. Say whether `validate_workflow()` keeps its name.** `tests/test_plan_document_consistency.py` (`validate_job_ids()`, `readme_validate_job_violations`) imports `module.validate_workflow()` and names `validate.yml` in its docstrings and messages. CP1 renames `VALIDATE_WORKFLOW` but says nothing about the function. If the function is renamed, that test file must be added to CP1's **Files:** and **Tests:**. If it is not, say so, and consider updating the stale docstrings and messages there.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "4334f7c22b78bc2ee27aade5482555dc2ed301e72b392115768c21cda61c3c8c",
+              "verdict": "REVISE",
+              "at": "2026-11-16T09:27:00Z"
+            }
+          ]
+        },
+        "F-bcf2c971b8ff": {
+          "digest": "bcf2c971b8ff619859b7d5848f97ad5386a0a418c0616c80f8ad0d237ebb21f0",
+          "text": "**O2. Give D4's release-latency cost a number.** Moving `after-merge-*` behind `validate` adds their duration (about 15-17 minutes measured, per `docs/guide/ci-and-releases.md`) to every ordinary release, which used to wait for the slower of the two. \"Only the release's latency grows\" is correct, but the guide's timing paragraph (about as long as the mutations job after the merge) has to change. CP4 should name it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "4334f7c22b78bc2ee27aade5482555dc2ed301e72b392115768c21cda61c3c8c",
+              "verdict": "REVISE",
+              "at": "2026-11-16T09:27:00Z"
+            }
+          ]
+        },
+        "F-0aeeff3d218e": {
+          "digest": "0aeeff3d218e8c4720a9bb65d5c0952a49cbaff1e13e099d7343e43be301fb42",
+          "text": "**O3. Correct the item page's \"8-shard plan\".** `docs/items/workflow-controller-ci3.md` says \"The 8-shard plan and the after-merge jobs currently exceed six\", but CI runs six shards (`CI_MAX_SHARDS`). CP4 rewrites the page anyway and should fix this.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "4334f7c22b78bc2ee27aade5482555dc2ed301e72b392115768c21cda61c3c8c",
+              "verdict": "REVISE",
+              "at": "2026-11-16T09:27:00Z"
+            }
+          ]
+        },
+        "F-70013bc42689": {
+          "digest": "70013bc42689c8e8c52c3bf42087a0227c29d0f694a4582ca85c845e3a2f4f3c",
+          "text": "**O1. Name who asks the owner at CP3.** O1 says \"the Controller asks the owner through SignalHub when CP3 is reached\". The Controller has no mechanism that reads a plan's prose and pauses before a checkpoint, and the plan gate is automatic, so the owner never sees the table before approval. Say that the CP3 implementer asks through SignalHub and stops until the answer is recorded in `docs/items/workflow-controller-ci3.md`, and that CP1 and CP2 may proceed meanwhile.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "734f1857e3fb37c43157acb138f0f3560852290b5894739d8ed52f3ff93cfe67",
+              "verdict": "REVISE",
+              "at": "2026-11-16T09:33:27Z"
+            }
+          ]
+        },
+        "F-3054b54d1dfa": {
+          "digest": "3054b54d1dfa9a233c4310a4c56494d5169048f860bca8c974a7d33cbed02ac1",
+          "text": "**O2. Say which `workflow_dispatch` CP3 counts.** CP3 lists `workflow_dispatch` without naming the workflow. Three are dispatchable: `ci.yml` on `main` and on another branch, `tests.yml` alone, and `build-publish.yml`, which after CP2 runs only `release-plan`. Name all three in the test.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "734f1857e3fb37c43157acb138f0f3560852290b5894739d8ed52f3ff93cfe67",
+              "verdict": "REVISE",
+              "at": "2026-11-16T09:33:27Z"
+            }
+          ]
+        },
+        "F-eb48ea51d1db": {
+          "digest": "eb48ea51d1db87a080dc63b4e4ebd5691987354c66e68736cb659206a16df180",
+          "text": "**O1. Make R3's wording match D4's arithmetic.** R3, in the plan and the mapping, says \"at most six runners beside the managed conformance job, `PR title` and the main reuse report\". D4 and CP3 count conformance, `PR title` and `reuse-report` inside `RUNNER_LIMIT`: four for the shards and the lane, plus the outside runners, is at most six. Read literally, R3 allows six plus three. Reword R3 to say the total, those runners included, is at most six.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "e9f86369e3d191250466a1ad7d8fbcda261eca43db50873b58055b7948703121",
+              "verdict": "APPROVE",
+              "at": "2026-11-16T09:37:42Z"
+            }
+          ]
+        },
+        "F-48296eac3a09": {
+          "digest": "48296eac3a091b43ef344e2af625f17d1eea2eed406c955d39cfe74a12ec0768",
+          "text": "**O2. Name every `validate.yml` reference on `docs/guide/ci-and-releases.md`.** CP4 names \"the tree and the paragraph that call the reusable workflow Validate\". The page also names the file at lines 27, 125, 369, 396 and 401: the single-definition sentence, the SHA-pinning sentence, the generated-files list and the two manual-dispatch bullets. `check_docs.py` does not catch a stale file name in prose, so CP4 should say \"every reference to `validate.yml`\" on that page. Line 125 also says every action outside `validate.yml` is pinned to a commit SHA. The `@main` call inside it is the D4 assumption, so the rewritten sentence should keep that exception visible.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "e9f86369e3d191250466a1ad7d8fbcda261eca43db50873b58055b7948703121",
+              "verdict": "APPROVE",
+              "at": "2026-11-16T09:37:42Z"
+            }
+          ]
+        },
+        "F-b3367dcfb35b": {
+          "digest": "b3367dcfb35b7b8cc32e5ed3cf44e4050f11de50af6123f4d8613df0cd0cba61",
+          "text": "**O1. Clarify the existing planner dependency.** D4 (`docs/ai-workflow/CONTROLLER_CI3_PLAN.md:35`) says the model does not import the planner, but `tools/ci_workflows.py:85` already loads `test_shards.py` for placement information. Say that the new constants remain independent and their relationship is checked by a test.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "e9f86369e3d191250466a1ad7d8fbcda261eca43db50873b58055b7948703121",
+              "verdict": "APPROVE",
+              "at": "2026-11-16T09:41:23Z"
+            }
+          ]
+        }
       }
     }
   }

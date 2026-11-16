@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ci3",
+  "plan_revision": 3,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "Tests, the renamed reusable workflow",
+      "depends_on": [],
+      "complexity": 1,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "Build and publish only builds and publishes",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "The six-runner limit and its proof",
+      "depends_on": [
+        "CP2"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP4",
+      "name": "The pages and the item record",
+      "depends_on": [
+        "CP3"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    }
+  ]
+}

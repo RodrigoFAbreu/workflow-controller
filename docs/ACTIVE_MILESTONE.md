@@ -1,6 +1,10 @@
 # Active Milestone
 
-## Latest milestone (AO1)
+## Latest milestone (CI3)
+
+**Complete: accepted by policy (`MILESTONE_COMPLETE`).** Plan `docs/ai-workflow/CONTROLLER_CI3_PLAN.md` (revision 3), four checkpoints; it aligns CI with the agreed standard (CI, Tests and Build and publish). CP1 is complete: the reusable test workflow is `tests.yml`, workflow name `Tests` (`tools/ci_workflows.py`: `TESTS_WORKFLOW`, `tests_workflow()`, `validate.yml` in `RETIRED_WORKFLOWS`); `ci.yml`'s calling job keeps the id `validate`, so the five required check names are unchanged; the docstrings of `tools/ci_changes.py` and `tools/ci_reuse.py` and the references in `tests.test_ci_workflows`, `tests.test_ci_changes` and `tests.test_plan_document_consistency` follow. Verified with `tests.test_ci_workflows`, `tests.test_ci_changes`, `tests.test_ci_reuse`, `tests.test_plan_document_consistency` (266 tests, exact coverage, all passing) and `python3 tools/ci_workflows.py --check`. CP2 is complete: `build-publish.yml` only builds and publishes (D2, D3). `build_publish_workflow` in `tools/ci_workflows.py` no longer holds the `validate`, `after-merge-determinism` and `after-merge-mutations` jobs, the `SELF_VALIDATING` branches or the `main-release` slot (its concurrency group is `build-publish-<run id>`); `build`, `publish` and `release-target-*` all carry `inputs.validate-result == 'success'` as a conjunct, the coverage condition is `&&`-ed onto it and reads only the caller's `after-merge-*` inputs and `release-target-*`; `release-plan` runs on `main` whatever it was handed and, for a run handed no success, writes a notice naming the CI dispatch that publishes. `ci.yml`'s `build-publish` call grants `contents: write` alone (no `actions: read`: nothing in the called workflow downloads another run). Tests in `tests.test_ci_workflows` replace the manual-dispatch ones: no `validate` or `after-merge-*` job there, the validate conjunct parsed by parenthesis depth, every input a direct dispatch can produce (null, empty, other strings) with every `release-plan` state and `release-target-*` result leaving `release-target-*`, `build` and `publish` not run, and a CI dispatch from `main` reaching `build-publish` with the results while one from another branch does not. Verified with `tests.test_ci_workflows`, `tests.test_release_tools`, `tests.test_ci_changes`, `tests.test_ci_reuse`, `tests.test_plan_document_consistency` and `python3 tools/ci_workflows.py --check`. CP3 is complete: the owner chose option B for O1 (recorded in `docs/items/workflow-controller-ci3.md`, SignalHub 2026-11-16): `RUNNER_LIMIT = 6`, `TEST_MAX_PARALLEL = 3` in `tools/ci_workflows.py`, `max-parallel` always emitted on the shard matrix, and `CI_MAX_SHARDS = 3` in `tools/test_shards.py` (its pins in `tests.test_test_shards` follow). `package` now needs `docs` and runs on `!cancelled()` (one docs-tests, docs, package lane beside the shards, never skipped by an upstream result), and `ci.yml`'s two `after-merge-*` jobs wait for `validate` (not cancelled, not a pull request, `validate` succeeded). `tests.test_ci_workflows.RunnerLimitTest` proves the limit from the generated models with no timing assumption: the called workflows are flattened into one job graph, the heaviest set of jobs with no `needs` path between them is found, and the outside runners (conformance, `PR title`, the main reuse report where its `if` holds) are added for every event and every `CI_MAIN_REUSE` mode; it also pins the shared `docs-tests` call, the one-job conformance file, the five required check names and the tie `TEST_MAX_PARALLEL <= CI_MAX_SHARDS`. Verified with `tests.test_ci_workflows`, `tests.test_ci_changes`, `tests.test_ci_reuse`, `tests.test_package_structure`, `tests.test_test_shards`, `tests.test_scenarios` (all passing, exact coverage) and `python3 tools/ci_workflows.py --check`. CP4 is complete: `docs/guide/ci-and-releases.md` (the tree and the Tests workflow, the new "The six-runner limit" section with its per-run limit and the mutable-ref assumption about `docs-tests`, the manual publish route as a CI dispatch from `main`, the release latency now plus about 15 to 17 minutes), `docs/guide/development.md` (the shard ceiling of three, `tests.yml`), `README.md` and `docs/items/workflow-controller-ci3.md` (status, plan link, O1 with the owner's choice and the table, what was done, the corrected "8-shard" sentence) are current; the pull request's measured run is recorded in the item page at self-review. Verified with `tests.test_docs`, `tests.test_plan_document_consistency`, `python3 tools/check_docs.py`, `python3 scripts/workflow_backlog.py check` and `preflight-accept workflow-controller-ci3`. **Self-review:** wording defects fixed in `73f2451`: `ci.yml`'s header and the model's docstring still said the after-merge checks run beside `validate` and that a dispatched `build-publish.yml` runs `tests.yml` itself; `tests.yml`'s header was wrapped mid-sentence; the CI guide had an ambiguous "It has seven jobs", said only a called `build-publish.yml` run has its own concurrency group, and its push-to-`main` paragraph and tree did not say the after-merge checks wait for `validate`. The measured run is recorded in the item page: PR #370's `CI` run at `b5dc86b` (run 43844429224) passed in 63.6 minutes, shards 41.2, 55.6 and 62.1 minutes. The single full run (`python3 tools/run_tests.py`, 6741 tests, exact coverage) failed 6 tests, none in a module this item touches: three in `tests.test_fake_codex_contract` are the known `~/.codex/config.toml` leak (the module passes in a clone under `/tmp`, 20 tests), and `tests.test_job_codex_review`, `tests.test_codex_worker` and `tests.test_job_codex_worker` (timing under load) pass when rerun alone (128 tests, exact coverage). `tools/ci_workflows.py --check`, `tools/check_docs.py`, `workflow_backlog.py check` and `preflight-accept` pass.
+
+## Previous milestone (AO1)
 
 **Complete: accepted by policy (`MILESTONE_COMPLETE`).** Plan `docs/ai-workflow/CONTROLLER_AO1_PLAN.md` (revision 2), two checkpoints; it opts this repository in to the Controller's auto-merge. CP1 is complete: `.workflow-controller/policy.json`'s `pull_request` block gains `"auto_merge": true` and `"release_workflow": "ci.yml"` (the retired `main.yml` is the parser default). Tests: the new `test_the_committed_policy_opts_in_to_a_real_publishing_workflow` in `tests.test_repo_policy` (the committed policy parses with both keys, `ci.yml` is a model of `tools/ci_workflows.py`, and its `build-publish` job calls `build-publish.yml`); `test_absent_means_off_and_main_yml` keeps its fixture half only, and `test_the_reference_file_is_one_plans_exact_content` compares the committed policy with a plan block after removing exactly the two AO1 keys and asserts their values. Verified with `tests.test_repo_policy`, `tests.test_ci_workflows`, `tests.test_version_authority`, `tests.test_milestone_branch` (281 tests, exact coverage, all passing). CP2 is complete: `docs/guide/ci-and-releases.md` (Repository settings) and `docs/guide/milestone-branches.md` (the reference-configuration paragraph) state the opt-in and the `ci.yml` release workflow, with the caveat that a milestone bound before the change never auto-merges; the generic `main.yml` example stays (it shows the parser's default); `docs/items/workflow-controller-ao1.md` records the status, what was done and the first later milestone as the live check. Verified with `tests.test_docs`, `tests.test_plan_document_consistency` (108 tests, exact coverage, all passing), `tools/check_docs.py`, `workflow_backlog.py check` and `preflight-accept`. **Self-review:** one wording defect fixed: the reference-configuration paragraph of `docs/guide/milestone-branches.md` had two parentheticals back to back; the opt-in is now its own sentence. The single full run (`python3 tools/run_tests.py`, 6730 tests, exact coverage) failed 5 tests, none in code this item touches: three in `tests.test_fake_codex_contract` are the known leak of the operator's `~/.codex/config.toml` into the fake Codex's parent walk (the module passes in a clone under `/tmp`, 20 tests), and `tests.test_job_codex_worker` (a timeout recorded as `terminated_by_signal`) and `tests.test_job_codex_worker_interrupt` (a process with its ownership tag from another shard) pass when rerun alone (33 tests, exact coverage). `tools/check_docs.py` passes. Accepted by policy from the functional review evidence and the pull request fact (#369).
 
@@ -677,48 +681,58 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-ao1` (AO1), implementation revision 1, plan `docs/ai-workflow/CONTROLLER_AO1_PLAN.md` (revision 2), base commit
-`7eb15d2`. Two checkpoints, both complete: CP1 (`.workflow-controller/policy.json`'s `pull_request` block gains `"auto_merge": true` and
-`"release_workflow": "ci.yml"`, with a test in `tests.test_repo_policy` that keeps the named workflow real and publishing) and CP2 (the opt-in and the
-`ci.yml` release workflow stated in `docs/guide/ci-and-releases.md` and `docs/guide/milestone-branches.md`, and the item page).
+Item `workflow-controller-ci3` (CI3), implementation revision 1, plan `docs/ai-workflow/CONTROLLER_CI3_PLAN.md` (revision 3), base commit
+`3166305`. Four checkpoints, all complete: CP1 (the reusable test workflow is `tests.yml`, workflow name `Tests`), CP2 (`build-publish.yml` only builds
+and publishes), CP3 (the six-runner limit, shard cap three, and its proof) and CP4 (the pages and the item record).
 Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the
 system directories, and no write inside the read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write only
 to the scratch `TMPDIR`. No flow needs a pull request or a forge call, and none runs the full suite.
 
 Setup: `export TMPDIR=$(mktemp -d)`. No data to seed.
 
-**Flow 1: the committed policy.**
-Run `python3 -B -c "import json; print(json.load(open('.workflow-controller/policy.json'))['pull_request'])"`.
-Expected: the printed block holds `'auto_merge': True` and `'release_workflow': 'ci.yml'`; the rest of the file is otherwise unchanged
-(`git diff 7eb15d2 -- .workflow-controller/policy.json` shows only those two keys added).
+**Flow 1: the workflow files and the generated models.**
+Run `ls .github/workflows` and `python3 -B tools/ci_workflows.py --check; echo rc=$?`.
+Expected: `tests.yml` exists and `validate.yml` does not; the other files are `build-publish.yml`, `ci.yml`, `main-reuse-report.yml`, `pr-title.yml` and
+`workflow-conformance.yml`; `--check` reports the committed files match the models, `rc=0`.
 
-**Flow 2: the policy test and its neighbours.**
-Run `python3 -B tools/run_tests.py tests.test_repo_policy tests.test_ci_workflows tests.test_version_authority tests.test_milestone_branch; echo rc=$?`.
-Expected: `# Test run: PASS`, exact coverage, `rc=0`. A `namespace: none` line is expected in this sandbox. Look for
-`test_the_committed_policy_opts_in_to_a_real_publishing_workflow` (policy parses with both keys, `ci.yml` is a model of `tools/ci_workflows.py`, its
-`build-publish` job calls `build-publish.yml`).
+**Flow 2: the names.**
+Run `grep -n "^name:" .github/workflows/tests.yml .github/workflows/ci.yml .github/workflows/build-publish.yml` and `grep -n "validate:\|uses:" .github/workflows/ci.yml`.
+Expected: `tests.yml` is named `Tests`; `ci.yml`'s calling job keeps the id `validate` (so the five required check names are unchanged) and calls
+`./.github/workflows/tests.yml`.
 
-**Flow 3: the release workflow is real.**
-Run `ls .github/workflows/ci.yml .github/workflows/build-publish.yml; grep -n "build-publish" .github/workflows/ci.yml`.
-Expected: both files exist and `ci.yml` has a job that calls `build-publish.yml`.
+**Flow 3: build and publish only builds and publishes.**
+Run `grep -n "^  [a-z-]*:$" .github/workflows/build-publish.yml` and `grep -n "validate-result\|concurrency\|group:" .github/workflows/build-publish.yml`.
+Expected: no `validate`, `after-merge-determinism` or `after-merge-mutations` job in `build-publish.yml`; `build`, `publish` and the `release-target-*`
+jobs carry `inputs.validate-result == 'success'`; the concurrency group is `build-publish-<run id>`; `ci.yml`'s `build-publish` call grants `contents: write` alone.
 
-**Flow 4: the pages and the item record.**
-Run `grep -n -i "auto_merge\|release_workflow\|ci.yml" docs/guide/ci-and-releases.md docs/guide/milestone-branches.md`, then read
-`docs/items/workflow-controller-ao1.md`.
-Expected: the Repository settings section of the CI guide and the reference-configuration paragraph of the milestone-branches guide state the opt-in
-(its own sentence) and the `ci.yml` release workflow, with the caveat that a milestone bound before the change never auto-merges; the generic `main.yml`
-example stays (it shows the parser's default); the item page records the status, what was done and the first later milestone as the live check.
+**Flow 4: the six-runner limit and the shard cap.**
+Run `grep -n "RUNNER_LIMIT\|TEST_MAX_PARALLEL" tools/ci_workflows.py | head`, `grep -n "CI_MAX_SHARDS" tools/test_shards.py | head -3` and
+`grep -n "max-parallel" .github/workflows/tests.yml`.
+Expected: `RUNNER_LIMIT = 6`, `TEST_MAX_PARALLEL = 3`, `CI_MAX_SHARDS = 3`; `max-parallel` is set on the shard matrix in `tests.yml`; `ci.yml`'s two `after-merge-*`
+jobs wait for `validate`.
 
-**Flow 5: the docs checks.**
+**Flow 5: the proofs.**
+Run `python3 -B tools/run_tests.py tests.test_ci_workflows tests.test_ci_changes tests.test_ci_reuse tests.test_test_shards tests.test_package_structure; echo rc=$?`.
+Expected: `# Test run: PASS`, exact coverage, `rc=0`. A `namespace: none` line is expected in this sandbox. Look for `RunnerLimitTest` in `tests.test_ci_workflows`
+(the flattened job graph never exceeds six concurrent runners for any event or `CI_MAIN_REUSE` mode).
+
+**Flow 6: the pages and the item record.**
+Read `docs/guide/ci-and-releases.md` ("The six-runner limit", the manual publish route as a CI dispatch from `main`, the release latency) and
+`docs/items/workflow-controller-ci3.md`.
+Expected: the guide describes `tests.yml`, the six-runner limit with its mutable-ref assumption about `docs-tests`, and the push-to-`main` after-merge checks
+waiting for `validate`; `docs/guide/development.md` states the shard ceiling of three; the item page records the status, the owner's choice of option B for
+O1, what was done and the measured run (PR #370's `CI` run 43844429224, 63.6 minutes).
+
+**Flow 7: the docs checks.**
 Run `python3 -B tools/run_tests.py tests.test_docs tests.test_plan_document_consistency; echo rc=$?`, `python3 -B tools/check_docs.py; echo rc=$?`,
-`python3 -B scripts/workflow_backlog.py check; echo rc=$?` and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-ao1; echo rc=$?`.
+`python3 -B scripts/workflow_backlog.py check; echo rc=$?` and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-ci3; echo rc=$?`.
 Expected: `# Test run: PASS`, exact coverage, every `rc=0`, `preflight-accept` `"ok": true`.
 
-**Known limitations / out of scope.** The opt-in takes effect only for a milestone bound after this change; the live auto-merge is checked by the first
-later milestone, not here (no real `gh`, no pull request in the sandbox). The full suite is CI's on the pull request; the self-review run's five
-failures (three `tests.test_fake_codex_contract` cases from the operator's `~/.codex/config.toml`, two timing/ownership cases that pass alone) are in
-code this item does not touch and are not flows.
+**Known limitations / out of scope.** The workflows run only on GitHub; the sandbox has no forge, so a real `CI` run, a real release and the six-runner limit
+under load are not flows (the model-level proof in Flow 5 and the recorded run in the item page stand in). The full suite is CI's on the pull request; the
+self-review run's six failures (three `tests.test_fake_codex_contract` cases from the operator's `~/.codex/config.toml`, and `tests.test_job_codex_review`,
+`tests.test_codex_worker`, `tests.test_job_codex_worker` timing under load, which pass alone) are in code this item does not touch and are not flows.
 
 ## Next action
 
-Manual functional review of `workflow-controller-ao1` (Opt this repository in to the Controller's auto-merge): see the checklist above.
+`/milestone-plan` for `workflow-controller-bl1` (Owner-requested backlog and docs changes run through the Controller), the item `python3 scripts/workflow_backlog.py next` returns.

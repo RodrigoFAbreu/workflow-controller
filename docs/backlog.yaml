@@ -548,7 +548,7 @@ items:
     detail: docs/items/workflow-controller-ao1.md
   - id: workflow-controller-ci3
     title: "Align CI with the agreed standard: CI, Tests and Build and publish"
-    status: next
+    status: done
     order: 94
     depends_on: []
     detail: docs/items/workflow-controller-ci3.md

@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ci3",
+  "requirements": {
+    "R1": {
+      "description": "The reusable test workflow is tests.yml, named Tests, and every required check name is unchanged",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "Build and publish orchestrates no tests of the pushed commit, always requires `validate-result == 'success'` to build or publish, a manual CI dispatch from main publishes, and a direct dispatch runs no test job and cannot publish",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "One run holds at most six runners beside the managed conformance job, `PR title` and the main reuse report, proved from the generated models for every event and `CI_MAIN_REUSE` mode; the wall-time cost is the owner's recorded choice",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R4": {
+      "description": "The pages and the item record state the standard, the cap with its per-run limit and the measured result",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    }
+  }
+}

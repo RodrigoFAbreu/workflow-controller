@@ -13,7 +13,7 @@ verification; ``tools/ci_workflows.py`` wires them into the workflows.
 - unset or ``report``: the decision is computed and written to the job
   summary; the full validation still runs, exactly as before;
 - ``on``: when every check passes, ``ci.yml`` passes the pull request run's
-  id to ``validate.yml``, which skips the shards;
+  id to ``tests.yml``, which skips the shards;
 - ``off``, or any other value (treated as ``off``, and said so): nothing is
   looked up and nothing changes.
 
@@ -29,7 +29,7 @@ writes ``GITHUB_OUTPUT`` / ``GITHUB_STEP_SUMMARY`` when GitHub sets them):
     and, in mode ``on`` with every check passing, output ``run-id``.
 ``verify``
     Fail closed (exit 1) unless the recorded tree and plan digest equal this
-    run's. Used by ``validate.yml``'s ``tests-result`` when it reuses a run.
+    run's. Used by ``tests.yml``'s ``tests-result`` when it reuses a run.
 
 There is no network access in the tests: ``find_candidate`` takes the API
 reader as an argument.

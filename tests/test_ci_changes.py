@@ -54,7 +54,7 @@ class ClassifyTests(unittest.TestCase):
                      "docs/ai-workflow/WORKFLOW_STATE.json", "docs/milestones/x.md",
                      "docs/other.yaml", "docs/sub/page.md", "docs/items", "docs/items/",
                      "README.md", "pyproject.toml", "tools/x.py", "tests/test_x.py",
-                     "controller/x.py", "scripts/x.py", ".github/workflows/validate.yml",
+                     "controller/x.py", "scripts/x.py", ".github/workflows/tests.yml",
                      ".claude/commands/x.md", "docs/items/../tools/x.py", "/docs/run.md",
                      "docs\\run.md", "docs//run.md", "", "nothing.txt"):
             with self.subTest(path=path):

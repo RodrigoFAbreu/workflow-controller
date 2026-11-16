@@ -220,9 +220,10 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   shard is a separate process in its own session, with its own `TMPDIR`
   and `XDG_STATE_HOME`. The shard count is planned from recorded
   durations: about 60 s of work per shard, at least 2, at most
-  `min(8, CPUs)`. CI plans from the `ci` profile, which has a ceiling of six shards
-  (`CI_MAX_SHARDS`; a seventh is the owner's runner-budget decision, see
-  [Continuous integration](ci-and-releases.md#continuous-integration)).
+  `min(8, CPUs)`. CI plans from the `ci` profile, which has a ceiling of three shards
+  (`CI_MAX_SHARDS`, tied to the six-runner limit; a higher ceiling is the owner's
+  runner-budget decision, see
+  [The six-runner limit](ci-and-releases.md#the-six-runner-limit)).
   Two modules stay out of the CI plan and run on `main` instead
   (`tests.test_catalogue_determinism` and `tests.test_scenarios_negative`, see
   [Checks that run after the merge](ci-and-releases.md#checks-that-run-after-the-merge));
@@ -412,7 +413,7 @@ namespace, not of the code under test. Never replace a mock with a real signal t
 `tools/check_docs.py` keeps the documentation true without a network or a
 running Controller. It uses only the standard library, and
 `tests/test_docs.py` runs it on the repository and tries every rule on
-small synthetic trees. They run in the validate workflow's `docs` job on every
+small synthetic trees. They run in the Tests workflow's `docs` job on every
 pull request, and in the `tests` shards of a pull request that changes code.
 
 ```bash
@@ -557,7 +558,7 @@ restrict them) the runner exits 2 and the suite skips the scenarios; under
 `CI` they fail instead, so a green CI run means the sandbox was exercised.
 GitHub's `ubuntu-latest` image restricts them through AppArmor
 (`kernel.apparmor_restrict_unprivileged_userns=1`), so the generated
-`validate.yml` lifts the restriction in the `tests` job before the shard runs;
+`tests.yml` lifts the restriction in the `tests` job before the shard runs;
 on such an image locally, run
 `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` or use the
 diagnostic.

@@ -154,7 +154,7 @@ python3 tools/check_docs.py     # links, anchors and the commands shown on the t
 
 Do not set `PYTHONPATH=.`, and run the suite in the foreground. `CI`
 (`.github/workflows/ci.yml`) runs on every pull request and every push to
-`main`. It validates through `.github/workflows/validate.yml`, whose jobs are
+`main`. It validates through `.github/workflows/tests.yml` (the `Tests` workflow), whose jobs are
 `changes`, `docs-tests` (the documentation test modules, through the shared
 `python-tests.yml` workflow), `docs`, `plan`, `tests` (one per shard),
 `tests-result` and `package`; a pull request that changes only documentation

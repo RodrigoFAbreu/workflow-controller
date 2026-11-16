@@ -2,14 +2,14 @@
 ``workflow-controller-trunk-branch-pr-release-orchestration`` CP5): the
 committed workflow files equal the render, the retired ``release.yml`` is
 absent, the emitter's quoting and layout, and the structure of ``ci.yml``,
-``validate.yml`` and ``main.yml``; and
-(``workflow-controller-adaptive-test-sharding`` CP6) ``validate.yml``'s
+``tests.yml`` and ``main.yml``; and
+(``workflow-controller-adaptive-test-sharding`` CP6) ``tests.yml``'s
 planned ``plan`` / ``tests`` / ``tests-result`` jobs, the CI placement
 partition and the conformance family; and
 (``workflow-controller-squash-merge-tag-versioning`` CP4) ``pr-title.yml``
 and ``main.yml``'s ``build`` job taking the classified version as
 ``RELEASE_VERSION``; and (``ci/standardize-actions``) ``ci.yml`` as the one
-entry point that calls ``validate.yml`` and, on ``main`` after a successful
+entry point that calls ``tests.yml`` and, on ``main`` after a successful
 validation, ``build-publish.yml`` (which replaced ``main.yml``), both
 reusable workflows also dispatchable by hand, and the shared
 ``python-tests.yml`` running the documentation test modules.
@@ -137,7 +137,7 @@ class CommittedFilesTest(unittest.TestCase):
         self.assertFalse((WORKFLOWS / "controller-tests.yml").exists())
 
     def test_the_tag_triggered_release_workflow_and_main_yml_are_retired(self) -> None:
-        self.assertEqual(ci.RETIRED_WORKFLOWS, ("release.yml", "main.yml"))
+        self.assertEqual(ci.RETIRED_WORKFLOWS, ("release.yml", "main.yml", "validate.yml"))
         for name in ci.RETIRED_WORKFLOWS:
             with self.subTest(name=name):
                 self.assertNotIn(name, ci.WORKFLOWS)
@@ -166,7 +166,7 @@ class CommittedFilesTest(unittest.TestCase):
 
     def test_the_generated_files(self) -> None:
         self.assertEqual(sorted(ci.WORKFLOWS), ["build-publish.yml", "ci.yml", "main-reuse-report.yml",
-                                                "pr-title.yml", "validate.yml"])
+                                                "pr-title.yml", "tests.yml"])
         self.assertEqual(sorted(ci.render()), sorted(ci.WORKFLOWS))
         self.assertTrue((WORKFLOWS / "pr-title.yml").is_file())
 
@@ -298,8 +298,8 @@ class CoverageTest(unittest.TestCase):
         for name in ("CONTROLLER_SHARDS", "EXCLUDED_TEST_MODULES", "CONFORMANCE_SUITES"):
             with self.subTest(name=name):
                 self.assertFalse(hasattr(ci, name))
-        self.assertNotIn("conformance", _jobs(ci.validate_workflow()))
-        self.assertNotIn("controller", _jobs(ci.validate_workflow()))
+        self.assertNotIn("conformance", _jobs(ci.tests_workflow()))
+        self.assertNotIn("controller", _jobs(ci.tests_workflow()))
 
     def test_every_test_module_is_in_the_inventory(self) -> None:
         discovered = {f"tests.{path.stem}" for path in (fixtures.REPO_ROOT / "tests").glob("test_*.py")}
@@ -331,7 +331,7 @@ class CoverageTest(unittest.TestCase):
 
     def test_package_job_runs_the_package_placed_modules(self) -> None:
         self.assertEqual(ci.PACKAGE_TEST_MODULES, ("tests.test_packaged_runtime",))
-        package = _jobs(ci.validate_workflow())["package"]
+        package = _jobs(ci.tests_workflow())["package"]
         runs = [_run(step) for step in _steps(package)]
         self.assertIn("CONTROLLER_REQUIRE_PACKAGING_TESTS=1 python -m unittest "
                       "tests.test_packaged_runtime -v", runs)
@@ -352,7 +352,7 @@ class ValidatePlanTest(unittest.TestCase):
     """``plan`` -> ``tests`` (one job per planned shard) -> ``tests-result``."""
 
     def setUp(self) -> None:
-        self.jobs = _jobs(ci.validate_workflow())
+        self.jobs = _jobs(ci.tests_workflow())
 
     def _argv(self, job: str, fragment: str) -> list[str]:
         steps = _steps(self.jobs[job])
@@ -371,7 +371,10 @@ class ValidatePlanTest(unittest.TestCase):
         # The shards are skipped only when a reused run's id is passed in.
         self.assertEqual(self.jobs["tests"]["if"],
                          "inputs.tests-from-run == '' && needs.changes.outputs.code == 'true'")
-        self.assertNotIn("needs", self.jobs["package"])
+        # The third job of the one docs-tests -> docs -> package lane; whatever
+        # docs ended as, package runs unless the run is cancelled (CI3 D4).
+        self.assertEqual(self.jobs["package"]["needs"], ["docs"])
+        self.assertEqual(self.jobs["package"]["if"], "!cancelled()")
 
     def test_check_names(self) -> None:
         self.assertNotIn("name", self.jobs["plan"])
@@ -393,7 +396,7 @@ class ValidatePlanTest(unittest.TestCase):
 
     def test_matrix_is_the_planned_shards(self) -> None:
         strategy = self.jobs["tests"]["strategy"]
-        self.assertEqual(strategy, {"fail-fast": False,
+        self.assertEqual(strategy, {"fail-fast": False, "max-parallel": ci.TEST_MAX_PARALLEL,
                                     "matrix": {"shard": "${{ fromJSON(needs.plan.outputs.shards) }}"}})
 
     def test_exec_shard_recomputes_the_plan_and_checks_its_digest(self) -> None:
@@ -431,7 +434,7 @@ class ValidatePlanTest(unittest.TestCase):
                           {"pattern": "results-*", "path": "results/shards"}])
         self.assertEqual(downloads[1]["if"],
                          "inputs.tests-from-run == '' && needs.changes.outputs.code == 'true'")
-        self.assertNotIn("merge-multiple", ci.emit(ci.validate_workflow()))
+        self.assertNotIn("merge-multiple", ci.emit(ci.tests_workflow()))
         # A missing artifact must reach aggregate (which exits 2, naming it),
         # not end the job before it can say so.
         self.assertTrue(all(s["continue-on-error"] is True for s in downloads))
@@ -479,7 +482,7 @@ class ValidatePlanTest(unittest.TestCase):
         self.assertEqual(steps[step_index], {"name": "allow unprivileged user namespaces", "run": guarded})
 
     def test_validate_keeps_major_tag_actions(self) -> None:
-        # ADR 0002: validate.yml's actions keep their major tags; the jobs
+        # ADR 0002: tests.yml's actions keep their major tags; the jobs
         # outside it are pinned to commits.
         for job_name, job in self.jobs.items():
             for step in _steps(job):
@@ -496,7 +499,7 @@ class ChangeDetectionTest(unittest.TestCase):
     CODE = "needs.changes.outputs.code == 'true'"
 
     def setUp(self) -> None:
-        self.validate = ci.validate_workflow()
+        self.validate = ci.tests_workflow()
         self.jobs = _jobs(self.validate)
         self.result_steps = _steps(self.jobs["tests-result"])
 
@@ -596,11 +599,10 @@ class ChangeDetectionTest(unittest.TestCase):
                 self.assertNotIn("paths-ignore", text)
                 self.assertNotRegex(text, r"(?m)^\s+paths:")
 
-    def test_ci_and_build_publish_call_validate_unchanged_and_ignore_changes(self) -> None:
+    def test_ci_calls_tests_unchanged_and_build_publish_runs_no_tests(self) -> None:
         models = _models()
-        self.assertEqual(_jobs(models["ci.yml"])["validate"]["uses"], "./.github/workflows/validate.yml")
-        self.assertEqual(_jobs(models["build-publish.yml"])["validate"]["uses"],
-                         "./.github/workflows/validate.yml")
+        self.assertEqual(_jobs(models["ci.yml"])["validate"]["uses"], "./.github/workflows/tests.yml")
+        self.assertEqual([job for job in _jobs(models["build-publish.yml"]).values() if "uses" in job], [])
         for name in ("ci.yml", "build-publish.yml"):
             self.assertNotIn("changes", ci.emit(models[name]).replace("tests-from-run", ""))
 
@@ -609,13 +611,13 @@ class ChangeDetectionTest(unittest.TestCase):
         self.assertIn("package", self.jobs)
         self.assertNotIn("name", self.jobs["tests-result"])
         self.assertNotIn("name", self.jobs["package"])
-        self.assertNotIn("needs", self.jobs["package"])
-        self.assertNotIn("if", self.jobs["package"])
+        self.assertEqual((self.jobs["package"]["needs"], self.jobs["package"]["if"]),
+                         (["docs"], "!cancelled()"))
 
 
 class AllJobsTest(unittest.TestCase):
     #: The reusable workflows a job may call instead of running steps.
-    CALLED = {"./.github/workflows/validate.yml", "./.github/workflows/build-publish.yml",
+    CALLED = {"./.github/workflows/tests.yml", "./.github/workflows/build-publish.yml",
               "RodrigoFAbreu/action-workflows/.github/workflows/python-tests.yml@main"}
 
     def test_matrix_jobs_do_not_fail_fast(self) -> None:
@@ -641,7 +643,7 @@ class AllJobsTest(unittest.TestCase):
         self.assertEqual(called, self.CALLED)
 
     def test_validate_jobs_are_read_only(self) -> None:
-        for job_name, job in _jobs(ci.validate_workflow()).items():
+        for job_name, job in _jobs(ci.tests_workflow()).items():
             with self.subTest(job=job_name):
                 # tests-result alone may read another run's artifact (reuse).
                 expected = {"contents": "read", "actions": "read"} \
@@ -656,7 +658,7 @@ class AllJobsTest(unittest.TestCase):
         # publish job asks for: a called workflow cannot exceed its caller.
         self.assertEqual(writers, [("ci.yml", "build-publish"), ("build-publish.yml", "publish")])
         self.assertEqual(_jobs(ci.ci_workflow())["build-publish"]["permissions"],
-                         {"contents": "write", "actions": "read"})
+                         {"contents": "write"})
         for job_name, job in _jobs(ci.build_publish_workflow()).items():
             with self.subTest(job=job_name):
                 self.assertIn("permissions", job)
@@ -682,14 +684,14 @@ class AllJobsTest(unittest.TestCase):
                                  ("build-publish.yml", "publish", "actions/download-artifact"),
                                  ("ci.yml", "reuse", "actions/download-artifact"),
                                  ("main-reuse-report.yml", "reuse-report", "actions/download-artifact"),
-                                 ("validate.yml", "plan", "actions/upload-artifact"),
-                                 ("validate.yml", "tests", "actions/upload-artifact"),
-                                 ("validate.yml", "tests-result", "actions/download-artifact"),
-                                 ("validate.yml", "tests-result", "actions/download-artifact"),
-                                 ("validate.yml", "tests-result", "actions/download-artifact"),
-                                 ("validate.yml", "tests-result", "actions/upload-artifact")])
-        # ci.yml calls validate.yml and build-publish.yml in one run, and a
-        # dispatched build-publish.yml calls validate.yml: no name may collide.
+                                 ("tests.yml", "plan", "actions/upload-artifact"),
+                                 ("tests.yml", "tests", "actions/upload-artifact"),
+                                 ("tests.yml", "tests-result", "actions/download-artifact"),
+                                 ("tests.yml", "tests-result", "actions/download-artifact"),
+                                 ("tests.yml", "tests-result", "actions/download-artifact"),
+                                 ("tests.yml", "tests-result", "actions/upload-artifact")])
+        # ci.yml calls tests.yml and build-publish.yml in one run, and a
+        # dispatched build-publish.yml calls tests.yml: no name may collide.
         names = [step["with"].get("name") for _, _, _, step in _all_steps()
                  if "upload-artifact" in _uses(step)]
         self.assertEqual(len(names), len(set(names)))
@@ -705,7 +707,7 @@ class AllJobsTest(unittest.TestCase):
                     self.assertNotEqual(match.group(1), '"$GITHUB_SHA"')
 
     def test_package_peels_github_sha(self) -> None:
-        package = _jobs(ci.validate_workflow())["package"]
+        package = _jobs(ci.tests_workflow())["package"]
         verify = [_run(s) for s in _steps(package) if "verify-wheel" in _run(s)]
         self.assertEqual(verify, ['python3 tools/release.py verify-wheel dist/*.whl --local '
                                   '--commit "$(git rev-parse "$GITHUB_SHA^{commit}")"'])
@@ -715,7 +717,7 @@ class AllJobsTest(unittest.TestCase):
 
     def test_validate_smoke_test_is_unchanged_in_text(self) -> None:
         # 1.3.0's text: the local build's version, now tag-derived after the cutover.
-        smoke = [_run(s) for s in _steps(_jobs(ci.validate_workflow())["package"])
+        smoke = [_run(s) for s in _steps(_jobs(ci.tests_workflow())["package"])
                  if s.get("name") == "pipx smoke test"]
         self.assertEqual(smoke, [PIPX_SMOKE_1_3_0])
 
@@ -758,15 +760,15 @@ class AllJobsTest(unittest.TestCase):
                     self.assertIs(persist, True)
                 else:
                     self.assertIs(persist, False)
-        # validate.yml's six step jobs; ci.yml's reuse and two after-merge jobs;
-        # build-publish.yml's two after-merge, release-plan, two release-target,
-        # build and publish; reuse-report; title.
-        self.assertEqual(checkouts, 6 + 3 + 7 + 1 + 1)
+        # tests.yml's six step jobs; ci.yml's reuse and two after-merge jobs;
+        # build-publish.yml's release-plan, two release-target, build and
+        # publish; reuse-report; title.
+        self.assertEqual(checkouts, 6 + 3 + 5 + 1 + 1)
 
     def test_the_two_reusable_workflows_are_also_dispatchable_without_inputs(self) -> None:
-        # A manual run hands nothing in: validate.yml never reuses, and
-        # build-publish.yml cannot claim a validation it did not run.
-        for workflow in (ci.validate_workflow(), ci.build_publish_workflow()):
+        # A manual run hands nothing in: tests.yml never reuses, and
+        # build-publish.yml cannot claim a validation: it builds nothing.
+        for workflow in (ci.tests_workflow(), ci.build_publish_workflow()):
             with self.subTest(workflow=workflow["name"]):
                 self.assertEqual(list(workflow["on"]), ["workflow_call", "workflow_dispatch"])
                 self.assertIsNone(workflow["on"]["workflow_dispatch"])
@@ -798,7 +800,7 @@ def _gh_eval(expression: str, context: dict) -> object:
     operand = r"(\w+|'[^']*')"
     text = re.sub(rf"{operand} (==|!=) {operand}",
                   lambda m: f"{'' if m.group(2) == '==' else 'not '}eq({m.group(1)}, {m.group(3)})", text)
-    text = text.replace("!cancelled()", "True").replace("&&", " and ").replace("||", " or ")
+    text = text.replace("!cancelled()", "True").replace("always()", "True").replace("&&", " and ").replace("||", " or ")
     text = text.replace("format(", "fmt(")
     assert "!" not in text, text
     return eval(text, {"__builtins__": {}},  # noqa: S307 - a fixed, model-derived expression
@@ -842,14 +844,14 @@ class CiWorkflowTest(unittest.TestCase):
         self.assertEqual(self.jobs["validate"], {
             "needs": ["reuse"], "if": "!cancelled()",
             "permissions": {"contents": "read", "actions": "read"},
-            "uses": "./.github/workflows/validate.yml",
+            "uses": "./.github/workflows/tests.yml",
             "with": {"tests-from-run": "${{ vars.CI_MAIN_REUSE == 'on' && "
                                        "needs.reuse.outputs.run-id || '' }}"}})
         self.assertEqual(self.jobs["build-publish"], {
             "needs": ["validate", "after-merge-determinism", "after-merge-mutations"],
             "if": "!cancelled() && needs.validate.result == 'success' && "
                   "github.event_name != 'pull_request' && github.ref == 'refs/heads/main'",
-            "permissions": {"contents": "write", "actions": "read"},
+            "permissions": {"contents": "write"},
             "uses": "./.github/workflows/build-publish.yml",
             "with": {"validate-result": "${{ needs.validate.result }}",
                      "after-merge-determinism": "${{ needs.after-merge-determinism.result }}",
@@ -862,11 +864,11 @@ class CiWorkflowTest(unittest.TestCase):
         # Branch protection requires "validate / plan", "validate / tests-result",
         # "validate / package" (a called job's context is "<caller job> / <job name>"),
         # "PR title" and the managed "workflow-conformance".
-        validate_jobs = _jobs(ci.validate_workflow())
+        validate_jobs = _jobs(ci.tests_workflow())
         contexts = {f"validate / {validate_jobs[job].get('name', job)}"
                     for job in ("plan", "tests-result", "package")}
         self.assertEqual(contexts, {"validate / plan", "validate / tests-result", "validate / package"})
-        self.assertEqual(self.jobs["validate"]["uses"], "./.github/workflows/validate.yml")
+        self.assertEqual(self.jobs["validate"]["uses"], "./.github/workflows/tests.yml")
         self.assertEqual(ci.pr_title_workflow()["jobs"]["title"]["name"], "PR title")
         self.assertIn("workflow-conformance:", CONFORMANCE_YML.read_text(encoding="utf-8"))
 
@@ -897,14 +899,20 @@ class CiWorkflowTest(unittest.TestCase):
     def test_after_merge_checks_never_run_on_a_pull_request(self) -> None:
         for check in ("determinism", "mutations"):
             job = self.jobs[f"after-merge-{check}"]
-            self.assertNotIn("needs", job)
-            self.assertEqual(job["if"], "github.event_name != 'pull_request'")
-            self.assertFalse(_gh_eval(job["if"], {"github.event_name": "pull_request"}))
-            self.assertTrue(_gh_eval(job["if"], {"github.event_name": "push"}))
-            self.assertTrue(_gh_eval(job["if"], {"github.event_name": "workflow_dispatch"}))
+            # They wait for validate, so they never share its runners (CI3 D4).
+            self.assertEqual(job["needs"], ["validate"])
+            self.assertEqual(job["if"], "!cancelled() && needs.validate.result == 'success' && "
+                                        "github.event_name != 'pull_request'")
+            ok = {"needs.validate.result": "success"}
+            self.assertFalse(_gh_eval(job["if"], {"github.event_name": "pull_request", **ok}))
+            self.assertTrue(_gh_eval(job["if"], {"github.event_name": "push", **ok}))
+            self.assertTrue(_gh_eval(job["if"], {"github.event_name": "workflow_dispatch", **ok}))
+            for result in ("failure", "skipped", "cancelled"):
+                self.assertFalse(_gh_eval(job["if"], {"github.event_name": "push",
+                                                      "needs.validate.result": result}))
 
     def test_validate_is_workflow_call_and_dispatch(self) -> None:
-        on = ci.validate_workflow()["on"]
+        on = ci.tests_workflow()["on"]
         self.assertEqual(list(on), ["workflow_call", "workflow_dispatch"])
         self.assertIsNone(on["workflow_dispatch"])
         self.assertEqual(list(on["workflow_call"]), ["inputs"])
@@ -913,7 +921,7 @@ class CiWorkflowTest(unittest.TestCase):
         self.assertEqual((inputs["tests-from-run"]["type"], inputs["tests-from-run"]["default"],
                           inputs["tests-from-run"]["required"]), ("string", "", False))
         # Dispatched, the input is null, which runs the shards like ''.
-        tests_if = _jobs(ci.validate_workflow())["tests"]["if"]
+        tests_if = _jobs(ci.tests_workflow())["tests"]["if"]
         self.assertTrue(_gh_eval(tests_if, {"needs.changes.outputs.code": "true"}))
 
 
@@ -922,7 +930,7 @@ class DocsTestsTest(unittest.TestCase):
     generic ``python-tests.yml``."""
 
     def setUp(self) -> None:
-        self.job = _jobs(ci.validate_workflow())["docs-tests"]
+        self.job = _jobs(ci.tests_workflow())["docs-tests"]
 
     def test_the_job_calls_the_shared_workflow_through_its_structured_inputs(self) -> None:
         self.assertEqual(self.job, {
@@ -931,7 +939,7 @@ class DocsTestsTest(unittest.TestCase):
             "with": {"python-version": "3.12", "test-directory": "tests",
                      "top-level-directory": ".", "test-pattern": ci.DOCS_TEST_PATTERN}})
         self.assertEqual(self.job["with"]["python-version"], ci.PYTHON_VERSION)
-        self.assertNotIn("test-command", ci.render()["validate.yml"])
+        self.assertNotIn("test-command", ci.render()["tests.yml"])
 
     def test_the_pattern_selects_exactly_the_documentation_test_modules(self) -> None:
         # unittest discover matches the pattern against file names in tests/
@@ -972,47 +980,33 @@ class BuildPublishWorkflowTest(unittest.TestCase):
         self.assertNotIn("pull_request", on)
         self.assertNotIn("push", on)
 
-    def _concurrency(self, inputs: dict, ref: str) -> str:
-        context = {"github.ref": ref, "github.run_id": "123",
-                   **{f"inputs.{name}": value for name, value in inputs.items()}}
-        return _gh_eval(self.workflow["concurrency"]["group"], context)
-
     def test_concurrency(self) -> None:
         self.assertIs(self.workflow["concurrency"]["cancel-in-progress"], False)
-        # Dispatched (null inputs) on main: the release slot ci.yml's main runs hold.
-        self.assertEqual(self._concurrency({}, "refs/heads/main"), "main-release")
-        self.assertEqual(self._concurrency({}, "refs/heads/topic"), "build-publish-123")
-        # Called by ci.yml, which holds the slot already: a group of its own.
-        self.assertEqual(self._concurrency({"validate-result": "success"}, "refs/heads/main"),
-                         "build-publish-123")
+        # No self-run test job is left, so the workflow never takes the
+        # release slot: its group is its own run's, called or dispatched.
+        self.assertEqual(self.workflow["concurrency"]["group"], "build-publish-${{ github.run_id }}")
         self.assertEqual(self.workflow["permissions"], {"contents": "read"})
 
+    TARGETS = ["release-target-determinism", "release-target-mutations"]
+
     def test_needs_chain(self) -> None:
-        self.assertEqual(list(self.jobs), ["validate", "after-merge-determinism", "after-merge-mutations",
-                                           "release-plan", "release-target-determinism",
-                                           "release-target-mutations", "build", "publish"])
-        self.assertEqual(self.jobs["validate"], {
-            "if": "inputs.validate-result == ''",
-            "permissions": {"contents": "read", "actions": "read"},
-            "uses": "./.github/workflows/validate.yml"})
+        self.assertEqual(list(self.jobs), ["release-plan", *self.TARGETS, "build", "publish"])
+        for name in self.jobs:
+            self.assertFalse(name == "validate" or name.startswith("after-merge-"), name)
+        self.assertNotIn("needs", self.jobs["release-plan"])
         for check in ("determinism", "mutations"):
-            self.assertEqual(self.jobs[f"after-merge-{check}"]["if"], "inputs.validate-result == ''")
-            self.assertNotIn("needs", self.jobs[f"after-merge-{check}"])
-        self.assertEqual(self.jobs["release-plan"]["needs"], ["validate"])
-        checks = ["after-merge-determinism", "after-merge-mutations",
-                  "release-target-determinism", "release-target-mutations"]
-        self.assertEqual(self.jobs["build"]["needs"], ["validate", "release-plan", *checks])
-        self.assertEqual(self.jobs["publish"]["needs"], ["validate", "release-plan", "build", *checks])
+            self.assertEqual(self.jobs[f"release-target-{check}"]["needs"], ["release-plan"])
+        self.assertEqual(self.jobs["build"]["needs"], ["release-plan", *self.TARGETS])
+        self.assertEqual(self.jobs["publish"]["needs"], ["release-plan", "build", *self.TARGETS])
 
     def test_conditions(self) -> None:
         on_trunk = "github.ref == 'refs/heads/main'"
-        validated = "(inputs.validate-result == 'success' || needs.validate.result == 'success')"
+        validated = "inputs.validate-result == 'success'"
         publishing = (f"{on_trunk} && (needs.release-plan.outputs.state == 'RELEASE_DUE' || "
                       "needs.release-plan.outputs.state == 'RESUME')")
-        self.assertEqual(self.jobs["release-plan"]["if"], f"!cancelled() && {validated} && {on_trunk}")
+        self.assertEqual(self.jobs["release-plan"]["if"], f"!cancelled() && {on_trunk}")
         coverage = " && ".join(
-            f"((needs.release-plan.outputs.commit == github.sha && (inputs.after-merge-{c} == 'success' || "
-            f"needs.after-merge-{c}.result == 'success')) || "
+            f"((needs.release-plan.outputs.commit == github.sha && inputs.after-merge-{c} == 'success') || "
             f"(needs.release-plan.outputs.commit != github.sha && needs.release-target-{c}.result == 'success'))"
             for c in ("determinism", "mutations"))
         self.assertEqual(self.jobs["build"]["if"],
@@ -1024,31 +1018,50 @@ class BuildPublishWorkflowTest(unittest.TestCase):
         for check in ("determinism", "mutations"):
             self.assertEqual(self.jobs[f"release-target-{check}"]["needs"], ["release-plan"])
             self.assertEqual(self.jobs[f"release-target-{check}"]["if"],
-                             "!cancelled() && needs.release-plan.result == 'success' && "
+                             f"!cancelled() && needs.release-plan.result == 'success' && {validated} && "
                              f"{publishing} && needs.release-plan.outputs.commit != github.sha")
         self.assertEqual(ci._publishing_condition(), publishing)
 
-    #: ``ci.yml``'s call: its validate and after-merge results for the pushed commit.
-    CALLED = {"validate-result": "success", "after-merge-determinism": "success",
-              "after-merge-mutations": "success"}
-    #: The four check jobs of a called run in an ordinary release (the target is the
-    #: pushed commit): the own after-merge jobs are skipped, the target ones too.
-    ORDINARY = {"after-merge-determinism": "skipped", "after-merge-mutations": "skipped",
-                "release-target-determinism": "skipped", "release-target-mutations": "skipped"}
+    @staticmethod
+    def _conjuncts(expression: str) -> list:
+        """The top-level ``&&`` operands of ``expression``, parsed by
+        parenthesis depth (never by substring)."""
+        parts, depth, start = [], 0, 0
+        for index, char in enumerate(expression):
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+            elif depth == 0 and expression.startswith(" && ", index):
+                parts.append(expression[start:index])
+                start = index + 4
+        parts.append(expression[start:])
+        return [part.strip() for part in parts]
+
+    def test_every_release_job_requires_the_callers_validate_result_as_a_conjunct(self) -> None:
+        for name in ("build", "publish", *self.TARGETS):
+            with self.subTest(job=name):
+                expression = self.jobs[name]["if"]
+                self.assertIn("inputs.validate-result == 'success'", self._conjuncts(expression))
+                self.assertNotIn("always()", expression)
+                self.assertIn("!cancelled()", self._conjuncts(expression))
+                # Only the inputs, release-plan, the targets and the build are read.
+                for reference in re.findall(r"\b(?:inputs|needs|github)\.[A-Za-z0-9_.-]*[A-Za-z0-9_]", expression):
+                    self.assertRegex(reference, r"^(inputs\.(validate-result|after-merge-[a-z]+)|"
+                                                r"needs\.(release-plan|build|release-target-[a-z]+)\.[a-z.]+|"
+                                                r"github\.(ref|sha))$")
+        self.assertNotIn("inputs.validate-result", self.jobs["release-plan"]["if"])
 
     def _would_run(self, name: str, results: dict, state: str, ref: str = "refs/heads/main",
-                   *, target_is_pushed: bool = True, checks: "dict | None" = None,
-                   inputs: "dict | None" = None) -> bool:
-        """The job's ``if`` over ``results`` (job -> result), the four check jobs at
-        ``checks`` (default: a called run's ordinary release), ``inputs`` (default:
-        ``ci.yml``'s call; ``{}`` is a dispatch, every input null) and
+                   *, target_is_pushed: bool = True, inputs: "dict | None" = None) -> bool:
+        """The job's ``if`` over ``results`` (job -> result), ``inputs`` (default: a
+        successful call of ``ci.yml``; ``{}`` is a dispatch, every input null) and
         ``release-plan``'s commit equal to the pushed one or not."""
-        results = {**(self.ORDINARY if checks is None else checks), **results}
         inputs = self.CALLED if inputs is None else inputs
         job = self.jobs[name]
         # Only a job named in the if's own needs may be read (a GitHub Actions rule).
         for needed in re.findall(r"needs\.([a-z-]+)\.", job.get("if", "")):
-            self.assertIn(needed, job["needs"], (name, needed))
+            self.assertIn(needed, job.get("needs", []), (name, needed))
         context = {"github.ref": ref, "github.sha": "pushed",
                    "needs.release-plan.outputs.commit": "pushed" if target_is_pushed else "ancestor",
                    "needs.release-plan.outputs.state": state,
@@ -1056,63 +1069,79 @@ class BuildPublishWorkflowTest(unittest.TestCase):
                    **{f"inputs.{key}": value for key, value in inputs.items()}}
         return bool(_gh_eval(job["if"], context))
 
-    def _chain(self, state: str = "RELEASE_DUE", *, inputs: "dict | None" = None,
-               validate: str = "skipped", checks: "dict | None" = None) -> tuple:
-        results = {"validate": validate}
-        plan = self._would_run("release-plan", results, state, inputs=inputs, checks=checks)
-        results["release-plan"] = "success" if plan else "skipped"
-        build = self._would_run("build", results, state, inputs=inputs, checks=checks)
-        results["build"] = "success" if build else "skipped"
-        return plan, build, self._would_run("publish", results, state, inputs=inputs, checks=checks)
+    #: ``ci.yml``'s call: its validate and after-merge results for the pushed commit.
+    CALLED = {"validate-result": "success", "after-merge-determinism": "success",
+              "after-merge-mutations": "success"}
+    STATES = ("RELEASE_DUE", "RESUME", "NO_CHANGE", "NOT_DUE")
 
-    def test_called_it_validates_nothing_again(self) -> None:
-        # ci.yml's results stand in: the own validate and after-merge jobs are skipped.
-        for job in ("validate", "after-merge-determinism", "after-merge-mutations"):
-            with self.subTest(job=job):
-                self.assertFalse(self._would_run(job, {}, "RELEASE_DUE"))
-        self.assertEqual(self._chain(), (True, True, True))
-        self.assertEqual(self._chain("RESUME"), (True, True, True))
-        self.assertEqual(self._chain("NO_CHANGE"), (True, False, False))
-        # A caller result other than success releases nothing, and nothing re-validates.
+    def _chain(self, state: str = "RELEASE_DUE", *, inputs: "dict | None" = None,
+               target_is_pushed: bool = True, targets: str = "skipped") -> tuple:
+        """(release-plan, release-target-*, build, publish) would-run flags."""
+        results = {"release-plan": "success" if self._would_run(
+            "release-plan", {}, state, inputs=inputs) else "skipped"}
+        ran = tuple(self._would_run(name, results, state, inputs=inputs, target_is_pushed=target_is_pushed)
+                    for name in self.TARGETS)
+        results.update({name: targets if run else "skipped" for name, run in zip(self.TARGETS, ran)})
+        build = self._would_run("build", results, state, inputs=inputs, target_is_pushed=target_is_pushed)
+        results["build"] = "success" if build else "skipped"
+        publish = self._would_run("publish", results, state, inputs=inputs, target_is_pushed=target_is_pushed)
+        return results["release-plan"] == "success", any(ran), build, publish
+
+    def test_called_it_builds_and_publishes_what_the_caller_validated(self) -> None:
+        self.assertEqual(self._chain(), (True, False, True, True))
+        # An ancestor RESUME runs the target's own checks first.
+        self.assertEqual(self._chain("RESUME", target_is_pushed=False, targets="success"),
+                         (True, True, True, True))
+        self.assertEqual(self._chain("NO_CHANGE"), (True, False, False, False))
+        # A caller result other than success releases nothing.
         for result in ("failure", "cancelled", "skipped"):
             with self.subTest(result=result):
                 inputs = {**self.CALLED, "validate-result": result}
-                self.assertFalse(self._would_run("validate", {}, "RELEASE_DUE", inputs=inputs))
-                self.assertEqual(self._chain(inputs=inputs), (False, False, False))
-        # A caller that hands in no after-merge results publishes nothing.
-        self.assertEqual(self._chain(inputs={"validate-result": "success"}), (True, False, False))
+                self.assertEqual(self._chain(inputs=inputs), (True, False, False, False))
+        # A caller that hands in no after-merge results publishes nothing for the pushed commit.
+        self.assertEqual(self._chain(inputs={"validate-result": "success"}), (True, False, False, False))
 
-    #: A dispatch's checks in an ordinary release: its own after-merge jobs ran.
-    DISPATCHED = {"after-merge-determinism": "success", "after-merge-mutations": "success",
-                  "release-target-determinism": "skipped", "release-target-mutations": "skipped"}
+    def test_a_direct_dispatch_runs_no_test_and_publishes_nothing(self) -> None:
+        # Every input a dispatch can produce: absent (null) or empty or any other string.
+        for values in ({}, {"validate-result": ""},
+                       {"validate-result": "", "after-merge-determinism": "", "after-merge-mutations": ""},
+                       {"validate-result": "failure"}, {"validate-result": "skipped"},
+                       {"after-merge-determinism": "success", "after-merge-mutations": "success"}):
+            for state in self.STATES:
+                for pushed in (True, False):
+                    for targets in ("success", "failure", "skipped"):
+                        with self.subTest(inputs=values, state=state, pushed=pushed, targets=targets):
+                            plan, target, build, publish = self._chain(
+                                state, inputs=values, target_is_pushed=pushed, targets=targets)
+                            self.assertEqual((target, build, publish), (False, False, False))
+        # Only the read-only classification runs, and it names the CI dispatch.
+        self.assertTrue(self._would_run("release-plan", {}, "RESUME", inputs={}))
+        notice = [step for step in _steps(self.jobs["release-plan"]) if step.get("name") == "no test results"]
+        self.assertEqual(len(notice), 1)
+        self.assertEqual(notice[0]["if"], "inputs.validate-result != 'success'")
+        self.assertIn("dispatch the CI workflow on main", notice[0]["run"])
+        self.assertTrue(_gh_eval(notice[0]["if"], {}))
+        self.assertFalse(_gh_eval(notice[0]["if"], {"inputs.validate-result": "success"}))
 
-    def test_dispatched_it_validates_first(self) -> None:
-        for job in ("validate", "after-merge-determinism", "after-merge-mutations"):
-            with self.subTest(job=job):
-                self.assertTrue(self._would_run(job, {}, "RELEASE_DUE", inputs={}))
-        self.assertEqual(self._chain(inputs={}, validate="success", checks=self.DISPATCHED), (True, True, True))
-        for validate in ("failure", "skipped", "cancelled"):
-            with self.subTest(validate=validate):
-                self.assertEqual(self._chain(inputs={}, validate=validate, checks=self.DISPATCHED),
-                                 (False, False, False))
+    def test_a_ci_dispatch_publishes_from_main_only(self) -> None:
+        ci_jobs = _jobs(ci.ci_workflow())
+        call = ci_jobs["build-publish"]
+        self.assertEqual(call["with"]["validate-result"], "${{ needs.validate.result }}")
         for check in ("determinism", "mutations"):
-            broken = {**self.DISPATCHED, f"after-merge-{check}": "failure"}
-            self.assertEqual(self._chain(inputs={}, validate="success", checks=broken), (True, False, False))
-        # Not on main: nothing releases.
-        self.assertFalse(self._would_run("release-plan", {"validate": "success"}, "RELEASE_DUE",
-                                         ref="refs/heads/other", inputs={}))
-        # A failed build does not publish.
-        self.assertFalse(self._would_run("publish", {"validate": "success", "release-plan": "success",
-                                                      "build": "failure"}, "RELEASE_DUE", inputs={},
-                                         checks=self.DISPATCHED))
+            self.assertEqual(call["with"][f"after-merge-{check}"], f"${{{{ needs.after-merge-{check}.result }}}}")
+            self.assertTrue(_gh_eval(ci_jobs[f"after-merge-{check}"]["if"],
+                                     {"github.event_name": "workflow_dispatch",
+                                      "needs.validate.result": "success"}))
+        for ref, expected in (("refs/heads/main", True), ("refs/heads/topic", False)):
+            context = {"github.event_name": "workflow_dispatch", "github.ref": ref,
+                       "needs.validate.result": "success"}
+            self.assertEqual(bool(_gh_eval(call["if"], context)), expected, ref)
 
     def test_every_release_job_states_its_condition(self) -> None:
         for name in ("release-plan", "build", "publish"):
             expression = self.jobs[name]["if"]
             self.assertNotIn("always()", expression)
             self.assertIn("!cancelled()", expression)
-            # validate is read through VALIDATED (it is skipped when called).
-            self.assertIn(ci.VALIDATED, expression)
 
     def test_permissions(self) -> None:
         self.assertEqual(self.jobs["release-plan"]["permissions"], {"contents": "read"})
@@ -1141,7 +1170,7 @@ class BuildPublishWorkflowTest(unittest.TestCase):
         self.assertIs(self.plan[0]["with"]["persist-credentials"], False)
 
     def test_every_action_outside_validate_is_pinned_to_a_commit(self) -> None:
-        for name, count in (("build-publish.yml", 16), ("ci.yml", 7), ("main-reuse-report.yml", 3),
+        for name, count in (("build-publish.yml", 12), ("ci.yml", 7), ("main-reuse-report.yml", 3),
                             ("pr-title.yml", 2)):
             uses = re.findall(r"(?m)^\s*(?:- )?uses: (\S+)(.*)$", ci.render()[name])
             actions = [(ref, comment) for ref, comment in uses if not ref.startswith('"./')]
@@ -1231,12 +1260,15 @@ class BuildPublishWorkflowTest(unittest.TestCase):
 
 class AfterMergeChecksTest(unittest.TestCase):
     """The two whole-catalogue checks run after the merge and gate the release
-    (``workflow-controller-ci-time`` D2): in ``ci.yml`` beside ``validate``,
-    or in a dispatched ``build-publish.yml``. Borrows ``_would_run``."""
+    (``workflow-controller-ci-time`` D2): ``after-merge-*`` in ``ci.yml``
+    beside ``validate``, ``release-target-*`` in ``build-publish.yml`` for an
+    ancestor a ``RESUME`` publishes. Borrows ``_would_run``."""
 
     _would_run = BuildPublishWorkflowTest._would_run
+    _chain = BuildPublishWorkflowTest._chain
     CALLED = BuildPublishWorkflowTest.CALLED
-    ORDINARY = BuildPublishWorkflowTest.ORDINARY
+    STATES = BuildPublishWorkflowTest.STATES
+    TARGETS = BuildPublishWorkflowTest.TARGETS
 
     def setUp(self) -> None:
         self.workflow = ci.build_publish_workflow()
@@ -1245,27 +1277,23 @@ class AfterMergeChecksTest(unittest.TestCase):
 
     CHECKS = {"determinism": "tests.test_catalogue_determinism",
               "mutations": "tests.test_scenarios_negative"}
-    TARGET_CHECKS = ["release-target-determinism", "release-target-mutations"]
 
-    def test_the_jobs_exist_outside_validate(self) -> None:
+    def test_the_jobs_exist_outside_tests(self) -> None:
         self.assertEqual(ci.MAIN_TEST_MODULES, self.CHECKS)
         for check in self.CHECKS:
-            for kind in ("after-merge", "release-target"):
-                with self.subTest(job=f"{kind}-{check}"):
-                    self.assertIn(f"{kind}-{check}", self.jobs)
-                    self.assertNotIn(f"{kind}-{check}", _jobs(ci.validate_workflow()))
+            self.assertIn(f"release-target-{check}", self.jobs)
+            self.assertNotIn(f"after-merge-{check}", self.jobs)
             self.assertIn(f"after-merge-{check}", self.ci_jobs)
             self.assertNotIn(f"release-target-{check}", self.ci_jobs)
-            # ci.yml's job and the dispatched one are the same job but for their if.
-            self.assertEqual(ci.emit({k: v for k, v in self.ci_jobs[f"after-merge-{check}"].items() if k != "if"}),
-                             ci.emit({k: v for k, v in self.jobs[f"after-merge-{check}"].items() if k != "if"}))
-        self.assertNotIn("main-check", ci.render()["validate.yml"])
+            for kind in ("after-merge", "release-target"):
+                self.assertNotIn(f"{kind}-{check}", _jobs(ci.tests_workflow()))
+        self.assertNotIn("main-check", ci.render()["tests.yml"])
 
     def test_each_job_has_the_shard_jobs_setup_and_the_fail_closed_command(self) -> None:
-        shard = _steps(_jobs(ci.validate_workflow())["tests"])
+        shard = _steps(_jobs(ci.tests_workflow())["tests"])
         for check, module in self.CHECKS.items():
-            for kind in ("after-merge", "release-target"):
-                steps = _steps(self.jobs[f"{kind}-{check}"])
+            for kind, jobs in (("after-merge", self.ci_jobs), ("release-target", self.jobs)):
+                steps = _steps(jobs[f"{kind}-{check}"])
                 with self.subTest(job=f"{kind}-{check}"):
                     self.assertTrue(_uses(steps[0]).startswith("actions/checkout@"))
                     self.assertTrue(_uses(steps[1]).startswith("actions/setup-python@"))
@@ -1277,96 +1305,84 @@ class AfterMergeChecksTest(unittest.TestCase):
 
     def test_the_target_jobs_check_out_the_publication_target(self) -> None:
         for check in self.CHECKS:
-            pushed = _steps(self.jobs[f"after-merge-{check}"])[0]
+            pushed = _steps(self.ci_jobs[f"after-merge-{check}"])[0]
             target = _steps(self.jobs[f"release-target-{check}"])[0]
             self.assertNotIn("ref", pushed.get("with", {}))
             self.assertEqual(target["with"]["ref"], "${{ needs.release-plan.outputs.commit }}")
             self.assertEqual(target["with"]["fetch-depth"], 0)
 
-    def test_none_depends_on_reuse_and_the_after_merge_jobs_start_at_once(self) -> None:
+    def test_none_depends_on_reuse(self) -> None:
         for check in self.CHECKS:
-            self.assertNotIn("needs", self.jobs[f"after-merge-{check}"])
-            self.assertNotIn("needs", self.ci_jobs[f"after-merge-{check}"])
+            # validate waits for reuse, so waiting for validate is not a direct need of it.
+            self.assertEqual(self.ci_jobs[f"after-merge-{check}"]["needs"], ["validate"])
             self.assertEqual(self.jobs[f"release-target-{check}"]["needs"], ["release-plan"])
         for jobs in (self.jobs, self.ci_jobs):
             for name, job in jobs.items():
                 if name.startswith(("after-merge-", "release-target-")):
                     self.assertNotIn("reuse", job.get("needs", []))
                     self.assertNotIn("reuse", job.get("if", ""))
-        self.assertEqual(self.jobs["release-plan"]["needs"], ["validate"])
+        self.assertNotIn("needs", self.jobs["release-plan"])
 
     def test_no_if_reads_a_job_outside_its_own_needs(self) -> None:
-        for workflow in (ci.build_publish_workflow(), ci.ci_workflow(), ci.validate_workflow()):
+        for workflow in (ci.build_publish_workflow(), ci.ci_workflow(), ci.tests_workflow()):
             for name, job in _jobs(workflow).items():
                 with self.subTest(workflow=workflow["name"], job=name):
                     for needed in re.findall(r"needs\.([a-z-]+)\.", job.get("if", "")):
                         self.assertIn(needed, job["needs"])
 
-    def _publishes(self, *, target_is_pushed: bool, checks: dict, inputs: "dict | None" = None,
-                   validate: str = "skipped") -> bool:
-        results = {"validate": validate, "release-plan": "success"}
-        build = self._would_run("build", results, "RELEASE_DUE", target_is_pushed=target_is_pushed,
-                                checks=checks, inputs=inputs)
-        return build and self._would_run("publish", {**results, "build": "success"}, "RELEASE_DUE",
-                                         target_is_pushed=target_is_pushed, checks=checks, inputs=inputs)
+    def _publishes(self, *, target_is_pushed: bool, inputs: "dict | None" = None,
+                   targets: str = "skipped") -> bool:
+        return self._chain("RELEASE_DUE", inputs=inputs, target_is_pushed=target_is_pushed,
+                           targets=targets)[3]
 
     def test_an_ordinary_release_publishes_only_on_successful_after_merge_checks(self) -> None:
-        self.assertTrue(self._publishes(target_is_pushed=True, checks=dict(self.ORDINARY)))
+        self.assertTrue(self._publishes(target_is_pushed=True))
         for check in self.CHECKS:
             for result in ("failure", "cancelled", "skipped", "pending", ""):
                 with self.subTest(check=check, result=result):
-                    # called: the caller's result is what counts
                     inputs = {**self.CALLED, f"after-merge-{check}": result}
-                    self.assertFalse(self._publishes(target_is_pushed=True, checks=dict(self.ORDINARY),
-                                                     inputs=inputs))
-                    # dispatched: the own job's
-                    own = {**self.ORDINARY, "after-merge-determinism": "success",
-                           "after-merge-mutations": "success", f"after-merge-{check}": result}
-                    self.assertFalse(self._publishes(target_is_pushed=True, checks=own, inputs={},
-                                                     validate="success"))
+                    self.assertFalse(self._publishes(target_is_pushed=True, inputs=inputs))
             # a missing input (never handed in) is not a success either
             missing = {k: v for k, v in self.CALLED.items() if k != f"after-merge-{check}"}
-            self.assertFalse(self._publishes(target_is_pushed=True, checks=dict(self.ORDINARY), inputs=missing))
+            self.assertFalse(self._publishes(target_is_pushed=True, inputs=missing))
 
     def test_a_target_job_result_is_irrelevant_when_the_target_is_the_pushed_commit(self) -> None:
+        # The target jobs do not even run: the target is the pushed commit.
         for result in ("success", "failure", "skipped"):
-            checks = {**self.ORDINARY, "release-target-determinism": result, "release-target-mutations": result}
-            self.assertTrue(self._publishes(target_is_pushed=True, checks=checks))
+            self.assertTrue(self._publishes(target_is_pushed=True, targets=result))
 
     def test_an_ancestor_resume_needs_the_checks_of_the_target_not_of_the_pushed_commit(self) -> None:
-        # Wrong-commit regression: successful after-merge results on the pushed commit B say nothing about A.
-        self.assertFalse(self._publishes(target_is_pushed=False, checks=dict(self.ORDINARY)))
+        self.assertTrue(self._publishes(target_is_pushed=False, targets="success"))
         for result in ("failure", "cancelled", "skipped"):
-            checks = {**self.ORDINARY, "release-target-determinism": "success", "release-target-mutations": result}
             with self.subTest(result=result):
-                self.assertFalse(self._publishes(target_is_pushed=False, checks=checks))
-        both = {**self.ORDINARY, **{job: "success" for job in self.TARGET_CHECKS}}
-        self.assertTrue(self._publishes(target_is_pushed=False, checks=both))
-        # even with the pushed commit's checks failed: they do not decide an ancestor target
-        failed_b = {**self.CALLED, "after-merge-determinism": "failure", "after-merge-mutations": "failure"}
-        self.assertTrue(self._publishes(target_is_pushed=False, checks=both, inputs=failed_b))
+                self.assertFalse(self._publishes(target_is_pushed=False, targets=result))
+        # the pushed commit's checks failed: they do not decide an ancestor target
+        failed = {**self.CALLED, "after-merge-determinism": "failure", "after-merge-mutations": "failure"}
+        self.assertTrue(self._publishes(target_is_pushed=False, inputs=failed, targets="success"))
+        # and a pushed commit's successes say nothing about the ancestor
+        self.assertFalse(self._publishes(target_is_pushed=False, targets="skipped"))
 
     def test_the_target_jobs_run_for_an_ancestor_resume_and_only_then(self) -> None:
-        for check in self.CHECKS:
-            name = f"release-target-{check}"
+        for name in self.TARGETS:
             for state, pushed, expected in (("RESUME", False, True), ("RELEASE_DUE", False, True),
                                             ("RESUME", True, False), ("NOT_DUE", False, False)):
                 with self.subTest(job=name, state=state, pushed=pushed):
                     self.assertEqual(self._would_run(name, {"release-plan": "success"}, state,
-                                                     target_is_pushed=pushed, checks={}), expected)
+                                                     target_is_pushed=pushed), expected)
             self.assertFalse(self._would_run(name, {"release-plan": "failure"}, "RESUME",
-                                             target_is_pushed=False, checks={}))
+                                             target_is_pushed=False))
             self.assertFalse(self._would_run(name, {"release-plan": "success"}, "RESUME",
-                                             "refs/heads/other", target_is_pushed=False, checks={}))
+                                             "refs/heads/other", target_is_pushed=False))
+            # ... and never inside a run the caller did not validate (D2).
+            self.assertFalse(self._would_run(name, {"release-plan": "success"}, "RESUME",
+                                             target_is_pushed=False, inputs={}))
 
-    def test_a_failed_validate_still_stops_the_release_whatever_the_checks_say(self) -> None:
-        for validate in ("failure", "skipped", "cancelled"):
-            self.assertFalse(self._publishes(target_is_pushed=True, checks=dict(self.ORDINARY),
+    def test_a_failed_validate_stops_the_release_whatever_the_checks_say(self) -> None:
+        for validate in ("failure", "skipped", "cancelled", ""):
+            self.assertFalse(self._publishes(target_is_pushed=True,
                                              inputs={**self.CALLED, "validate-result": validate}))
-            dispatched = {**self.ORDINARY, "after-merge-determinism": "success",
-                          "after-merge-mutations": "success"}
-            self.assertFalse(self._publishes(target_is_pushed=True, checks=dispatched, inputs={},
-                                             validate=validate))
+            self.assertFalse(self._publishes(target_is_pushed=False, targets="success",
+                                             inputs={**self.CALLED, "validate-result": validate}))
 
 
 class ReuseTest(unittest.TestCase):
@@ -1379,7 +1395,7 @@ class ReuseTest(unittest.TestCase):
         self.reuse = _jobs(self.ci)["reuse"]
         self.report_workflow = ci.reuse_report_workflow()
         self.report = _jobs(self.report_workflow)["reuse-report"]
-        self.validate = _jobs(ci.validate_workflow())
+        self.validate = _jobs(ci.tests_workflow())
 
     def test_reuse_job_is_least_privilege_and_cannot_write(self) -> None:
         self.assertEqual(self.reuse["permissions"],
@@ -1433,8 +1449,8 @@ class ReuseTest(unittest.TestCase):
         find = self.reuse["steps"][_index(self.reuse["steps"], lambda s: s.get("id") == "find")]
         self.assertIn('--mode "$CI_MAIN_REUSE"', find["run"])
         self.assertNotIn("${{", find["run"])
-        # validate.yml and build-publish.yml do not know the variable.
-        self.assertNotIn("vars.", ci.render()["validate.yml"] + ci.render()["build-publish.yml"])
+        # tests.yml and build-publish.yml do not know the variable.
+        self.assertNotIn("vars.", ci.render()["tests.yml"] + ci.render()["build-publish.yml"])
 
     def test_the_lookup_steps_only_run_with_a_candidate_and_the_report_cannot_fail_ci(self) -> None:
         steps = self.reuse["steps"]
@@ -1473,10 +1489,11 @@ class ReuseTest(unittest.TestCase):
         self.assertEqual(_gh_eval(validate["with"]["tests-from-run"], context), "")
 
     def test_the_release_jobs_still_need_validate(self) -> None:
+        # Through the caller's result: build-publish.yml has no validate job.
         jobs = _jobs(ci.build_publish_workflow())
-        for name in ("release-plan", "build", "publish"):
+        for name in ("build", "publish"):
             with self.subTest(job=name):
-                self.assertIn("validate", jobs[name]["needs"])
+                self.assertIn("inputs.validate-result == 'success'", jobs[name]["if"])
                 self.assertNotIn("reuse", jobs[name]["needs"])
         self.assertIn("validate", _jobs(self.ci)["build-publish"]["needs"])
         self.assertNotIn("reuse", _jobs(self.ci)["build-publish"]["needs"])
@@ -1492,7 +1509,7 @@ class ReuseTest(unittest.TestCase):
         # The plan is this run's own, in both cases: plan runs whatever the
         # input, and depends only on the change detection (CI1a D4).
         self.assertEqual(self.validate["plan"]["if"], "needs.changes.outputs.code == 'true'")
-        self.assertNotIn("if", self.validate["package"])
+        self.assertEqual(self.validate["package"]["if"], "!cancelled()")
 
     def test_reused_results_are_verified_then_aggregated_and_never_continue_on_error(self) -> None:
         steps = _steps(self.validate["tests-result"])
@@ -1525,19 +1542,19 @@ class ReuseTest(unittest.TestCase):
         self.assertIn("--upstream-result tests=${{ needs.tests.result }}", run)
 
     def test_callers_grant_actions_read_for_the_artifact_download(self) -> None:
-        for workflow in (ci.ci_workflow(), ci.build_publish_workflow()):
-            with self.subTest(workflow=workflow["name"]):
-                self.assertEqual(_jobs(workflow)["validate"]["permissions"],
-                                 {"contents": "read", "actions": "read"})
-        # A dispatched build-publish.yml never reuses: it passes no run id.
-        self.assertNotIn("with", _jobs(ci.build_publish_workflow())["validate"])
+        # Only a job calling tests.yml needs it; build-publish.yml has none.
+        self.assertEqual(_jobs(ci.ci_workflow())["validate"]["permissions"],
+                         {"contents": "read", "actions": "read"})
+        self.assertNotIn("validate", _jobs(ci.build_publish_workflow()))
+        for name, job in _jobs(ci.build_publish_workflow()).items():
+            self.assertNotIn("actions", job["permissions"], name)
 
     def test_the_generated_reuse_job_is_readable_and_documented_in_the_header(self) -> None:
         text = ci.render()["ci.yml"]
         self.assertIn("# reuse (read-only, never on a pull request) is switched by the repository variable", text)
         self.assertIn("main-reuse-report.yml", text)
         self.assertIn("A workflow apart from ci.yml", ci.render()["main-reuse-report.yml"])
-        self.assertIn("tests-from-run", ci.render()["validate.yml"].split("name: Validate")[0])
+        self.assertIn("tests-from-run", ci.render()["tests.yml"].split("name: Validate")[0])
 
 
 class PrTitleWorkflowTest(unittest.TestCase):
@@ -1591,7 +1608,218 @@ class PrTitleWorkflowTest(unittest.TestCase):
         self.assertEqual(steps[1]["with"], {"python-version": "3.12"})
 
 
-#: ``validate.yml``'s and 1.3.0's ``main.yml``'s pipx smoke test (``build-publish.yml``'s with
+class _WorstCase(dict):
+    """A ``_gh_eval`` context that assumes the worst for what a run decides
+    while it runs: every ``needs.*.result`` is ``success``, the change
+    detection says code, and ``release-plan`` resumes an ancestor. Anything
+    else not named is null."""
+
+    def get(self, key, default=None):
+        if key in self:
+            return self[key]
+        if key.startswith("needs.") and key.endswith(".result"):
+            return "success"
+        return {"needs.changes.outputs.code": "true",
+                "needs.release-plan.outputs.state": "RESUME",
+                "needs.release-plan.outputs.commit": "a",
+                "github.sha": "b"}.get(key)
+
+
+def _called_model(job: dict) -> "dict | None":
+    uses = job.get("uses", "")
+    if uses.startswith("./.github/workflows/"):
+        return {fname: build() for fname, (build, _) in ci.WORKFLOWS.items()}[uses.rsplit("/", 1)[1]]
+    return None
+
+
+def _runner_nodes(model: dict, context: _WorstCase) -> dict:
+    """``model``'s jobs, the called local workflows flattened in, as
+    ``{node: (weight, active, direct_dependencies)}``. A static job is one
+    runner, a call to a shared workflow is one (assumed, see CI3 D4), a matrix
+    counts its ``max-parallel`` and fails without one."""
+    nodes: dict = {}
+    groups: dict = {}
+    for name, job in _jobs(model).items():
+        active = bool(_gh_eval(job["if"], context)) if "if" in job else True
+        outer = [member for need in job.get("needs", []) for member in groups[need]]
+        child = _called_model(job)
+        if child is None:
+            matrix = job.get("strategy", {}).get("matrix")
+            if matrix is not None and "max-parallel" not in job["strategy"]:
+                raise AssertionError(f"{name}: a matrix without max-parallel is unbounded")
+            weight = job["strategy"]["max-parallel"] if matrix is not None else 1
+            nodes[name] = (weight, active, set(outer))
+            groups[name] = [name]
+            continue
+        declared = child["on"]["workflow_call"].get("inputs", {})
+        inner = _WorstCase(context)
+        inner.update({f"inputs.{key}": "" if key == ci.REUSE_INPUT else "success" for key in declared})
+        grandchildren = _runner_nodes(child, inner)
+        groups[name] = []
+        for key, (weight, child_active, deps) in grandchildren.items():
+            nodes[f"{name}/{key}"] = (weight, active and child_active,
+                                      {f"{name}/{d}" for d in deps} | set(outer))
+            groups[name].append(f"{name}/{key}")
+    return nodes
+
+
+def _heaviest_independent_set(nodes: dict) -> int:
+    """The largest total weight of active jobs, no two ordered by ``needs``
+    (directly or through any job, a skipped one included): the most runners
+    the graph can hold at once, with no assumption about how long any job runs."""
+    after = {name: set(deps) for name, (_, _, deps) in nodes.items()}
+    changed = True
+    while changed:
+        changed = False
+        for name, deps in after.items():
+            grown = set(deps).union(*(after[d] for d in deps))
+            if grown != deps:
+                after[name] = grown
+                changed = True
+    live = sorted((name for name, (weight, active, _) in nodes.items() if active and weight),
+                  key=lambda name: -nodes[name][0])
+    ordered = lambda a, b: a in after[b] or b in after[a]  # noqa: E731
+    best = 0
+
+    def search(index: int, chosen: list, total: int) -> None:
+        nonlocal best
+        best = max(best, total)
+        if index == len(live) or total + sum(nodes[n][0] for n in live[index:]) <= best:
+            return
+        name = live[index]
+        if not any(ordered(name, other) for other in chosen):
+            search(index + 1, chosen + [name], total + nodes[name][0])
+        search(index + 1, chosen, total)
+
+    search(0, [], 0)
+    return best
+
+
+class RunnerLimitTest(unittest.TestCase):
+    """CI3 D4/D5: one run holds at most ``RUNNER_LIMIT`` runners, the managed
+    conformance job, ``PR title`` and the main reuse report included, proved
+    from the generated models and counted against the whole set: no runner is
+    excused because it ends quickly."""
+
+    MODES = ("on", "off", None, "report")
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.models = _models()
+        text = CONFORMANCE_YML.read_text(encoding="utf-8")
+        cls.conformance_text = text
+        trigger_block = re.search(r"(?m)^on:\n((?:  .*\n)+)", text).group(1)
+        cls.conformance_events = set(re.findall(r"(?m)^  (\w+):", trigger_block))
+
+    def _outside(self, event: str, ref: str, mode: "str | None") -> int:
+        total = 0
+        if event in self.conformance_events:
+            total += 1  # workflow-conformance: one job, asserted below
+        if event in self.models["pr-title.yml"]["on"]:
+            total += 1  # PR title, on every activity type, beside the shards
+        report = self.models["main-reuse-report.yml"]
+        if event in report["on"] and ref == "refs/heads/main":
+            context = _WorstCase({"github.event_name": event, "github.ref": ref,
+                                  "vars.CI_MAIN_REUSE": mode})
+            total += sum(1 for job in _jobs(report).values() if _gh_eval(job["if"], context))
+        return total
+
+    def _peak(self, entry: str, event: str, ref: str, mode: "str | None") -> int:
+        context = _WorstCase({"github.event_name": event, "github.ref": ref,
+                              "vars.CI_MAIN_REUSE": mode})
+        if entry != "ci.yml":  # dispatched alone: no input can be handed in
+            context["inputs.tests-from-run"] = None
+        nodes = _runner_nodes(self.models[entry], context)
+        return _heaviest_independent_set(nodes) + self._outside(event, ref, mode)
+
+    def _scenarios(self):
+        yield "ci.yml", "pull_request", "refs/pull/7/merge"
+        yield "ci.yml", "push", "refs/heads/main"
+        yield "ci.yml", "workflow_dispatch", "refs/heads/main"
+        yield "ci.yml", "workflow_dispatch", "refs/heads/topic"
+        yield "tests.yml", "workflow_dispatch", "refs/heads/main"
+        yield "tests.yml", "workflow_dispatch", "refs/heads/topic"
+        yield "build-publish.yml", "workflow_dispatch", "refs/heads/main"
+        yield "build-publish.yml", "workflow_dispatch", "refs/heads/topic"
+
+    def test_no_event_and_no_reuse_mode_holds_more_than_the_limit(self) -> None:
+        for entry, event, ref in self._scenarios():
+            for mode in self.MODES:
+                with self.subTest(entry=entry, event=event, ref=ref, mode=mode):
+                    self.assertLessEqual(self._peak(entry, event, ref, mode), ci.RUNNER_LIMIT)
+
+    def test_the_count_is_not_vacuous(self) -> None:
+        # Shards, the docs/package lane, conformance and PR title: exactly the limit.
+        self.assertEqual(self._peak("ci.yml", "pull_request", "refs/pull/7/merge", None), ci.RUNNER_LIMIT)
+        # On main: the shards and the lane, conformance, and the report only where its if holds.
+        main = {mode: self._peak("ci.yml", "push", "refs/heads/main", mode) for mode in self.MODES}
+        self.assertEqual(main, {"on": 5, "off": 5, None: 6, "report": 6})
+        # A direct build-publish run classifies and nothing else.
+        self.assertEqual(self._peak("build-publish.yml", "workflow_dispatch", "refs/heads/main", None), 1)
+
+    def test_a_matrix_without_max_parallel_fails(self) -> None:
+        model = {"jobs": {"tests": {"runs-on": "ubuntu-latest", "strategy": {"matrix": {"shard": "x"}}}}}
+        with self.assertRaises(AssertionError):
+            _runner_nodes(model, _WorstCase())
+
+    def test_every_shard_matrix_is_bounded_and_tied_to_the_planner_ceiling(self) -> None:
+        count = 0
+        for name, model in self.models.items():
+            for job_name, job in _jobs(model).items():
+                if "matrix" in job.get("strategy", {}):
+                    count += 1
+                    with self.subTest(workflow=name, job=job_name):
+                        self.assertEqual(job["strategy"]["max-parallel"], ci.TEST_MAX_PARALLEL)
+        self.assertEqual(count, 1)
+        # The model does not import the planner: this test ties the two numbers.
+        self.assertLessEqual(ci.TEST_MAX_PARALLEL, shards.CI_MAX_SHARDS)
+        # Option B (CI3 O1): the planner plans no more shards than may run.
+        self.assertEqual(ci.TEST_MAX_PARALLEL, shards.CI_MAX_SHARDS)
+        self.assertEqual(ci.RUNNER_LIMIT, 6)
+
+    def test_the_ordering_is_what_the_count_relies_on(self) -> None:
+        jobs = _jobs(self.models["tests.yml"])
+        self.assertEqual((jobs["docs"]["needs"], jobs["package"]["needs"]), (["docs-tests"], ["docs"]))
+        for check in ("determinism", "mutations"):
+            self.assertEqual(_jobs(self.models["ci.yml"])[f"after-merge-{check}"]["needs"], ["validate"])
+
+    def test_docs_tests_counts_one_runner_through_a_pinned_called_workflow(self) -> None:
+        job = _jobs(self.models["tests.yml"])["docs-tests"]
+        # An assumption about a workflow on a mutable ref this test cannot read
+        # offline: pinning the value makes a change of the called workflow visible.
+        self.assertEqual(job["uses"], "RodrigoFAbreu/action-workflows/.github/workflows/python-tests.yml@main")
+        nodes = _runner_nodes(self.models["tests.yml"], _WorstCase({"inputs.tests-from-run": ""}))
+        self.assertEqual(nodes["docs-tests"][0], 1)
+
+    def test_the_managed_conformance_workflow_is_one_job(self) -> None:
+        body = self.conformance_text.split("\njobs:\n", 1)[1]
+        self.assertEqual(re.findall(r"(?m)^  ([A-Za-z0-9_-]+):\s*$", body), ["workflow-conformance"])
+        self.assertEqual(self.conformance_events, {"pull_request", "push"})
+
+    def test_package_is_never_skipped_by_an_upstream_result(self) -> None:
+        # GitHub treats a skipped required check as satisfied, so package must
+        # run whatever docs (and a skipped tests job, on a documentation-only
+        # pull request) ended as, on every event.
+        job = _jobs(self.models["tests.yml"])["package"]
+        for event in ("pull_request", "push", "workflow_dispatch"):
+            for result in ("success", "failure", "cancelled", "skipped"):
+                with self.subTest(event=event, docs=result):
+                    context = _WorstCase({"github.event_name": event, "needs.docs.result": result,
+                                          "needs.tests.result": "skipped"})
+                    self.assertTrue(_gh_eval(job["if"], context))
+        self.assertEqual(job["if"], "!cancelled()")
+
+    def test_the_required_check_names_are_unchanged(self) -> None:
+        names = {f"validate / {job}" for job in ("plan", "tests-result", "package")}
+        self.assertEqual(names, {"validate / plan", "validate / tests-result", "validate / package"})
+        for job in ("plan", "tests-result", "package"):
+            self.assertIn(job, _jobs(self.models["tests.yml"]))
+            self.assertNotIn("name", _jobs(self.models["tests.yml"])[job])
+        self.assertIn("validate", _jobs(self.models["ci.yml"]))
+        self.assertEqual(_jobs(self.models["pr-title.yml"])["title"]["name"], "PR title")
+
+
+#: ``tests.yml``'s and 1.3.0's ``main.yml``'s pipx smoke test (``build-publish.yml``'s with
 #: ``$RELEASE_VERSION``).
 PIPX_SMOKE_1_3_0 = "\n".join([
     "pipx install dist/*.whl",

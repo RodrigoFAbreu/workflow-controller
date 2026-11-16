@@ -77277,12 +77277,12 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-cm1-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-cm1-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "SELF_REVIEWING_IMPLEMENTATION",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 4,
-      "implementation_revision": null,
+      "implementation_revision": 1,
       "functional_review_round": null,
       "base_commit": "9f73ca71dc5c3dd1bc4127ac127d5f1a94922b6e",
-      "reviewed_implementation_head": null,
+      "reviewed_implementation_head": "463af475ece8571aa6628d9c8495213913aa0629",
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": "CP3",
       "checkpoints": {
@@ -77425,8 +77425,8 @@
           "external": 0
         }
       },
-      "state_revision": 21,
-      "last_transition": "2026-11-16T00:45:24Z",
+      "state_revision": 22,
+      "last_transition": "2026-11-16T01:08:48Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "work_item_id": "workflow-controller-ci2",
-  "plan_revision": 5,
+  "plan_revision": 11,
   "checkpoints": [
     {
       "id": "CP1",

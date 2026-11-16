@@ -25,15 +25,16 @@ validation, the reusable build and publication (``build-publish.yml``):
 - ``ci.yml`` runs on every pull request, every push to ``main`` and on
   ``workflow_dispatch``. It calls ``tests.yml`` (``reuse`` first, on
   ``main`` under ``CI_MAIN_REUSE=on``), runs the two after-merge checks
-  beside it except on a pull request, and on ``main`` calls
+  after it except on a pull request, and on ``main`` calls
   ``build-publish.yml`` once ``validate`` succeeded, handing it the results,
   so that the revision is validated once;
 - ``build-publish.yml`` (``workflow_call``, and ``workflow_dispatch`` for a
   manual publication) classifies the trunk commit with
   ``tools/release.py classify`` and, when a release is due or resumable,
   builds, verifies and publishes it as one release transaction. Called, it
-  trusts its caller's results; dispatched, it has none, and runs
-  ``tests.yml`` and the after-merge checks itself first. ``build``
+  trusts its caller's results; dispatched, it has none, so it classifies
+  and builds nothing (a manual publication is a ``ci.yml`` dispatch from
+  ``main``). ``build``
   receives the classified version as ``RELEASE_VERSION``, and its ``build``
   and ``verify`` command lines are 1.3.0's, so a ``RESUME`` target carrying
   1.3.0's tooling still builds;
@@ -958,7 +959,7 @@ WORKFLOWS = {
     "ci.yml": (ci_workflow,
                "The entry point: every pull request, every push to main and workflow_dispatch. It\n"
                "calls the required validation (tests.yml); except on a pull request it runs the\n"
-               "two after-merge checks beside it; on main, once validate succeeded, it calls\n"
+               "two after-merge checks after it; on main, once validate succeeded, it calls\n"
                "build-publish.yml with those results, so the revision is validated once before a\n"
                "release. A pull request's newer push cancels its older run; main's runs never cancel\n"
                "one another (main-release). Milestone branches are validated through their Draft PR.\n\n"
@@ -968,16 +969,17 @@ WORKFLOWS = {
                "at once. The report-only mode is the separate workflow main-reuse-report.yml. See\n"
                "docs/guide/ci-and-releases.md.\n\n"
                "after-merge-determinism and after-merge-mutations run the two whole-catalogue scenario\n"
-               "checks on the pushed commit (tools/run_tests.py main-check); they are never reused or\n"
-               "skipped. Every action outside validate is pinned to a full commit SHA."),
+               "checks on the pushed commit (tools/run_tests.py main-check) once validate succeeded, so\n"
+               "they never share its runners; they are never reused. Every action outside validate is\n"
+               "pinned to a full commit SHA."),
     "tests.yml": (tests_workflow,
-                     "The required validation, called by ci.yml, or dispatched by hand. Its input tests-from-run is empty except when\n"
-                     "ci.yml reuses a pull request run on main (CI_MAIN_REUSE=on); then the shards are\n"
-                     "skipped and tests-result re-verifies that run's recorded results. A pull request\n"
-                     "that changes only documentation (tools/ci_changes.py) skips plan and tests; the\n"
-                     "docs-tests and docs jobs run on every event and tests-result requires docs, which\n"
-                     "needs docs-tests. docs-tests is the shared python-tests.yml of\n"
-                     "RodrigoFAbreu/action-workflows."),
+                     "The required validation, called by ci.yml, or dispatched by hand. Its input\n"
+                     "tests-from-run is empty except when ci.yml reuses a pull request run on main\n"
+                     "(CI_MAIN_REUSE=on); then the shards are skipped and tests-result re-verifies that\n"
+                     "run's recorded results. A pull request that changes only documentation\n"
+                     "(tools/ci_changes.py) skips plan and tests; the docs-tests and docs jobs run on every\n"
+                     "event and tests-result requires docs, which needs docs-tests. docs-tests is the\n"
+                     "shared python-tests.yml of RodrigoFAbreu/action-workflows."),
     "build-publish.yml": (build_publish_workflow,
                           "Build and publication: classify the trunk commit and, when a release is due or\n"
                           "resumable, build, verify and publish it as one release transaction\n"

@@ -18,7 +18,7 @@ pull request, push to main, manual run
        ├─ validate ── tests.yml  "Tests"
        │                ├─ changes, docs-tests (shared python-tests.yml), docs
        │                └─ plan, tests (<i>), tests-result, package
-       ├─ after-merge-determinism, after-merge-mutations   (not on a pull request)
+       ├─ after-merge-determinism, after-merge-mutations   (after validate, not on a pull request)
        └─ build-publish ── build-publish.yml  "Build and publish"
                              (main only, once validate succeeded)
                              release-plan, release-target-*, build, publish
@@ -27,7 +27,7 @@ pull request, push to main, manual run
 `.github/workflows/tests.yml` is the single definition of required
 validation. `CI` calls it, and it can be dispatched by hand on any branch (a
 manual run never reuses another run's results). `build-publish.yml` does not
-call it: test orchestration belongs to `CI`. It has seven jobs, each on `ubuntu-latest` with
+call it: test orchestration belongs to `CI`. `tests.yml` has seven jobs, each on `ubuntu-latest` with
 Python 3.12 and read-only permissions (`tests-result` also has
 `actions: read`, which only the reuse path below uses):
 
@@ -96,8 +96,8 @@ What `CI` does depends on the event:
   `CI-<ref>`). Pushes to other branches without a pull request are not
   validated.
 - **A push to `main`**: `CI` calls `validate` (after `reuse` when
-  `CI_MAIN_REUSE` is `on`) and runs the two whole-catalogue scenario checks
-  that no longer run on a pull request beside it (see
+  `CI_MAIN_REUSE` is `on`) and, once it succeeded, the two whole-catalogue
+  scenario checks that no longer run on a pull request (see
   [Checks that run after the merge](#checks-that-run-after-the-merge)).
   When `validate` succeeded it calls `build-publish.yml`, handing it the
   results of `validate` and of both checks, so the commit is validated once
@@ -443,9 +443,9 @@ Each of the three can be started from the Actions tab or with `gh`
 
 `build-publish.yml` trusts a result only from its inputs, which only a
 calling workflow can set: `workflow_dispatch` declares none, so a manual run
-cannot claim a validation it did not run. A called run has a concurrency
-group of its own (`build-publish-<run id>`), because its caller already holds
-`main-release`.
+cannot claim a validation it did not run. Every run of it has a concurrency
+group of its own (`build-publish-<run id>`): a called run's caller already holds
+`main-release`, and a direct dispatch runs only `release-plan`.
 
 ### Reusing a pull request's results on `main` (`CI_MAIN_REUSE`)
 

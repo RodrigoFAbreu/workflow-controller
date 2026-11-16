@@ -27,7 +27,6 @@ import contextlib
 import dataclasses
 import errno
 import hashlib
-import inspect
 import io
 import json
 import os
@@ -984,9 +983,6 @@ class RoutingOptionsPassThroughTest(_StepFixture, unittest.TestCase):
         self.assertEqual(ran, [])
         self.assertFalse((self.runtime_root / "model-catalog").exists())
         self.assertIn("not looked up", ctx.exception.message)
-
-    def test_explain_builds_its_routing_options_read_only(self) -> None:
-        self.assertIn("allow_run=False", inspect.getsource(cli.cmd_explain))
 
     def test_a_namespace_without_the_options_routes_by_the_built_in_table(self) -> None:
         for command in (cli.cmd_step, cli.cmd_run):

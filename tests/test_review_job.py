@@ -361,6 +361,36 @@ class ExternalCapTest(_ReviewCase):
                 cli.cmd_explain(args, self.runtime_root, IDENTITY)
             self.assertEqual(seen, [expected])
 
+    def test_explain_with_an_unlisted_codex_model_and_no_cache_runs_nothing_and_exits_0(self) -> None:
+        from controller import routing
+        from controller.errors import RoutingConfigError
+        from tests.test_cli import _Args
+        args = _Args(str(self.life.root), workflow_manager=str(self.life.stub))
+        args.effective_settings = settings.resolve(
+            settings.empty(self.life.td / "settings.toml"), cli={"reviewer.harness": "codex"})
+        args.role_harness = {"review-plan": "codex"}
+        args.role_model = {"review-plan": "gpt-6.1-terra"}
+        args.role_effort = {"review-plan": "high"}
+        ran: list = []
+        refused: list = []
+        real = cli._routing_options
+
+        def spy(*a, **k):
+            try:
+                return real(*a, **k)
+            except RoutingConfigError as exc:
+                refused.append(exc)
+                raise
+
+        out = io.StringIO()
+        with mock.patch.object(review, "run_bounded", lambda *a, **k: ran.append(a)), \
+                mock.patch.object(cli, "_routing_options", spy), contextlib.redirect_stdout(out):
+            self.assertEqual(cli.cmd_explain(args, self.runtime_root, IDENTITY), cli.EXIT_OK)
+        self.assertEqual(ran, [])
+        self.assertFalse((self.runtime_root / "model-catalog").exists())
+        self.assertEqual(len(refused), 1, "explain must have built the route and swallowed its refusal")
+        self.assertNotIn("not looked up", out.getvalue())
+
 
 class HappyPathTest(_ReviewCase):
     def test_an_exact_verdict_is_ingested_and_the_phase_advances_with_no_claude_worker(self) -> None:

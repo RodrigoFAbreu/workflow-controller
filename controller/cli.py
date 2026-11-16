@@ -1389,10 +1389,10 @@ def _routing_options(
     The options are first built without a model lookup, so a configuration
     whose models are all declared or added never launches a harness CLI. A
     refusal of a model for a harness that has a lookup (CM1, D1) looks that
-    harness's models up (``allow_run=False``: from the cache only, nothing
-    run or written, as ``explain`` must stay read-only) and builds the
-    options again with them; a refusal that remains is raised as is, so it
-    names every accepted model."""
+    harness's models up and builds the options again with them; a refusal
+    that remains is raised as is, so it names every accepted model. With
+    ``allow_run=False`` (``explain``, which must stay read-only) the lookup
+    answers from the cache only, and nothing is run or written."""
     discovery: dict[str, routing.ModelDiscovery] = {}
     while True:
         try:

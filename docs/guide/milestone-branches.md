@@ -16,12 +16,11 @@ or an invalid value) refuses every lifecycle command rather than being
 ignored. This repository's own policy is the reference configuration:
 trunk `main` on `origin`, forge `github`, branches
 `milestone/{work_item_id}`, Draft pull requests that become ready only
-with green checks, merged with "Squash and merge" and, by its opt-in,
-merged by the Controller itself (see
-[Auto-merge and the release wait](#auto-merge-and-the-release-wait); the
-release workflow is `ci.yml`) (see the
+with green checks, merged with "Squash and merge" (see the
 [cutover](ci-and-releases.md#cutover-from-the-version-file-model) for how a
-repository moves to squash merging).
+repository moves to squash merging). By its opt-in the Controller merges
+them itself and waits for the `ci.yml` release workflow (see
+[Auto-merge and the release wait](#auto-merge-and-the-release-wait)).
 
 `milestone_branches.pull_request.merge_method` chooses how a milestone
 pull request is merged: `"merge"` (the default) or `"squash"`. A policy

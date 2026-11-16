@@ -530,7 +530,7 @@ items:
     detail: docs/items/workflow-controller-cx1.md
   - id: workflow-controller-cm1
     title: "List the Codex models in use instead of one fixed model"
-    status: next
+    status: done
     order: 91
     depends_on: []
     detail: docs/items/workflow-controller-cm1.md

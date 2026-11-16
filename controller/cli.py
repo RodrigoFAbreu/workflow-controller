@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from controller import (
-    claude_build, codex_build, codex_verify, evidence, functional_review, handoff, identity, job, lock, managed_repo, milestone_branch, notify,
+    claude_build, codex_build, codex_verify, evidence, functional_review, handoff, identity, job, lock, managed_repo, milestone_branch, model_discovery, notify,
     observe, protocol_decision, review, review_mode, review_rounds, route_select, routing, runtime, settings, target_state,
     telemetry, usage, worker,
 )
@@ -1149,7 +1149,7 @@ def cmd_explain(args: argparse.Namespace, runtime_root: Path, ident: identity.Co
     if decision.gate is not None and decision.protocol is not None:
         effective_settings = _effective(args)
         try:
-            report_routing = _routing_options(args)
+            report_routing = _routing_options(args, runtime_root, allow_run=False)
         except RoutingConfigError:  # `step` refuses such a route (exit 20); `explain` never does
             report_routing = routing.NO_OVERRIDES
         mode_report = job.review_mode_report(
@@ -1374,7 +1374,9 @@ _ROUTING_CONFIG_SOURCES = {
 }
 
 
-def _routing_options(args: argparse.Namespace) -> routing.RoutingOptions:
+def _routing_options(
+    args: argparse.Namespace, runtime_root: Path, *, allow_run: bool = True,
+) -> routing.RoutingOptions:
     """The operator's routing overrides (CP6) over the routing config in
     force (settings-and-telemetry CP2, I1): the ``--routing-config`` file
     when given, which replaces the settings file's ``routing`` section
@@ -1382,7 +1384,32 @@ def _routing_options(args: argparse.Namespace) -> routing.RoutingOptions:
     any job record is written, so a malformed one is exit 20 and nothing
     runs. Read with ``getattr`` defaults, as ``cmd_resume`` reads
     ``--abandon``, so a caller's hand-built namespace without these options
-    routes by the built-in table."""
+    routes by the built-in table.
+
+    The options are first built without a model lookup, so a configuration
+    whose models are all declared or added never launches a harness CLI. A
+    refusal of a model for a harness that has a lookup (CM1, D1) looks that
+    harness's models up and builds the options again with them; a refusal
+    that remains is raised as is, so it names every accepted model. With
+    ``allow_run=False`` (``explain``, which must stay read-only) the lookup
+    answers from the cache only, and nothing is run or written."""
+    discovery: dict[str, routing.ModelDiscovery] = {}
+    while True:
+        try:
+            return _build_routing_options(args, discovery)
+        except RoutingConfigError as exc:
+            evidence = exc.evidence if isinstance(exc.evidence, dict) else {}
+            name = evidence.get("harness")
+            if evidence.get("field") != "model" or not isinstance(name, str) or name in discovery:
+                raise
+            discovery[name] = model_discovery.lookup(
+                name, runtime_root, now=datetime.datetime.now(datetime.timezone.utc), allow_run=allow_run,
+            )
+
+
+def _build_routing_options(
+    args: argparse.Namespace, discovery: dict[str, routing.ModelDiscovery],
+) -> routing.RoutingOptions:
     effective = _effective(args)
     return routing.RoutingOptions(
         cli_model=getattr(args, "model", None),
@@ -1393,6 +1420,7 @@ def _routing_options(args: argparse.Namespace) -> routing.RoutingOptions:
         config=effective.routing_config,
         config_source=_ROUTING_CONFIG_SOURCES[effective.sources[settings.ROUTING_KEY]],
         harness_models={name: tuple(models) for name, models in effective[settings.HARNESS_MODELS_KEY].items()},
+        discovery=dict(discovery),
     )
 
 
@@ -2256,7 +2284,7 @@ def cmd_step(args: argparse.Namespace, runtime_root: Path, ident: identity.Contr
     """``step``: execute exactly one automatic action, validate the
     transition, stop (capabilities 5, 7, 8)."""
     require_pinned_execution()
-    routing_options = _routing_options(args)
+    routing_options = _routing_options(args, runtime_root)
     target = _inspect_target(args)
     run = _start_run("step", runtime_root, ident, target, max_steps=None)
     _start_follower(args, runtime_root, run.run_id)
@@ -2342,7 +2370,7 @@ def cmd_run(args: argparse.Namespace, runtime_root: Path, ident: identity.Contro
             file=sys.stderr,
         )
 
-    routing_options = _routing_options(args)
+    routing_options = _routing_options(args, runtime_root)
     target = _inspect_target(args)
     run = _start_run("run", runtime_root, ident, target, max_steps=_effective(args)["run.max_steps"])
     _start_follower(args, runtime_root, run.run_id)

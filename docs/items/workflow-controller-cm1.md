@@ -2,7 +2,7 @@
 
 Item id: `workflow-controller-cm1`.
 
-Not yet planned. Owner request 2026-11-15. Complexity: medium. Priority: medium. Follows [TS1](workflow-controller-ts1.md) in order.
+Status: implemented in [the plan](../ai-workflow/CONTROLLER_CM1_PLAN.md), awaiting review. Owner request 2026-11-15. Complexity: medium. Priority: medium. Follows [TS1](workflow-controller-ts1.md) in order.
 
 ## Why
 
@@ -20,6 +20,16 @@ One mechanism, chosen in planning:
 4. A discovered model without a price entry is reported as "unpriced" rather than silently unknown.
 
 Split suggestion for planning: (1) and (3) first; (2) and (4) as follow-ups if it grows past one mechanism. The sizing rule (at most one new mechanism, releasable alone) is on [Planning rules](../planning-rules.md#next-in-order-and-the-sizing-rules).
+
+## What was built
+
+Scope items 1 and 3. A route naming a Codex model the adapter does not declare makes `step` and `run` run `codex debug models` (`controller/model_discovery.py`), cache the answer in `model-catalog/codex.json` for 24 hours and accept every `list` model; the pinned list is the floor and a stale cache is used when the lookup fails. `explain` reads the cache only. A refused model names the declared, discovered (or why not) and added models and the `harness.models` setting. Hidden models still need `harness.models`.
+
+## Deferred
+
+- Scope 2, the read-only command that prints each harness's accepted models and their sources.
+- Scope 4, the "unpriced" report for a model without a `controller/prices.json` entry; the price rows below stay as the input.
+- The effort lookup: the efforts list is still declared by the adapter.
 
 ## Discovery source found
 

@@ -234,7 +234,7 @@ A work item whose state names a registry file that does not exist is refused bef
 
 ## A run or step refuses a model or effort (exit 20)
 
-Since 1.22.0 the message reads `role '<role>' routes the model '<value>' to the harness '<harness>', which declares [...]` (or the effort), followed by where the model, effort and harness came from, and nothing was written or launched. A model the harness does not list is added to the `harness.models` entry of the settings file; an effort it does not list is changed in the routing. See [Upgrading to 1.22.0](compatibility.md#upgrading-to-1220) and [the routing section](guide/runtime.md#the-routing-section).
+Since 1.22.0 the message reads `role '<role>' routes the model '<value>' to the harness '<harness>', which declares [...]` (or the effort), followed by where the model, effort and harness came from, and nothing was written or launched. A model the harness does not list is added to the `harness.models` entry of the settings file; an effort it does not list is changed in the routing. A Codex model the adapter does not declare is looked up with `codex debug models` first (cached 24 hours under `model-catalog/`), so a model the CLI lists is accepted; a refusal then ends with `(accepted for codex: declared [...]; ...)`, which names the declared, discovered (or why the lookup was unavailable, or that the cache is stale) and added models. `explain` does not run the lookup. See [Upgrading to 1.22.0](compatibility.md#upgrading-to-1220) and [the routing section](guide/runtime.md#the-routing-section).
 
 ## The settings file is refused (exit 20)
 

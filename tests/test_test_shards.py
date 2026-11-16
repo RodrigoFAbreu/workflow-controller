@@ -2505,10 +2505,63 @@ def splittable_atoms_over_the_limit(atoms: dict, limit: float = MAX_SPLITTABLE_A
                   if entry["tests"] > 1 and entry["seconds"] > limit)
 
 
+#: At most this share of the tests of the atoms the CI plan places on a shard may be
+#: absent from the committed CI timings (CI2, D2). The refresh is manual until ci2d
+#: automates it, and the untimed share grew about 1.2 points a day after the last full
+#: refresh (065ca1e, 2026-11-08: 656 of 6,650 CI-placed tests, 9.9 percent, eight days
+#: later, 1.23 points a day). Over the longest accepted gap of 14 days that is 17.2
+#: points, rounded up to a multiple of 5: 20. Crossing it means the refresh is overdue
+#: by a clear margin, not that a pull request added a few tests.
+MAX_UNTIMED_TEST_SHARE = 0.20
+
+
+def untimed_test_share(atoms, profile_atoms) -> tuple[int, int]:
+    """``(untimed, total)`` tests over ``atoms``, the atoms the CI plan places on a
+    shard; an atom is untimed when its key is not in ``profile_atoms``."""
+    total = sum(len(atom.test_ids) for atom in atoms)
+    untimed = sum(len(atom.test_ids) for atom in atoms if atom.key not in profile_atoms)
+    return untimed, total
+
+
+def untimed_share_over_the_limit(atoms, profile_atoms, limit: float = MAX_UNTIMED_TEST_SHARE) -> bool:
+    untimed, total = untimed_test_share(atoms, profile_atoms)
+    return total > 0 and untimed / total > limit
+
+
 class CommittedTimingsTest(unittest.TestCase):
     """The committed profile is advisory (I3): it must parse and name only
-    existing atoms, but its test counts and coverage may drift until the
-    next reviewed refresh without failing anything."""
+    existing atoms; its test counts may drift until the next reviewed
+    refresh, and its coverage may drift up to ``MAX_UNTIMED_TEST_SHARE``."""
+
+    def test_the_untimed_share_of_the_ci_placed_atoms_is_within_the_limit(self) -> None:
+        profile = shards.parse_timings((fixtures.REPO_ROOT / shards.CI_TIMINGS).read_bytes())
+        selection = shards.build_inventory(fixtures.REPO_ROOT).select((), ci_placement=True)
+        untimed, total = untimed_test_share(selection.atoms, profile.atoms)
+        self.assertFalse(
+            untimed_share_over_the_limit(selection.atoms, profile.atoms),
+            f"{untimed} of {total} CI-placed tests are untimed, over {MAX_UNTIMED_TEST_SHARE:.0%}: "
+            "refresh tools/test_timings.json from CI (docs/guide/development.md, Timings)")
+
+    def test_the_untimed_share_check_fails_over_the_limit_and_passes_at_it(self) -> None:
+        shard = [_atom(f"tests.test_x.T{i}", 1) for i in range(10)]
+        profile = lambda timed: {a.key: {"seconds": 1.0, "samples": 1, "tests": 1} for a in shard[:timed]}
+        self.assertTrue(untimed_share_over_the_limit(shard, profile(7)))    # 30 percent
+        self.assertFalse(untimed_share_over_the_limit(shard, profile(8)))   # exactly 20 percent
+        self.assertFalse(untimed_share_over_the_limit(shard, profile(9)))   # 10 percent
+        self.assertFalse(untimed_share_over_the_limit([], {}))
+
+    def test_atoms_the_ci_plan_does_not_place_on_a_shard_are_not_counted(self) -> None:
+        # Only main, package and excluded atoms are untimed: the share is zero.
+        inventory = shards.build_inventory(fixtures.REPO_ROOT)
+        selection = inventory.select((), ci_placement=True)
+        placed = {atom.key for atom in selection.atoms}
+        moved = [atom for atom in inventory.atoms if atom.key not in placed]
+        self.assertTrue(moved, "CI_PLACEMENT moves at least one module out of the shards")
+        timed_placed = {atom.key: {} for atom in selection.atoms}
+        self.assertEqual(untimed_test_share(selection.atoms, timed_placed)[0], 0)
+        self.assertFalse(untimed_share_over_the_limit(selection.atoms, timed_placed))
+        # Counting the moved atoms too would have been untimed tests.
+        self.assertGreater(untimed_test_share(inventory.atoms, timed_placed)[0], 0)
 
     def test_the_committed_profile_is_valid_and_names_only_existing_atoms(self) -> None:
         path = fixtures.REPO_ROOT / shards.CI_TIMINGS

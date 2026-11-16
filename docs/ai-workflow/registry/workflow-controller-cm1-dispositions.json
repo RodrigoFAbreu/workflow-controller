@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-cm1",
+  "dispositions": {
+    "F-147b7ebe4a7d": {
+      "disposition": "fixed",
+      "note": "Pinned behaviourally: tests.test_review_job.test_explain_with_an_unlisted_codex_model_and_no_cache_runs_nothing_and_exits_0 runs cmd_explain on an unlisted Codex model and asserts the lookup is asked read-only, nothing runs, no model-catalog is written and the exit is 0; tests.test_cli no longer checks the source text (commit 04baad0)."
+    },
+    "F-1792efd34a92": {
+      "disposition": "fixed",
+      "note": "Pinned behaviourally: tests.test_review_job.test_explain_with_an_unlisted_codex_model_and_no_cache_runs_nothing_and_exits_0 runs cmd_explain on an unlisted Codex model and asserts the lookup is asked read-only, nothing runs, no model-catalog is written and the exit is 0; tests.test_cli no longer checks the source text (commit 04baad0)."
+    },
+    "F-1ca9fa596c6a": {
+      "disposition": "fixed",
+      "note": "Pinned behaviourally: tests.test_review_job.test_explain_with_an_unlisted_codex_model_and_no_cache_runs_nothing_and_exits_0 runs cmd_explain on an unlisted Codex model and asserts the lookup is asked read-only, nothing runs, no model-catalog is written and the exit is 0; tests.test_cli no longer checks the source text (commit 04baad0)."
+    },
+    "F-276a58c2ca99": {
+      "disposition": "fixed",
+      "note": "Pinned behaviourally: tests.test_review_job.test_explain_with_an_unlisted_codex_model_and_no_cache_runs_nothing_and_exits_0 runs cmd_explain on an unlisted Codex model and asserts the lookup is asked read-only, nothing runs, no model-catalog is written and the exit is 0; tests.test_cli no longer checks the source text (commit 04baad0)."
+    },
+    "F-3bbc088b5297": {
+      "disposition": "fixed",
+      "note": "controller/model_discovery treats a fetched_at after now as stale (a future timestamp is never fresh); test_a_fetched_at_after_now_is_stale pins it."
+    },
+    "F-52876000cb68": {
+      "disposition": "fixed",
+      "note": "model_discovery._environment copies HOME and CODEX_HOME only when the Controller's environment has them; test_model_discovery covers environ={} (variable left out, not empty)."
+    },
+    "F-539d385da3b2": {
+      "disposition": "fixed",
+      "note": "The cache read and the answer decode catch ValueError (JSON and UTF-8 decode errors), RecursionError and OSError; test_model_discovery has a 'not utf-8' answer and cache case treated as absent/unreadable."
+    },
+    "F-5968568155fa": {
+      "disposition": "fixed",
+      "note": "model_discovery.lookup resolves codex with review.resolve_binary by default (the resolver launches use), and _environment builds PATH from the binary's directory."
+    },
+    "F-5bb83bdffaa0": {
+      "disposition": "fixed",
+      "note": "routing's refusal tail leaves the discovered part out for an unsupported harness (SOURCE_UNSUPPORTED); the claude-code refusal is pinned in tests.test_routing and tests.test_cli."
+    },
+    "F-601280bb795d": {
+      "disposition": "fixed",
+      "note": "The lookup refuses an answer over MAX_ANSWER_BYTES (1 MiB) after the read (a check, not a capped read); tests cover the oversize answer as unreadable."
+    },
+    "F-77c360aa1eb4": {
+      "disposition": "fixed",
+      "note": "Pinned behaviourally: tests.test_review_job.test_explain_with_an_unlisted_codex_model_and_no_cache_runs_nothing_and_exits_0 runs cmd_explain on an unlisted Codex model and asserts the lookup is asked read-only, nothing runs, no model-catalog is written and the exit is 0; tests.test_cli no longer checks the source text (commit 04baad0)."
+    },
+    "F-888d34d8e094": {
+      "disposition": "fixed",
+      "note": "docs/guide/runtime.md no longer offers 'not looked up' for step and run; the variant is no longer listed there (commit 838d5ae)."
+    },
+    "F-bad8692e3ef2": {
+      "disposition": "fixed",
+      "note": "RoutingOptionsPassThroughTest.test_a_read_only_call_runs_nothing_and_writes_no_catalogue now hands the lookup recording run/resolve fakes through the lookup's own keyword seam, so ran == [] is a real assertion (commit 04baad0)."
+    },
+    "F-f4d8ebfdacf4": {
+      "disposition": "fixed",
+      "note": "model_discovery._run_lookup catches OSError from the spawn (including a PermissionError) as a failed lookup; test_model_discovery has a 'spawn OSError' case."
+    }
+  }
+}

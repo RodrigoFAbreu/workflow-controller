@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": "workflow-controller-cm1",
+  "active_work_item_id": null,
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -77277,7 +77277,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-cm1-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-cm1-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_FUNCTIONAL_REVIEW",
+      "phase": "MILESTONE_COMPLETE",
       "plan_revision": 4,
       "implementation_revision": 5,
       "functional_review_round": null,
@@ -77580,8 +77580,8 @@
           "external": 3
         }
       },
-      "state_revision": 37,
-      "last_transition": "2026-11-16T01:51:20Z",
+      "state_revision": 38,
+      "last_transition": "2026-11-16T02:35:03Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -77830,89 +77830,207 @@
           "flow-1": {
             "flow_id": "flow-1",
             "status": "passed",
-            "head": "d321a30424cecbf7ea2f8b0c451b05649daae68e",
-            "ran_at": "2026-11-16T01:27:00Z",
+            "head": "5e397f5f4a1e38ed6bfae486a9410cc3cdee2fd5",
+            "ran_at": "2026-11-16T01:53:48Z",
             "summary": {
-              "checklist_blob": "9c2676fa96310dbc1b1caf995bcf9b91d16f98ec",
-              "text": "tests.test_model_discovery: Test run PASS, exact coverage (15 tests), rc=0."
+              "checklist_blob": "f0abf3b3d1546c89287c0b8dce3c46bfa1bc0b24",
+              "text": "15 tests, Test run: PASS, exact coverage, rc=0."
             },
-            "log_digest": "b1fc7bbbc55d8b63638ab99ea72704d5ec3e9e157d332852355cd55a8d2e6f22",
-            "run_ref": "controller:20261116T012543Z-464a8b62",
+            "log_digest": "a00b0f6c4eba695952bf97a14f9a910e12b7f41bb8d74609a65e2124628f0380",
+            "run_ref": "controller:20261116T015237Z-b46a52fe",
             "reporter": "workflow-controller 1.31.1",
-            "identity": "51c80fd4994bdea2faadebfa1210d05d85c66d43c7f45d27cda3722f1d6d8a65",
-            "recorded_at": "2026-11-16T01:27:00Z"
+            "identity": "4d4b81f9d7b70160f57719ef3b41fa1a227b8d0126a3ed9a523774d7f918b076",
+            "recorded_at": "2026-11-16T01:53:48Z"
           },
           "flow-2": {
             "flow_id": "flow-2",
-            "status": "failed",
-            "head": "d321a30424cecbf7ea2f8b0c451b05649daae68e",
-            "ran_at": "2026-11-16T01:27:00Z",
+            "status": "passed",
+            "head": "5e397f5f4a1e38ed6bfae486a9410cc3cdee2fd5",
+            "ran_at": "2026-11-16T02:33:56Z",
             "summary": {
-              "checklist_blob": "9c2676fa96310dbc1b1caf995bcf9b91d16f98ec",
-              "reason": "environment",
-              "text": "Test run FAIL, rc=1, coverage exact (256 tests). The only failure is tests.test_cli.VersionFlagTest.test_editable_install_prints_two_lines_and_writes_nothing: its `pip install -e` needs pypi.org (build deps), blocked by the sandbox. All routing/discovery cases otherwise ran without error."
+              "checklist_blob": "f0abf3b3d1546c89287c0b8dce3c46bfa1bc0b24",
+              "text": "Operator host run at head 5e397f5: tests.test_routing tests.test_routing_chain tests.test_cli, 255 tests, exact coverage, Test run PASS, rc=0. The Controller sandbox failure was VersionFlagTest pip install -e (no network); on the host it passes."
             },
-            "log_digest": "3c4c2d72e82b0bc777ba7632096753074e8fa402112aff9f4b58bd8db2521d10",
-            "run_ref": "controller:20261116T012543Z-464a8b62",
-            "reporter": "workflow-controller 1.31.1",
-            "identity": "51c80fd4994bdea2faadebfa1210d05d85c66d43c7f45d27cda3722f1d6d8a65",
-            "recorded_at": "2026-11-16T01:27:00Z"
+            "log_digest": "7573d404acbed54a6770421e224f75cf227be8486c1d77b99f406d214898e02c",
+            "run_ref": "operator-host: /tmp/claude-1000/-home-rodrigo-Workspace-workflow-controller/1bd63984-01b5-4a16-94f9-22576ff60013/scratchpad/flow2.log",
+            "reporter": "operator",
+            "identity": "4d4b81f9d7b70160f57719ef3b41fa1a227b8d0126a3ed9a523774d7f918b076",
+            "recorded_at": "2026-11-16T02:33:56Z"
           },
           "flow-3": {
             "flow_id": "flow-3",
             "status": "passed",
-            "head": "d321a30424cecbf7ea2f8b0c451b05649daae68e",
-            "ran_at": "2026-11-16T01:27:00Z",
+            "head": "5e397f5f4a1e38ed6bfae486a9410cc3cdee2fd5",
+            "ran_at": "2026-11-16T01:53:49Z",
             "summary": {
-              "checklist_blob": "9c2676fa96310dbc1b1caf995bcf9b91d16f98ec",
-              "text": "LOOKUPS is ['codex']; routing.py:895 builds the 'accepted for' message; routing.py imports no model_discovery (only comments at lines 707-709 mention it)."
+              "checklist_blob": "f0abf3b3d1546c89287c0b8dce3c46bfa1bc0b24",
+              "text": "LOOKUPS is ['codex']; refusal text built in routing.py line 895; routing imports no model_discovery (two mentions are comments)."
             },
             "log_digest": "810f3aa5f9d5669c9cb50fa811a38c469756b668f1013067441f188f46487f49",
-            "run_ref": "controller:20261116T012543Z-464a8b62",
+            "run_ref": "controller:20261116T015237Z-b46a52fe",
             "reporter": "workflow-controller 1.31.1",
-            "identity": "51c80fd4994bdea2faadebfa1210d05d85c66d43c7f45d27cda3722f1d6d8a65",
-            "recorded_at": "2026-11-16T01:27:00Z"
+            "identity": "4d4b81f9d7b70160f57719ef3b41fa1a227b8d0126a3ed9a523774d7f918b076",
+            "recorded_at": "2026-11-16T01:53:49Z"
           },
           "flow-4": {
             "flow_id": "flow-4",
-            "status": "failed",
-            "head": "d321a30424cecbf7ea2f8b0c451b05649daae68e",
-            "ran_at": "2026-11-16T01:27:00Z",
+            "status": "passed",
+            "head": "5e397f5f4a1e38ed6bfae486a9410cc3cdee2fd5",
+            "ran_at": "2026-11-16T01:53:49Z",
             "summary": {
-              "checklist_blob": "9c2676fa96310dbc1b1caf995bcf9b91d16f98ec",
-              "reason": "defect",
-              "text": "runtime.md has the lookup paragraph (cache, 24 hours, hidden models), common-problems.md has the new refusal text and remedy, and the item page records status, what was built and what is deferred. But docs/guide/commands.md has no mention of the lookup or that explain reads the cache only (the step and explain rows do not mention it; grep finds no hit), and harnesses.md only describes the lookup (line 63) without saying explain reads the cache only."
+              "checklist_blob": "f0abf3b3d1546c89287c0b8dce3c46bfa1bc0b24",
+              "text": "runtime.md has the lookup paragraph (cache, 24 hours, hide models, refusal text); harnesses.md and commands.md say explain reads the cache only; common-problems has the refusal text; item page records status, built and deferred (read-only command, unpriced report, effort lookup)."
             },
-            "log_digest": "5725a9fc821bc34467f0e5261744b53ae8432939c8ce7128b2091ca83f1ce092",
-            "run_ref": "controller:20261116T012543Z-464a8b62",
+            "log_digest": "ddc11772b5e2c4fca9e234e058a51aff1b81ee6882f0d1eb75aee6c995df24a3",
+            "run_ref": "controller:20261116T015237Z-b46a52fe",
             "reporter": "workflow-controller 1.31.1",
-            "identity": "51c80fd4994bdea2faadebfa1210d05d85c66d43c7f45d27cda3722f1d6d8a65",
-            "recorded_at": "2026-11-16T01:27:00Z"
+            "identity": "4d4b81f9d7b70160f57719ef3b41fa1a227b8d0126a3ed9a523774d7f918b076",
+            "recorded_at": "2026-11-16T01:53:49Z"
           },
           "flow-5": {
             "flow_id": "flow-5",
-            "status": "failed",
-            "head": "d321a30424cecbf7ea2f8b0c451b05649daae68e",
-            "ran_at": "2026-11-16T01:27:00Z",
+            "status": "passed",
+            "head": "5e397f5f4a1e38ed6bfae486a9410cc3cdee2fd5",
+            "ran_at": "2026-11-16T02:33:56Z",
             "summary": {
-              "checklist_blob": "9c2676fa96310dbc1b1caf995bcf9b91d16f98ec",
-              "reason": "environment",
-              "text": "Test run FAIL rc=1 with exact coverage (379 tests); the only failure is the same pip editable-install test needing pypi.org (blocked). check_docs rc=0, workflow_backlog check rc=0, preflight-accept rc=0 with ok true. The namespace: none line was not an issue."
+              "checklist_blob": "f0abf3b3d1546c89287c0b8dce3c46bfa1bc0b24",
+              "text": "Operator host run at head 5e397f5: flow-5 suite 378 tests exact coverage PASS rc=0 (namespace unwrapped for tests.test_cli as expected); check_docs rc=0; backlog check rc=0; preflight-accept ok:true rc=0."
             },
-            "log_digest": "25c7ade86d3d87ca572ba3ac67791e17a4f5c4698ad8de719a3c501f5bb522e9",
-            "run_ref": "controller:20261116T012543Z-464a8b62",
-            "reporter": "workflow-controller 1.31.1",
-            "identity": "51c80fd4994bdea2faadebfa1210d05d85c66d43c7f45d27cda3722f1d6d8a65",
-            "recorded_at": "2026-11-16T01:27:01Z"
+            "log_digest": "21b2b3883e072961ed7784fbe95f89d77f13bac985c39b9b1760fad023facb18",
+            "run_ref": "operator-host: /tmp/claude-1000/-home-rodrigo-Workspace-workflow-controller/1bd63984-01b5-4a16-94f9-22576ff60013/scratchpad/flow5.log",
+            "reporter": "operator",
+            "identity": "4d4b81f9d7b70160f57719ef3b41fa1a227b8d0126a3ed9a523774d7f918b076",
+            "recorded_at": "2026-11-16T02:33:56Z"
           }
         },
-        "pr": null,
+        "pr": {
+          "pr": {
+            "number": 368,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/368"
+          },
+          "state": "open",
+          "head": "5e397f5f4a1e38ed6bfae486a9410cc3cdee2fd5",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "success",
+            "failing": []
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "4d4b81f9d7b70160f57719ef3b41fa1a227b8d0126a3ed9a523774d7f918b076",
+          "observed_at": "2026-11-16T02:35:03Z",
+          "ingest_seq": 1,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "838d5ae40990d726939c29c9d22070ce332d52f7",
+          "provenance": {
+            "source": "workflow_gh",
+            "fetched_by": {
+              "name": "workflow-gh",
+              "version": "pr-list-v1"
+            },
+            "fetched_at": "2026-11-16T02:35:03Z",
+            "raw_sha256": "0718e62226f7b48dfd67c9d651cda9e6a3af79890f5d86208d1e9248f2219189",
+            "run_ref": null,
+            "gh_path": "/usr/bin/gh",
+            "gh_sha256": "ce3200ab0615ae60ee68dd4833719cd3a3856e8b22ae1a3641998b39be8d3dbf"
+          },
+          "fact_id": "f0e3b866567474c99ba5a28ac63d2472630a2a1fc09742435d4d305390174c37"
+        },
         "pr_reported": null,
         "pr_keys": {
           "reopened_for": [],
           "applied": [],
-          "ingest_seq": 0
+          "ingest_seq": 1
         }
+      },
+      "acceptance_satisfaction": {
+        "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "policy_source": "default",
+        "file_digest": null,
+        "adopted_digest": null,
+        "floor_digest": null,
+        "requirements": [
+          {
+            "id": "checkpoints_complete",
+            "met": true,
+            "detail": "every checkpoint of the item's own registry is COMPLETE"
+          },
+          {
+            "id": "technical_approval_current",
+            "met": true,
+            "detail": "the technical approval is CURRENT for the content now"
+          },
+          {
+            "id": "functional_flows_passed",
+            "met": true,
+            "detail": "flows ['flow-1', 'flow-2', 'flow-3', 'flow-4', 'flow-5'] passed at the approved content"
+          },
+          {
+            "id": "pr_fact_current",
+            "met": true,
+            "detail": "workflow_gh fact for PR #368 at 5e397f5f4a1e38ed6bfae486a9410cc3cdee2fd5 is current"
+          },
+          {
+            "id": "no_standing_pr_objection",
+            "met": true,
+            "detail": "no CHANGES_REQUESTED decision and no failed check"
+          },
+          {
+            "id": "ci_green",
+            "met": true,
+            "detail": "checks are 'success'"
+          }
+        ],
+        "inputs": {
+          "anchor_commit": "838d5ae40990d726939c29c9d22070ce332d52f7",
+          "anchor_identity": "4d4b81f9d7b70160f57719ef3b41fa1a227b8d0126a3ed9a523774d7f918b076",
+          "technical_approval": {
+            "basis": "POLICY_SATISFIED",
+            "approved_review_content_id": "4d4b81f9d7b70160f57719ef3b41fa1a227b8d0126a3ed9a523774d7f918b076",
+            "recorded_at": "2026-11-16T01:51:20Z"
+          },
+          "functional": {
+            "flow-1": {
+              "evidence_id": "4040147413f346e45e21d055ef5417e1fd4e46414fcacdbd82bf5845cb427602",
+              "log_digest": "a00b0f6c4eba695952bf97a14f9a910e12b7f41bb8d74609a65e2124628f0380",
+              "run_ref": "controller:20261116T015237Z-b46a52fe"
+            },
+            "flow-2": {
+              "evidence_id": "590f0c8c1b79f93985a53cfc55eb3ce6ff2105f3f0bb33cab9c416771131a2d0",
+              "log_digest": "7573d404acbed54a6770421e224f75cf227be8486c1d77b99f406d214898e02c",
+              "run_ref": "operator-host: /tmp/claude-1000/-home-rodrigo-Workspace-workflow-controller/1bd63984-01b5-4a16-94f9-22576ff60013/scratchpad/flow2.log"
+            },
+            "flow-3": {
+              "evidence_id": "20a8d4f407e43c69063d5f50070bf4e9e79d27f3f028c51d207ce71a69a04b29",
+              "log_digest": "810f3aa5f9d5669c9cb50fa811a38c469756b668f1013067441f188f46487f49",
+              "run_ref": "controller:20261116T015237Z-b46a52fe"
+            },
+            "flow-4": {
+              "evidence_id": "abdd96669f549b5b7e40ec6ae5e42a4837d0f4683bcfd672443163b061b48913",
+              "log_digest": "ddc11772b5e2c4fca9e234e058a51aff1b81ee6882f0d1eb75aee6c995df24a3",
+              "run_ref": "controller:20261116T015237Z-b46a52fe"
+            },
+            "flow-5": {
+              "evidence_id": "4df1ca7994dbef82f6b2cd9934660491ce29f04c9e53cc65ca52c991d90be019",
+              "log_digest": "21b2b3883e072961ed7784fbe95f89d77f13bac985c39b9b1760fad023facb18",
+              "run_ref": "operator-host: /tmp/claude-1000/-home-rodrigo-Workspace-workflow-controller/1bd63984-01b5-4a16-94f9-22576ff60013/scratchpad/flow5.log"
+            }
+          },
+          "pr": {
+            "fact_id": "f0e3b866567474c99ba5a28ac63d2472630a2a1fc09742435d4d305390174c37",
+            "head": "5e397f5f4a1e38ed6bfae486a9410cc3cdee2fd5",
+            "provenance": "workflow_gh",
+            "raw_sha256": "0718e62226f7b48dfd67c9d651cda9e6a3af79890f5d86208d1e9248f2219189"
+          }
+        },
+        "trust": {
+          "review_verdicts": "orchestrator",
+          "functional_evidence": "orchestrator",
+          "pr_fact": "workflow_gh"
+        },
+        "evaluated_at": "2026-11-16T02:35:03Z",
+        "workflow_release": "2.29.3"
       }
     }
   }

@@ -671,11 +671,11 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-cm1` (CM1), implementation revision 2, plan `docs/ai-workflow/CONTROLLER_CM1_PLAN.md` (revision 4), base commit
+Item `workflow-controller-cm1` (CM1), implementation revision 5, plan `docs/ai-workflow/CONTROLLER_CM1_PLAN.md` (revision 4), base commit
 `9f73ca7`. Three checkpoints, all complete: CP1 (`controller/model_discovery.py`: `lookup`, the 24-hour cache under `model-catalog/<harness>.json`,
 `codex debug models` under a 20 second deadline, only `visibility: "list"` slugs), CP2 (`routing.RoutingOptions.discovery`, the refusal text naming
 declared, discovered and added models, `cli._routing_options` retrying with a lookup, `explain` reading the cache only), CP3 (the guides, common
-problems and the item page). Revision 2 holds the fix of review finding I1 (a deeply nested answer or cache is unreadable, not an exception).
+problems and the item page). Revision 2 holds the fix of review finding I1 (a deeply nested answer or cache is unreadable, not an exception). Revisions 3 to 5 hold the functional round 1 docs fix and the review fixes: `explain` shows no lookup status or refusal when there is no model cache, its read-only lookup is pinned through a seam the lookup uses (`tests.test_cli`, `tests.test_review_job`), and the `step` and `run` refusals no longer list `not looked up`.
 Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the
 system directories, and no write inside the read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write only
 to the scratch `TMPDIR`. No flow needs a pull request, a forge call or a model turn (the lookup is exercised with stub runners), and none runs the full suite.
@@ -718,7 +718,7 @@ Expected: `# Test run: PASS`, exact coverage, every `rc=0`, `preflight-accept` `
 command, the unpriced report and an effort lookup are deferred. A live `codex debug models` call is not a flow (no real `codex` in the sandbox; the opt-in
 live check is the owner's). The full suite is CI's on the pull request; it is not a flow.
 
-Functional review round 1 (automated tester, head `d321a30`): flow 4 failed as a missing requirement -- `docs/guide/commands.md` and `docs/guide/harnesses.md` did not say that `explain` reads the model lookup cache only. Fixed (bounded, docs only): the `explain` row and the `step` row of the commands guide and the lookup paragraph of the harnesses guide now say so (`python3 tools/check_docs.py` passes). Nothing was deferred to a remediation child. Flow 2's one failure (`VersionFlagTest.test_editable_install_prints_two_lines_and_writes_nothing`, `pip install -e` needs pypi.org) is the sandbox's, not a finding. Needs re-testing: flow 4, and flow 5's docs checks, at the new head.
+Functional review round 1 (automated tester, head `d321a30`): flow 4 failed as a missing requirement -- `docs/guide/commands.md` and `docs/guide/harnesses.md` did not say that `explain` reads the model lookup cache only. Fixed (bounded, docs only): the `explain` row and the `step` row of the commands guide and the lookup paragraph of the harnesses guide now say so (`python3 tools/check_docs.py` passes). Nothing was deferred to a remediation child. Flow 2's one failure (`VersionFlagTest.test_editable_install_prints_two_lines_and_writes_nothing`, `pip install -e` needs pypi.org) is the sandbox's, not a finding. Needs re-testing: flow 4, and flow 5's docs checks, at the new head. Re-test at head `141335b` (implementation revision 5): flows 1-5 unchanged; flow 4 also covers the `explain` and refusal wording in `docs/guide/commands.md`, `docs/guide/harnesses.md` and `docs/guide/runtime.md`.
 
 ## Next action
 

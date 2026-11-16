@@ -77277,7 +77277,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-cm1-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-cm1-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 4,
       "implementation_revision": 4,
       "functional_review_round": null,
@@ -77570,12 +77570,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 3,
+          "local": 4,
           "external": 2
         }
       },
-      "state_revision": 32,
-      "last_transition": "2026-11-16T01:37:22Z",
+      "state_revision": 33,
+      "last_transition": "2026-11-16T01:40:56Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -77766,6 +77766,34 @@
               "review_content_id": "5ae9f251b304179aeeb6ee6bebc2db7f486832de655a1d054937723be0469234",
               "verdict": "REVISE",
               "at": "2026-11-16T01:34:32Z"
+            }
+          ]
+        },
+        "F-bad8692e3ef2": {
+          "digest": "bad8692e3ef26c9a32f0df2426206fc4356bf3013bd85ee0c61682fb736acba8",
+          "text": "**O1. The same ineffective patch is in `RoutingOptionsPassThroughTest.test_a_read_only_call_runs_nothing_and_writes_no_catalogue`** (`tests/test_cli.py:978`). That test passes `allow_run=False` itself, so its `not looked up` and no-`model-catalog/` assertions are real, but `ran == []` proves nothing for the same reason. Use the same seam as I1, or drop the vacuous assertion.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "04e2b7b89d7bf769d9c9bd91382983e927e887e2cae42224062e4d819cbc4289",
+              "verdict": "REVISE",
+              "at": "2026-11-16T01:40:56Z"
+            }
+          ]
+        },
+        "F-888d34d8e094": {
+          "digest": "888d34d8e0943c0cc3074842600185e4563f251c0322b06c40061754b177b323",
+          "text": "**O2. `docs/guide/runtime.md` now says \"refused by `step` and `run`\", but the variant list that follows still offers `not looked up`.** Only `allow_run=False` (`explain`) produces that variant, and `explain` swallows the refusal. As a result, `step` and `run` never print `not looked up`. Consider dropping it from that list, or noting that it is the read-only form.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 4,
+              "review_content_id": "04e2b7b89d7bf769d9c9bd91382983e927e887e2cae42224062e4d819cbc4289",
+              "verdict": "REVISE",
+              "at": "2026-11-16T01:40:56Z"
             }
           ]
         }

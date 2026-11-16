@@ -69,7 +69,7 @@ def parse_answer(raw: bytes) -> tuple[str, ...]:
         raise _Unreadable(f"the answer is over {MAX_ANSWER_BYTES} bytes")
     try:
         data = json.loads(raw.decode("utf-8"))
-    except ValueError as exc:  # JSONDecodeError and UnicodeDecodeError
+    except (ValueError, RecursionError) as exc:  # JSONDecodeError, UnicodeDecodeError, deep nesting
         raise _Unreadable(f"the answer is not JSON: {exc}") from exc
     entries = data.get("models") if isinstance(data, dict) else None
     if not isinstance(entries, list):
@@ -114,7 +114,7 @@ def _read_cache(runtime_root: Path, harness_name: str) -> tuple[tuple[str, ...],
         if not isinstance(models, list) or not models:
             return None
         return tuple(_slug(m) for m in models), data["fetched_at"], fetched
-    except (ValueError, OSError, _Unreadable):  # ValueError covers JSON and UTF-8 decode errors
+    except (ValueError, RecursionError, OSError, _Unreadable):  # JSON/UTF-8 decode errors, deep nesting
         return None
 
 

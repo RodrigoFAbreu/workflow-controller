@@ -91,6 +91,7 @@ class LookupTest(unittest.TestCase):
             ("bad slug", answer(("-flag", "list"))), ("empty slug", answer(("", "list"))),
             ("empty list", answer(("gpt-reserve", "hide"))), ("oversize", b" " * (md.MAX_ANSWER_BYTES + 1)),
             ("entry not an object", json.dumps({"models": ["x"]}).encode()),
+            ("deeply nested", b"[" * 200000),
         ):
             with self.subTest(name):
                 record, _ = self.look(Runner(result(raw)))
@@ -132,6 +133,11 @@ class LookupTest(unittest.TestCase):
         self.assertEqual(record.fetched_at, "2026-11-14T11:00:00Z")
         self.assertIn("exited with 1", record.reason)
 
+    def test_a_deeply_nested_answer_with_a_stale_cache_answers_stale(self) -> None:
+        self.write_cache(fetched_at="2026-11-14T11:00:00Z")
+        record, _ = self.look(Runner(result(b"[" * 200000)))
+        self.assertEqual((record.models, record.source), (("cached-model",), routing.SOURCE_STALE))
+
     def test_an_invalid_cache_counts_as_absent(self) -> None:
         for name, write in (
             ("not json", lambda: self._raw(b"{")),
@@ -143,6 +149,7 @@ class LookupTest(unittest.TestCase):
             ("bad slug", lambda: self.write_cache(models=["ok", "-bad"])),
             ("empty models", lambda: self.write_cache(models=[])),
             ("models not a list", lambda: self.write_cache(models="x")),
+            ("deeply nested", lambda: self._raw(b"[" * 200000)),
         ):
             with self.subTest(name):
                 write()

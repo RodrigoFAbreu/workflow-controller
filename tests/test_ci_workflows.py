@@ -371,7 +371,10 @@ class ValidatePlanTest(unittest.TestCase):
         # The shards are skipped only when a reused run's id is passed in.
         self.assertEqual(self.jobs["tests"]["if"],
                          "inputs.tests-from-run == '' && needs.changes.outputs.code == 'true'")
-        self.assertNotIn("needs", self.jobs["package"])
+        # The third job of the one docs-tests -> docs -> package lane; whatever
+        # docs ended as, package runs unless the run is cancelled (CI3 D4).
+        self.assertEqual(self.jobs["package"]["needs"], ["docs"])
+        self.assertEqual(self.jobs["package"]["if"], "!cancelled()")
 
     def test_check_names(self) -> None:
         self.assertNotIn("name", self.jobs["plan"])
@@ -393,7 +396,7 @@ class ValidatePlanTest(unittest.TestCase):
 
     def test_matrix_is_the_planned_shards(self) -> None:
         strategy = self.jobs["tests"]["strategy"]
-        self.assertEqual(strategy, {"fail-fast": False,
+        self.assertEqual(strategy, {"fail-fast": False, "max-parallel": ci.TEST_MAX_PARALLEL,
                                     "matrix": {"shard": "${{ fromJSON(needs.plan.outputs.shards) }}"}})
 
     def test_exec_shard_recomputes_the_plan_and_checks_its_digest(self) -> None:
@@ -608,8 +611,8 @@ class ChangeDetectionTest(unittest.TestCase):
         self.assertIn("package", self.jobs)
         self.assertNotIn("name", self.jobs["tests-result"])
         self.assertNotIn("name", self.jobs["package"])
-        self.assertNotIn("needs", self.jobs["package"])
-        self.assertNotIn("if", self.jobs["package"])
+        self.assertEqual((self.jobs["package"]["needs"], self.jobs["package"]["if"]),
+                         (["docs"], "!cancelled()"))
 
 
 class AllJobsTest(unittest.TestCase):
@@ -797,7 +800,7 @@ def _gh_eval(expression: str, context: dict) -> object:
     operand = r"(\w+|'[^']*')"
     text = re.sub(rf"{operand} (==|!=) {operand}",
                   lambda m: f"{'' if m.group(2) == '==' else 'not '}eq({m.group(1)}, {m.group(3)})", text)
-    text = text.replace("!cancelled()", "True").replace("&&", " and ").replace("||", " or ")
+    text = text.replace("!cancelled()", "True").replace("always()", "True").replace("&&", " and ").replace("||", " or ")
     text = text.replace("format(", "fmt(")
     assert "!" not in text, text
     return eval(text, {"__builtins__": {}},  # noqa: S307 - a fixed, model-derived expression
@@ -896,11 +899,17 @@ class CiWorkflowTest(unittest.TestCase):
     def test_after_merge_checks_never_run_on_a_pull_request(self) -> None:
         for check in ("determinism", "mutations"):
             job = self.jobs[f"after-merge-{check}"]
-            self.assertNotIn("needs", job)
-            self.assertEqual(job["if"], "github.event_name != 'pull_request'")
-            self.assertFalse(_gh_eval(job["if"], {"github.event_name": "pull_request"}))
-            self.assertTrue(_gh_eval(job["if"], {"github.event_name": "push"}))
-            self.assertTrue(_gh_eval(job["if"], {"github.event_name": "workflow_dispatch"}))
+            # They wait for validate, so they never share its runners (CI3 D4).
+            self.assertEqual(job["needs"], ["validate"])
+            self.assertEqual(job["if"], "!cancelled() && needs.validate.result == 'success' && "
+                                        "github.event_name != 'pull_request'")
+            ok = {"needs.validate.result": "success"}
+            self.assertFalse(_gh_eval(job["if"], {"github.event_name": "pull_request", **ok}))
+            self.assertTrue(_gh_eval(job["if"], {"github.event_name": "push", **ok}))
+            self.assertTrue(_gh_eval(job["if"], {"github.event_name": "workflow_dispatch", **ok}))
+            for result in ("failure", "skipped", "cancelled"):
+                self.assertFalse(_gh_eval(job["if"], {"github.event_name": "push",
+                                                      "needs.validate.result": result}))
 
     def test_validate_is_workflow_call_and_dispatch(self) -> None:
         on = ci.tests_workflow()["on"]
@@ -1121,7 +1130,8 @@ class BuildPublishWorkflowTest(unittest.TestCase):
         for check in ("determinism", "mutations"):
             self.assertEqual(call["with"][f"after-merge-{check}"], f"${{{{ needs.after-merge-{check}.result }}}}")
             self.assertTrue(_gh_eval(ci_jobs[f"after-merge-{check}"]["if"],
-                                     {"github.event_name": "workflow_dispatch"}))
+                                     {"github.event_name": "workflow_dispatch",
+                                      "needs.validate.result": "success"}))
         for ref, expected in (("refs/heads/main", True), ("refs/heads/topic", False)):
             context = {"github.event_name": "workflow_dispatch", "github.ref": ref,
                        "needs.validate.result": "success"}
@@ -1303,7 +1313,8 @@ class AfterMergeChecksTest(unittest.TestCase):
 
     def test_none_depends_on_reuse(self) -> None:
         for check in self.CHECKS:
-            self.assertNotIn("needs", self.ci_jobs[f"after-merge-{check}"])
+            # validate waits for reuse, so waiting for validate is not a direct need of it.
+            self.assertEqual(self.ci_jobs[f"after-merge-{check}"]["needs"], ["validate"])
             self.assertEqual(self.jobs[f"release-target-{check}"]["needs"], ["release-plan"])
         for jobs in (self.jobs, self.ci_jobs):
             for name, job in jobs.items():
@@ -1498,7 +1509,7 @@ class ReuseTest(unittest.TestCase):
         # The plan is this run's own, in both cases: plan runs whatever the
         # input, and depends only on the change detection (CI1a D4).
         self.assertEqual(self.validate["plan"]["if"], "needs.changes.outputs.code == 'true'")
-        self.assertNotIn("if", self.validate["package"])
+        self.assertEqual(self.validate["package"]["if"], "!cancelled()")
 
     def test_reused_results_are_verified_then_aggregated_and_never_continue_on_error(self) -> None:
         steps = _steps(self.validate["tests-result"])
@@ -1595,6 +1606,217 @@ class PrTitleWorkflowTest(unittest.TestCase):
         # The default depth: only the merge ref's own committed policy is read.
         self.assertEqual(steps[0]["with"], {"persist-credentials": False})
         self.assertEqual(steps[1]["with"], {"python-version": "3.12"})
+
+
+class _WorstCase(dict):
+    """A ``_gh_eval`` context that assumes the worst for what a run decides
+    while it runs: every ``needs.*.result`` is ``success``, the change
+    detection says code, and ``release-plan`` resumes an ancestor. Anything
+    else not named is null."""
+
+    def get(self, key, default=None):
+        if key in self:
+            return self[key]
+        if key.startswith("needs.") and key.endswith(".result"):
+            return "success"
+        return {"needs.changes.outputs.code": "true",
+                "needs.release-plan.outputs.state": "RESUME",
+                "needs.release-plan.outputs.commit": "a",
+                "github.sha": "b"}.get(key)
+
+
+def _called_model(job: dict) -> "dict | None":
+    uses = job.get("uses", "")
+    if uses.startswith("./.github/workflows/"):
+        return {fname: build() for fname, (build, _) in ci.WORKFLOWS.items()}[uses.rsplit("/", 1)[1]]
+    return None
+
+
+def _runner_nodes(model: dict, context: _WorstCase) -> dict:
+    """``model``'s jobs, the called local workflows flattened in, as
+    ``{node: (weight, active, direct_dependencies)}``. A static job is one
+    runner, a call to a shared workflow is one (assumed, see CI3 D4), a matrix
+    counts its ``max-parallel`` and fails without one."""
+    nodes: dict = {}
+    groups: dict = {}
+    for name, job in _jobs(model).items():
+        active = bool(_gh_eval(job["if"], context)) if "if" in job else True
+        outer = [member for need in job.get("needs", []) for member in groups[need]]
+        child = _called_model(job)
+        if child is None:
+            matrix = job.get("strategy", {}).get("matrix")
+            if matrix is not None and "max-parallel" not in job["strategy"]:
+                raise AssertionError(f"{name}: a matrix without max-parallel is unbounded")
+            weight = job["strategy"]["max-parallel"] if matrix is not None else 1
+            nodes[name] = (weight, active, set(outer))
+            groups[name] = [name]
+            continue
+        declared = child["on"]["workflow_call"].get("inputs", {})
+        inner = _WorstCase(context)
+        inner.update({f"inputs.{key}": "" if key == ci.REUSE_INPUT else "success" for key in declared})
+        grandchildren = _runner_nodes(child, inner)
+        groups[name] = []
+        for key, (weight, child_active, deps) in grandchildren.items():
+            nodes[f"{name}/{key}"] = (weight, active and child_active,
+                                      {f"{name}/{d}" for d in deps} | set(outer))
+            groups[name].append(f"{name}/{key}")
+    return nodes
+
+
+def _heaviest_independent_set(nodes: dict) -> int:
+    """The largest total weight of active jobs, no two ordered by ``needs``
+    (directly or through any job, a skipped one included): the most runners
+    the graph can hold at once, with no assumption about how long any job runs."""
+    after = {name: set(deps) for name, (_, _, deps) in nodes.items()}
+    changed = True
+    while changed:
+        changed = False
+        for name, deps in after.items():
+            grown = set(deps).union(*(after[d] for d in deps))
+            if grown != deps:
+                after[name] = grown
+                changed = True
+    live = sorted((name for name, (weight, active, _) in nodes.items() if active and weight),
+                  key=lambda name: -nodes[name][0])
+    ordered = lambda a, b: a in after[b] or b in after[a]  # noqa: E731
+    best = 0
+
+    def search(index: int, chosen: list, total: int) -> None:
+        nonlocal best
+        best = max(best, total)
+        if index == len(live) or total + sum(nodes[n][0] for n in live[index:]) <= best:
+            return
+        name = live[index]
+        if not any(ordered(name, other) for other in chosen):
+            search(index + 1, chosen + [name], total + nodes[name][0])
+        search(index + 1, chosen, total)
+
+    search(0, [], 0)
+    return best
+
+
+class RunnerLimitTest(unittest.TestCase):
+    """CI3 D4/D5: one run holds at most ``RUNNER_LIMIT`` runners, the managed
+    conformance job, ``PR title`` and the main reuse report included, proved
+    from the generated models and counted against the whole set: no runner is
+    excused because it ends quickly."""
+
+    MODES = ("on", "off", None, "report")
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.models = _models()
+        text = CONFORMANCE_YML.read_text(encoding="utf-8")
+        cls.conformance_text = text
+        trigger_block = re.search(r"(?m)^on:\n((?:  .*\n)+)", text).group(1)
+        cls.conformance_events = set(re.findall(r"(?m)^  (\w+):", trigger_block))
+
+    def _outside(self, event: str, ref: str, mode: "str | None") -> int:
+        total = 0
+        if event in self.conformance_events:
+            total += 1  # workflow-conformance: one job, asserted below
+        if event in self.models["pr-title.yml"]["on"]:
+            total += 1  # PR title, on every activity type, beside the shards
+        report = self.models["main-reuse-report.yml"]
+        if event in report["on"] and ref == "refs/heads/main":
+            context = _WorstCase({"github.event_name": event, "github.ref": ref,
+                                  "vars.CI_MAIN_REUSE": mode})
+            total += sum(1 for job in _jobs(report).values() if _gh_eval(job["if"], context))
+        return total
+
+    def _peak(self, entry: str, event: str, ref: str, mode: "str | None") -> int:
+        context = _WorstCase({"github.event_name": event, "github.ref": ref,
+                              "vars.CI_MAIN_REUSE": mode})
+        if entry != "ci.yml":  # dispatched alone: no input can be handed in
+            context["inputs.tests-from-run"] = None
+        nodes = _runner_nodes(self.models[entry], context)
+        return _heaviest_independent_set(nodes) + self._outside(event, ref, mode)
+
+    def _scenarios(self):
+        yield "ci.yml", "pull_request", "refs/pull/7/merge"
+        yield "ci.yml", "push", "refs/heads/main"
+        yield "ci.yml", "workflow_dispatch", "refs/heads/main"
+        yield "ci.yml", "workflow_dispatch", "refs/heads/topic"
+        yield "tests.yml", "workflow_dispatch", "refs/heads/main"
+        yield "tests.yml", "workflow_dispatch", "refs/heads/topic"
+        yield "build-publish.yml", "workflow_dispatch", "refs/heads/main"
+        yield "build-publish.yml", "workflow_dispatch", "refs/heads/topic"
+
+    def test_no_event_and_no_reuse_mode_holds_more_than_the_limit(self) -> None:
+        for entry, event, ref in self._scenarios():
+            for mode in self.MODES:
+                with self.subTest(entry=entry, event=event, ref=ref, mode=mode):
+                    self.assertLessEqual(self._peak(entry, event, ref, mode), ci.RUNNER_LIMIT)
+
+    def test_the_count_is_not_vacuous(self) -> None:
+        # Shards, the docs/package lane, conformance and PR title: exactly the limit.
+        self.assertEqual(self._peak("ci.yml", "pull_request", "refs/pull/7/merge", None), ci.RUNNER_LIMIT)
+        # On main: the shards and the lane, conformance, and the report only where its if holds.
+        main = {mode: self._peak("ci.yml", "push", "refs/heads/main", mode) for mode in self.MODES}
+        self.assertEqual(main, {"on": 5, "off": 5, None: 6, "report": 6})
+        # A direct build-publish run classifies and nothing else.
+        self.assertEqual(self._peak("build-publish.yml", "workflow_dispatch", "refs/heads/main", None), 1)
+
+    def test_a_matrix_without_max_parallel_fails(self) -> None:
+        model = {"jobs": {"tests": {"runs-on": "ubuntu-latest", "strategy": {"matrix": {"shard": "x"}}}}}
+        with self.assertRaises(AssertionError):
+            _runner_nodes(model, _WorstCase())
+
+    def test_every_shard_matrix_is_bounded_and_tied_to_the_planner_ceiling(self) -> None:
+        count = 0
+        for name, model in self.models.items():
+            for job_name, job in _jobs(model).items():
+                if "matrix" in job.get("strategy", {}):
+                    count += 1
+                    with self.subTest(workflow=name, job=job_name):
+                        self.assertEqual(job["strategy"]["max-parallel"], ci.TEST_MAX_PARALLEL)
+        self.assertEqual(count, 1)
+        # The model does not import the planner: this test ties the two numbers.
+        self.assertLessEqual(ci.TEST_MAX_PARALLEL, shards.CI_MAX_SHARDS)
+        # Option B (CI3 O1): the planner plans no more shards than may run.
+        self.assertEqual(ci.TEST_MAX_PARALLEL, shards.CI_MAX_SHARDS)
+        self.assertEqual(ci.RUNNER_LIMIT, 6)
+
+    def test_the_ordering_is_what_the_count_relies_on(self) -> None:
+        jobs = _jobs(self.models["tests.yml"])
+        self.assertEqual((jobs["docs"]["needs"], jobs["package"]["needs"]), (["docs-tests"], ["docs"]))
+        for check in ("determinism", "mutations"):
+            self.assertEqual(_jobs(self.models["ci.yml"])[f"after-merge-{check}"]["needs"], ["validate"])
+
+    def test_docs_tests_counts_one_runner_through_a_pinned_called_workflow(self) -> None:
+        job = _jobs(self.models["tests.yml"])["docs-tests"]
+        # An assumption about a workflow on a mutable ref this test cannot read
+        # offline: pinning the value makes a change of the called workflow visible.
+        self.assertEqual(job["uses"], "RodrigoFAbreu/action-workflows/.github/workflows/python-tests.yml@main")
+        nodes = _runner_nodes(self.models["tests.yml"], _WorstCase({"inputs.tests-from-run": ""}))
+        self.assertEqual(nodes["docs-tests"][0], 1)
+
+    def test_the_managed_conformance_workflow_is_one_job(self) -> None:
+        body = self.conformance_text.split("\njobs:\n", 1)[1]
+        self.assertEqual(re.findall(r"(?m)^  ([A-Za-z0-9_-]+):\s*$", body), ["workflow-conformance"])
+        self.assertEqual(self.conformance_events, {"pull_request", "push"})
+
+    def test_package_is_never_skipped_by_an_upstream_result(self) -> None:
+        # GitHub treats a skipped required check as satisfied, so package must
+        # run whatever docs (and a skipped tests job, on a documentation-only
+        # pull request) ended as, on every event.
+        job = _jobs(self.models["tests.yml"])["package"]
+        for event in ("pull_request", "push", "workflow_dispatch"):
+            for result in ("success", "failure", "cancelled", "skipped"):
+                with self.subTest(event=event, docs=result):
+                    context = _WorstCase({"github.event_name": event, "needs.docs.result": result,
+                                          "needs.tests.result": "skipped"})
+                    self.assertTrue(_gh_eval(job["if"], context))
+        self.assertEqual(job["if"], "!cancelled()")
+
+    def test_the_required_check_names_are_unchanged(self) -> None:
+        names = {f"validate / {job}" for job in ("plan", "tests-result", "package")}
+        self.assertEqual(names, {"validate / plan", "validate / tests-result", "validate / package"})
+        for job in ("plan", "tests-result", "package"):
+            self.assertIn(job, _jobs(self.models["tests.yml"]))
+            self.assertNotIn("name", _jobs(self.models["tests.yml"])[job])
+        self.assertIn("validate", _jobs(self.models["ci.yml"]))
+        self.assertEqual(_jobs(self.models["pr-title.yml"])["title"]["name"], "PR title")
 
 
 #: ``tests.yml``'s and 1.3.0's ``main.yml``'s pipx smoke test (``build-publish.yml``'s with

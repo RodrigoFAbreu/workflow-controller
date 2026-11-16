@@ -101,6 +101,7 @@ jobs:
       contents: read
     strategy:
       fail-fast: false
+      max-parallel: 3
       matrix:
         shard: "${{ fromJSON(needs.plan.outputs.shards) }}"
     steps:
@@ -182,6 +183,9 @@ jobs:
         if: "always()"
         run: "python3 tools/ci_changes.py require --changes ${{ needs.changes.result }} --docs ${{ needs.docs.result }} --code \"${{ needs.changes.outputs.code }}\""
   package:
+    needs:
+      - docs
+    if: "!cancelled()"
     runs-on: ubuntu-latest
     permissions:
       contents: read

@@ -98,6 +98,17 @@ RESERVED_SCALARS = frozenset({
 PYTHON_VERSION = "3.12"
 RUNNER = "ubuntu-latest"
 
+#: The most runners one run may hold at once, the managed conformance job, the
+#: ``PR title`` check and the main reuse report included (CI3 D4, D5; the owner's
+#: CI standard). ``tests/test_ci_workflows.py`` proves it from the generated
+#: models, for every event and every ``CI_MAIN_REUSE`` mode.
+RUNNER_LIMIT = 6
+#: The shard matrix's ``max-parallel``: the owner's option B (CI3 O1) leaves
+#: room for the conformance job, ``PR title`` and the one docs/package lane
+#: beside the shards. ``tools/test_shards.py``'s ``CI_MAX_SHARDS`` plans no more
+#: shards than this; a test ties the two numbers, the model does not import it.
+TEST_MAX_PARALLEL = 3
+
 #: Every action outside ``tests.yml`` uses (``ci.yml``'s ``reuse`` and
 #: ``after-merge-*`` jobs, ``build-publish.yml``'s jobs, ``pr-title.yml``'s
 #: ``title`` job and the report), pinned to the full commit
@@ -453,7 +464,7 @@ def tests_workflow() -> dict:
                 "if": f"{RUN_SHARDS} && {IS_CODE}",
                 "runs-on": RUNNER,
                 "permissions": read,
-                "strategy": {"fail-fast": False,
+                "strategy": {"fail-fast": False, "max-parallel": TEST_MAX_PARALLEL,
                              "matrix": {"shard": "${{ fromJSON(needs.plan.outputs.shards) }}"}},
                 "steps": [
                     _checkout(pinned=False),
@@ -528,7 +539,14 @@ def tests_workflow() -> dict:
                             f'--code "${{{{ {CHANGES_CODE_OUTPUT} }}}}"'},
                 ],
             },
+            # The third job of the one docs-tests -> docs -> package lane, so
+            # the three hold one runner at a time beside the shards (CI3 D4).
+            # It is the required validate / package check and GitHub counts a
+            # skipped required check as passing, so no predecessor's result may
+            # skip it: !cancelled() runs it whatever docs ended as.
             "package": {
+                "needs": ["docs"],
+                "if": "!cancelled()",
                 "runs-on": RUNNER,
                 "permissions": read,
                 "steps": [
@@ -635,6 +653,7 @@ def _main_check_job(check: str, *, release_target: bool, condition: str | None =
     module = MAIN_TEST_MODULES[check]
     job: dict = {}
     if condition is not None:
+        job["needs"] = ["validate"]
         job["if"] = condition
     if release_target:
         job.update({
@@ -669,6 +688,11 @@ def _main_check_job(check: str, *, release_target: bool, condition: str | None =
 REUSE_ON = f"vars.{REUSE_VARIABLE} == 'on'"
 NOT_PULL_REQUEST = "github.event_name != 'pull_request'"
 REUSE_REPORT = f"vars.{REUSE_VARIABLE} != 'on' && vars.{REUSE_VARIABLE} != 'off'"
+
+
+#: ``ci.yml``'s ``after-merge-*`` condition: not a pull request, and the
+#: caller's ``validate`` succeeded.
+AFTER_VALIDATE = f"{_after('validate')} && {NOT_PULL_REQUEST}"
 
 
 def _reuse_job(report: bool = False) -> dict:
@@ -857,13 +881,15 @@ def ci_workflow() -> dict:
                 needs=["reuse"], condition="!cancelled()",
                 inputs={REUSE_INPUT: f"${{{{ vars.{REUSE_VARIABLE} == 'on' && "
                                      "needs.reuse.outputs.run-id || '' }}"}),
-            # The two whole-catalogue checks run beside validate on the pushed
-            # commit (not on a pull request) and are never reused or skipped;
-            # build-publish receives their results (_coverage_condition).
+            # The two whole-catalogue checks run on the pushed commit (not on a
+            # pull request), after validate so they never share its runners
+            # (CI3 D4), and are never reused; build-publish receives their
+            # results (_coverage_condition). A validate that did not succeed
+            # skips them, and build-publish publishes nothing then anyway.
             "after-merge-determinism": _main_check_job("determinism", release_target=False,
-                                                       condition=NOT_PULL_REQUEST),
+                                                       condition=AFTER_VALIDATE),
             "after-merge-mutations": _main_check_job("mutations", release_target=False,
-                                                     condition=NOT_PULL_REQUEST),
+                                                     condition=AFTER_VALIDATE),
             # Only on main, only after validate succeeded. It also waits for
             # the after-merge checks, whose results it needs, but does not
             # require them here: a RESUME of an ancestor is gated by that

@@ -25,3 +25,7 @@ The owner's words:
 - Carry this out through the Controller as a work item, not by the orchestrator.
 
 The sizing rule (at most one new mechanism, releasable alone) is on [Planning rules](../planning-rules.md#next-in-order-and-the-sizing-rules).
+
+## O1: the runner-limit option
+
+Owner's choice, recorded 2026-11-16 through SignalHub (event `01a1e3c3-0bd2-7b74-b24d-a04cee0054f5`): **option B**, `CI_MAX_SHARDS = 3` (3 shards, one wave) with `max-parallel` always emitted on the shard matrix. The plan estimates about 54 minutes for the pull request against the 15-20 minute target; CP3 records the measured run and CI2 starts from it.

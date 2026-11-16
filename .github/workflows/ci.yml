@@ -83,7 +83,9 @@ jobs:
     with:
       tests-from-run: "${{ vars.CI_MAIN_REUSE == 'on' && needs.reuse.outputs.run-id || '' }}"
   after-merge-determinism:
-    if: "github.event_name != 'pull_request'"
+    needs:
+      - validate
+    if: "!cancelled() && needs.validate.result == 'success' && github.event_name != 'pull_request'"
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -101,7 +103,9 @@ jobs:
       - name: determinism
         run: "python3 tools/run_tests.py main-check tests.test_catalogue_determinism"
   after-merge-mutations:
-    if: "github.event_name != 'pull_request'"
+    needs:
+      - validate
+    if: "!cancelled() && needs.validate.result == 'success' && github.event_name != 'pull_request'"
     runs-on: ubuntu-latest
     permissions:
       contents: read

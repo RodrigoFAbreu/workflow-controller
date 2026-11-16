@@ -78680,7 +78680,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci3-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci3-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 3,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -78797,7 +78797,162 @@
           "workflow_release": "2.29.3"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "c1a5170dc62c8808ecf8cdd84ff743ef0de2d4edc65a4ff276730c426e2c4418",
+        "approved_review_content_id": "c0d64201659ab7c6a9a44d6fd8ec0c9e224006442d699482d8c34817567638e3",
+        "review_content_manifest": [
+          {
+            "path": ".github/workflows/build-publish.yml",
+            "exists": true,
+            "mode": "100644",
+            "blob": "333597e2938d6ef187afab0230ecd8b02a162613"
+          },
+          {
+            "path": ".github/workflows/ci.yml",
+            "exists": true,
+            "mode": "100644",
+            "blob": "fca7495372f6ce04fbe695491e38b4b4c48cf7b0"
+          },
+          {
+            "path": ".github/workflows/tests.yml",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a638e3fd27926af8380b6c57c782aea330d6e5a6"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-ci3-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6a3ccd8b941472a41bcbec118cd1e10e37257729"
+          },
+          {
+            "path": "docs/guide/ci-and-releases.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "de5517373c28b0462e8a336fe979dedbfbb96f3a"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e17677d34ab23314f9cd0a041795a07e3aa2ae5e"
+          },
+          {
+            "path": "tests/test_ci_changes.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3f4b9ac664bd6ec48b305c1f27c9fd4d2c5c4838"
+          },
+          {
+            "path": "tests/test_ci_workflows.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ca8c0c395c01c5de6e65f8d123b0a969eb56666c"
+          },
+          {
+            "path": "tests/test_plan_document_consistency.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "00d50f106ff0391d82699ee66ced2ca089e0b021"
+          },
+          {
+            "path": "tests/test_test_shards.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b24b12e5a6a353f6f222962b6ac56f3ac54a9a9d"
+          },
+          {
+            "path": "tools/ci_changes.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "50636807c43eb60978cd1ee6f73e14f0f719ca01"
+          },
+          {
+            "path": "tools/ci_reuse.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "defa4033a471155f62aa5df478576c0964e24f64"
+          },
+          {
+            "path": "tools/ci_workflows.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ce348f391c5be2641135d5413d67650f1876f76a"
+          },
+          {
+            "path": "tools/test_shards.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0926946c45e45105c5de4a59b36ee675b4cdc051"
+          }
+        ],
+        "reviewed_content_commit": "f516a787a3887eeecb305c6eca3d7c76bc15fff3",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-16T11:11:38Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "c0d64201659ab7c6a9a44d6fd8ec0c9e224006442d699482d8c34817567638e3",
+            "ledger": {
+              "local": {
+                "bundle_id": "c1a5170dc62c8808ecf8cdd84ff743ef0de2d4edc65a4ff276730c426e2c4418",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "fbc993a4798aa39cfa8d335ec1970543131a6c87b6aa3df57450f0b503656acd",
+                "ledger_entry_sha256": "614174144c6a9144f2c5a3d9d3b87b34a747efeda235d486613df1457f56f86b",
+                "run_ref": "session:local .ai-review/workflow-controller-ci3/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "c1a5170dc62c8808ecf8cdd84ff743ef0de2d4edc65a4ff276730c426e2c4418",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "91f721b99b64658597b5cfccb74da520b7f0aed45b03f24573197df04cc4b609",
+                "ledger_entry_sha256": "2bb2cc0bf1058887b2209d256c50545e1394057e935945d9c9d679b84c99680d",
+                "run_ref": "codex:20261116T110655Z-fc5c5d92",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-16T11:11:38Z",
+          "workflow_release": "2.29.3"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "e9f86369e3d191250466a1ad7d8fbcda261eca43db50873b58055b7948703121",
@@ -78828,12 +78983,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 21,
-      "last_transition": "2026-11-16T11:02:02Z",
+      "state_revision": 24,
+      "last_transition": "2026-11-16T11:11:38Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -78969,6 +79124,83 @@
               "at": "2026-11-16T09:41:23Z"
             }
           ]
+        },
+        "F-3cc9d8085626": {
+          "digest": "3cc9d8085626a23776860ec0a2920c845430faaf108e840a13ebeacb1f7f091f",
+          "text": "**O1. A tautological assertion in the check-name test.** `tests/test_ci_workflows.py` `RunnerLimitTest.test_the_required_check_names_are_unchanged` first builds `{f\"validate / {job}\" ...}` and compares it with the same three literals, which can never fail. The test's real protection is the job-presence, no-`name` and `validate`-caller assertions after it. Either drop the set comparison or derive the names from the models (the calling job id in `ci.yml` whose `uses` is `TESTS_WORKFLOW`, joined with `tests.yml`'s job ids).",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "c0d64201659ab7c6a9a44d6fd8ec0c9e224006442d699482d8c34817567638e3",
+              "verdict": "APPROVE",
+              "at": "2026-11-16T11:06:23Z"
+            }
+          ]
+        },
+        "F-43054b27e2a9": {
+          "digest": "43054b27e2a99b15a0bbbfa750fac77eeabb69166c8799db7fc92fe9c6156e64",
+          "text": "**O2. A few pre-CI3 timing figures remain in the CI guide and the planner comment.** `docs/guide/ci-and-releases.md` \"Documentation-only pull requests\" still says skipping the shards saves \"about 24 minutes of the roughly 25 a pull request took\", and the refresh advice compares the longest shard against the six-shard estimate. Neither matches the three-shard plan (about 54 minutes estimated, 63.6 measured). The `tools/test_shards.py` comment above `CI_MAX_SHARDS` also still says conformance and `validate` \"end at about the same time\", which is no longer true at 13 against about 63 minutes. Updating these to the three-shard figures (or labelling them historical) keeps the pages true.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "c0d64201659ab7c6a9a44d6fd8ec0c9e224006442d699482d8c34817567638e3",
+              "verdict": "APPROVE",
+              "at": "2026-11-16T11:06:23Z"
+            }
+          ]
+        },
+        "F-16a916fa7ef0": {
+          "digest": "16a916fa7ef06f3eca60ba6fc5a92af213c041a1fa1bbef27626c0380ecc5a18",
+          "text": "**O3. Small maintainability nits in the model.** `_main_check_job` now adds `needs: [\"validate\"]` whenever a `condition` is passed. This silently couples a generic helper to `ci.yml`'s job id; it would be clearer passed in by the caller. The `\"tests.yml\": (tests_workflow,` entry in `WORKFLOWS` keeps the old `validate.yml` continuation indentation, so it no longer lines up.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "c0d64201659ab7c6a9a44d6fd8ec0c9e224006442d699482d8c34817567638e3",
+              "verdict": "APPROVE",
+              "at": "2026-11-16T11:06:23Z"
+            }
+          ]
+        },
+        "F-b1bbf533e2f3": {
+          "digest": "b1bbf533e2f332fefd62d9c34ee7cddc79a7ed3f924b0487068174198c32dc8b",
+          "text": "In `docs/items/workflow-controller-ci3.md:45`, qualify “It runs no test job” as “A direct dispatch runs no test job.” Validated ancestor-resume runs still execute `release-target-*` tests, as the guide correctly explains.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "c0d64201659ab7c6a9a44d6fd8ec0c9e224006442d699482d8c34817567638e3",
+              "verdict": "APPROVE",
+              "at": "2026-11-16T11:09:59Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "c0d64201659ab7c6a9a44d6fd8ec0c9e224006442d699482d8c34817567638e3",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "c1a5170dc62c8808ecf8cdd84ff743ef0de2d4edc65a4ff276730c426e2c4418",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-16T11:06:23Z",
+          "verdict_sha256": "fbc993a4798aa39cfa8d335ec1970543131a6c87b6aa3df57450f0b503656acd",
+          "run_ref": "session:local .ai-review/workflow-controller-ci3/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "c1a5170dc62c8808ecf8cdd84ff743ef0de2d4edc65a4ff276730c426e2c4418",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-16T11:09:59Z",
+          "verdict_sha256": "91f721b99b64658597b5cfccb74da520b7f0aed45b03f24573197df04cc4b609",
+          "run_ref": "codex:20261116T110655Z-fc5c5d92",
+          "reviewer_model": "openai/gpt-6.1-sol"
         }
       }
     }

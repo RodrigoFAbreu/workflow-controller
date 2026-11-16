@@ -57,7 +57,10 @@ not in the list of the harness that runs it (see
 [the routing section](runtime.md#the-routing-section)). The effort list is fixed
 by the adapter; a model outside the list is added with the `harness.models`
 setting, which maps a harness name to a list of model names and is not shown in
-the table.
+the table. For `codex` the list is the floor: when a route names a model the
+adapter does not declare, the Controller looks up the models the Codex CLI
+lists, caches the answer for 24 hours and accepts them (see
+[the Codex model lookup](runtime.md#the-routing-section)).
 
 The tables change when an adapter gains or loses a role, so a role that is
 `no` today (the Codex worker, the Codex tester) becomes `yes` in the same change

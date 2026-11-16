@@ -723,8 +723,9 @@ A model and an effort are checked against the harness the same way, once the
 three values of a role are resolved (the command line, the routing config in
 force and the built-in table together), before any job record is written. A
 model passes when the harness's adapter declares it (the
-[harness page](harnesses.md) lists them) or when the `harness.models` setting
-adds it for that harness; an effort passes when the adapter declares it. An
+[harness page](harnesses.md) lists them), when the `harness.models` setting
+adds it for that harness, or, for `codex`, when the Codex CLI lists it (see
+below); an effort passes when the adapter declares it. An
 unset model or effort inherits and is never refused. Otherwise the run or step
 is refused with exit `20`, for example `role 'review-plan' routes the model
 'gpt-5' to the harness 'claude-code', which declares [...]`, followed by where
@@ -734,6 +735,27 @@ add it to the `models` key of the settings file's `harness` section:
 ```json
 "harness": {"models": {"claude-code": ["claude-opus-5-6"]}}
 ```
+
+**The Codex model lookup.** A route that names a Codex model the adapter does
+not declare and `harness.models` does not add makes `step` and `run` ask the
+Codex CLI which models it lists (`codex debug models`, run with the `codex` a
+launch would use, a 20 second limit, an environment of only `PATH`, `HOME`,
+`CODEX_HOME` and the ownership tag). Every model with visibility `list` is
+accepted; a `hide` model is internal and needs `harness.models`. The answer is
+kept in `model-catalog/codex.json` under the runtime root with a timestamp and
+is used without running `codex` for 24 hours; a stale or unreadable cache runs
+the lookup again and rewrites it. The declared and added models are the floor:
+a lookup that fails (no binary, an error, a timeout, an unreadable answer)
+accepts them and uses a stale cache when there is one. A configuration whose
+models are all declared or added never runs `codex`, and `explain` never runs
+it or writes the cache: it answers from the cache, or reports `not looked up`.
+A model still unknown is refused with exit `20`, and the message ends with
+`(accepted for codex: declared [...]; discovered [...] | not looked up |
+unavailable: <reason> | stale cache from <time> [...]; added by harness.models
+[...])` followed by the `harness.models` hint, so the refusal names every
+accepted model and where it came from. `claude-code` has no lookup: its
+refusal lists the declared and added models only. The effort list is still
+fixed by the adapter.
 
 An unsupported effort is changed in the routing; no setting extends the effort
 list. A harness name no adapter has is left out of `harness.models` and

@@ -471,7 +471,8 @@ The settings file's `routing` section has the same shape, without
 `schema_version`; `--routing-config` replaces it whole. Only `step` and
 `run` use these options to launch workers. A model or effort value must be non-empty, must not begin with `-`, and must be
 one the resolved harness declares (a model also passes when the `harness.models`
-setting adds it; see [the routing section](runtime.md#the-routing-section)); a
+setting adds it, or, for `codex`, the Codex CLI lists it; see
+[the routing section](runtime.md#the-routing-section)); a
 pair the harness does not declare is refused with exit 20 before any job record is
 written. An unknown role, a missing `=`, a role assigned twice, or an
 unusable value on the command line is a usage error (exit 2). The same

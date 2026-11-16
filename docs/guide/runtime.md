@@ -751,7 +751,7 @@ models are all declared or added never runs `codex`, and `explain` never runs
 it or writes the cache: it answers from the cache only, and with no cache it
 shows no lookup status (it shows no route refusal either).
 A model still unknown is refused by `step` and `run` with exit `20`, and the message ends with
-`(accepted for codex: declared [...]; discovered [...] | not looked up |
+`(accepted for codex: declared [...]; discovered [...] |
 unavailable: <reason> | stale cache from <time> [...]; added by harness.models
 [...])` followed by the `harness.models` hint, so the refusal names every
 accepted model and where it came from. `claude-code` has no lookup: its

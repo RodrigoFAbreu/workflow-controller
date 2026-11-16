@@ -79491,7 +79491,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci2-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci2-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "IMPLEMENTING",
+      "phase": "AMENDING_PLAN",
       "plan_revision": 5,
       "implementation_revision": null,
       "functional_review_round": null,
@@ -79502,7 +79502,7 @@
       "checkpoints": {},
       "current_bundle_id": "08334acd4223cc77287a99b2f0c514d3fef46421487cefecf805dea06118b6c1",
       "plan_approval": {
-        "status": "CURRENT",
+        "status": "SUPERSEDED",
         "basis": "POLICY_SATISFIED",
         "reviewed_bundle_id": "08334acd4223cc77287a99b2f0c514d3fef46421487cefecf805dea06118b6c1",
         "approved_review_content_id": "37f1e1f592560d89279cbf0428d4b4e386e1b6a3beed1e2f2a7c485ab681eb76",
@@ -79626,30 +79626,24 @@
           "external": 0
         }
       },
-      "state_revision": 25,
-      "last_transition": "2026-11-16T17:45:53Z",
+      "state_revision": 28,
+      "last_transition": "2026-11-16T23:08:59Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
-        "status": "BOUND",
-        "at": "2026-11-16T17:35:37Z",
+        "status": "CONSUMED",
+        "at": "2026-11-16T23:08:59Z",
         "consumed": {
-          "review_content_id": "055aff70969d3be095dde5fbcd4bd5a64ee57c4d33da8e3a29e9a16b7270260d",
-          "plan_revision": 4,
+          "review_content_id": "37f1e1f592560d89279cbf0428d4b4e386e1b6a3beed1e2f2a7c485ab681eb76",
+          "plan_revision": 5,
           "legacy": false
         },
-        "published": {
-          "review_content_id": "37f1e1f592560d89279cbf0428d4b4e386e1b6a3beed1e2f2a7c485ab681eb76",
-          "plan_revision": 5
-        },
-        "bound": {
-          "review_content_id": "37f1e1f592560d89279cbf0428d4b4e386e1b6a3beed1e2f2a7c485ab681eb76",
-          "bundle_id": "08334acd4223cc77287a99b2f0c514d3fef46421487cefecf805dea06118b6c1",
-          "plan_revision": 5
-        }
+        "published": null,
+        "bound": null
       },
       "consumed_plan_review_content_ids": [
         "055aff70969d3be095dde5fbcd4bd5a64ee57c4d33da8e3a29e9a16b7270260d",
         "3015037d976d46c186b34b9a69c637204cdb1fc9e41f7b5f541c64e0511c2455",
+        "37f1e1f592560d89279cbf0428d4b4e386e1b6a3beed1e2f2a7c485ab681eb76",
         "998a3c4667ff722ec3207c9a213df838072ba6ba038840fbe7e657dc9b0711c9",
         "c7cc415c3ed26a166e0f0fc8f4f53e25f86073aa7b6ce46fd13d8041936155e8"
       ],
@@ -79929,9 +79923,109 @@
             "CP3": "retained"
           },
           "resolved_review_content_id": "37f1e1f592560d89279cbf0428d4b4e386e1b6a3beed1e2f2a7c485ab681eb76"
+        },
+        {
+          "amendment_id": "1",
+          "requested_at": "2026-11-16T23:08:59Z",
+          "requested_from_phase": "IMPLEMENTING",
+          "reason": "after the CP1 timings refresh from the three CI runs, tests.test_test_shards.CommittedTimingsTest.test_no_multi_test_class_atom_exceeds_the_splittable_limit fails because tests.test_codex_apply_regeneration.PlanRegenerationTest is now timed at 210.6 s over 10 tests, above the 200 s splittable-class limit (it had no timing entry before, so it was never counted); the plan says splitting a class belongs to ci2b, so the worker stopped; owner decided on 2026-11-16 to split the class inside CP1: split PlanRegenerationTest into two classes of five tests each (test-only, the same tests, no behaviour change), and refresh its timing entries from the same three runs.",
+          "superseded_plan_revision": 5,
+          "superseded_plan_approval": {
+            "status": "CURRENT",
+            "basis": "POLICY_SATISFIED",
+            "reviewed_bundle_id": "08334acd4223cc77287a99b2f0c514d3fef46421487cefecf805dea06118b6c1",
+            "approved_review_content_id": "37f1e1f592560d89279cbf0428d4b4e386e1b6a3beed1e2f2a7c485ab681eb76",
+            "review_content_manifest": [
+              {
+                "path": "docs/ai-workflow/CONTROLLER_CI2_PLAN.md",
+                "exists": true,
+                "mode": "100644",
+                "blob": "168bdf1bd4eb0ed18a7bb108b5cb818f668db1c3"
+              },
+              {
+                "path": "docs/ai-workflow/registry/workflow-controller-ci2-registry.json",
+                "exists": true,
+                "mode": "100644",
+                "blob": "57659b8e0ef00796e9f0b982de91e537925ad07c"
+              },
+              {
+                "path": "docs/ai-workflow/requirements/workflow-controller-ci2-mapping.json",
+                "exists": true,
+                "mode": "100644",
+                "blob": "d7b9d45176bdb75b3bdab2ba4e5b5204a75cb159"
+              }
+            ],
+            "reviewed_content_commit": null,
+            "legacy_evidence": null,
+            "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+            "waived_guarantees": [],
+            "recorded_at": "2026-11-16T17:45:53Z",
+            "policy_evidence": {
+              "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+              "policy_source": "default",
+              "file_digest": null,
+              "adopted_digest": null,
+              "adopted_at": null,
+              "requirements": [
+                {
+                  "id": "gate_reachable",
+                  "met": true,
+                  "detail": "the approval gate is reachable"
+                },
+                {
+                  "id": "verdict_approve_bound",
+                  "met": true,
+                  "detail": "the latest verdict is APPROVE and names the current bundle"
+                },
+                {
+                  "id": "distinct_reviewer_models",
+                  "met": true,
+                  "detail": "families 'anthropic' and 'openai' differ"
+                },
+                {
+                  "id": "review_evidence_audited",
+                  "met": true,
+                  "detail": "both stages carry the audit keys"
+                }
+              ],
+              "inputs": {
+                "review_content_id": "37f1e1f592560d89279cbf0428d4b4e386e1b6a3beed1e2f2a7c485ab681eb76",
+                "ledger": {
+                  "local": {
+                    "bundle_id": "08334acd4223cc77287a99b2f0c514d3fef46421487cefecf805dea06118b6c1",
+                    "verdict": "APPROVE",
+                    "round": 5,
+                    "verdict_sha256": "6c05caa9baa23d5f3110f0eac9a3418beb64534e4abe05beebfdd8bd533f8136",
+                    "ledger_entry_sha256": "3b7db993c97ca3e38c30251545ad0a4ccb132afbd3d73166db9fc7c3853462d3",
+                    "run_ref": "session:local .ai-review/workflow-controller-ci2/feedback/REVIEW_FEEDBACK.md",
+                    "reviewer_model": "anthropic/claude-opus-5-5"
+                  },
+                  "manual": {
+                    "bundle_id": "08334acd4223cc77287a99b2f0c514d3fef46421487cefecf805dea06118b6c1",
+                    "verdict": "APPROVE",
+                    "round": 5,
+                    "verdict_sha256": "e826c8c6385b8693a94bab9396bedf19809863a6033d0705e021f6e443b442cd",
+                    "ledger_entry_sha256": "e688734c2d96362a4add50977a402074d0214770b1b848991bd7851a9f078c72",
+                    "run_ref": "codex:20261116T173816Z-7e70e0f7",
+                    "reviewer_model": "openai/gpt-6.1-sol"
+                  }
+                },
+                "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+              },
+              "floor_digest": null,
+              "trust": {
+                "review_verdicts": "orchestrator"
+              },
+              "evaluated_at": "2026-11-16T17:45:53Z",
+              "workflow_release": "2.29.3"
+            }
+          },
+          "checkpoints_snapshot": {},
+          "pre_amendment_approval_commit": "1f06119e2d51712f4824061cc26ea7fff5bcfb70",
+          "resolved_at_plan_revision": null
         }
       ],
-      "amendment_base_commit": "77ee65caa960c2c1737917a30a7ff1b48424a7e1"
+      "amendment_base_commit": "1f06119e2d51712f4824061cc26ea7fff5bcfb70"
     }
   }
 }

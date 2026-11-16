@@ -6,7 +6,7 @@
 # (tools/release.py over controller/release_txn.py). Called by ci.yml on main after
 # its validate succeeded, with the validate and after-merge results for the same
 # commit, so nothing is validated twice. Dispatched by hand (no inputs), it has no
-# results and runs validate.yml and the after-merge checks itself first, taking the
+# results and runs tests.yml and the after-merge checks itself first, taking the
 # main-release slot on main. Every action outside validate is pinned to a full commit
 # SHA; publish is the only job that can write.
 #
@@ -31,7 +31,7 @@ name: "Build and publish"
   workflow_call:
     inputs:
       validate-result:
-        description: "The caller's validate.yml result for github.sha; empty: validate here."
+        description: "The caller's tests.yml result for github.sha; empty: validate here."
         type: string
         required: false
         default: ""
@@ -57,7 +57,7 @@ jobs:
     permissions:
       contents: read
       actions: read
-    uses: "./.github/workflows/validate.yml"
+    uses: "./.github/workflows/tests.yml"
   after-merge-determinism:
     if: "inputs.validate-result == ''"
     runs-on: ubuntu-latest

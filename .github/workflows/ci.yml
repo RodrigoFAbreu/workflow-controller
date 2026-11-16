@@ -2,7 +2,7 @@
 # Change the model there and run: python3 tools/ci_workflows.py --write
 #
 # The entry point: every pull request, every push to main and workflow_dispatch. It
-# calls the required validation (validate.yml); except on a pull request it runs the
+# calls the required validation (tests.yml); except on a pull request it runs the
 # two after-merge checks beside it; on main, once validate succeeded, it calls
 # build-publish.yml with those results, so the revision is validated once before a
 # release. A pull request's newer push cancels its older run; main's runs never cancel
@@ -79,7 +79,7 @@ jobs:
     permissions:
       contents: read
       actions: read
-    uses: "./.github/workflows/validate.yml"
+    uses: "./.github/workflows/tests.yml"
     with:
       tests-from-run: "${{ vars.CI_MAIN_REUSE == 'on' && needs.reuse.outputs.run-id || '' }}"
   after-merge-determinism:

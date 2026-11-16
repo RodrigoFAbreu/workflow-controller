@@ -2,14 +2,14 @@
 ``workflow-controller-trunk-branch-pr-release-orchestration`` CP5): the
 committed workflow files equal the render, the retired ``release.yml`` is
 absent, the emitter's quoting and layout, and the structure of ``ci.yml``,
-``validate.yml`` and ``main.yml``; and
-(``workflow-controller-adaptive-test-sharding`` CP6) ``validate.yml``'s
+``tests.yml`` and ``main.yml``; and
+(``workflow-controller-adaptive-test-sharding`` CP6) ``tests.yml``'s
 planned ``plan`` / ``tests`` / ``tests-result`` jobs, the CI placement
 partition and the conformance family; and
 (``workflow-controller-squash-merge-tag-versioning`` CP4) ``pr-title.yml``
 and ``main.yml``'s ``build`` job taking the classified version as
 ``RELEASE_VERSION``; and (``ci/standardize-actions``) ``ci.yml`` as the one
-entry point that calls ``validate.yml`` and, on ``main`` after a successful
+entry point that calls ``tests.yml`` and, on ``main`` after a successful
 validation, ``build-publish.yml`` (which replaced ``main.yml``), both
 reusable workflows also dispatchable by hand, and the shared
 ``python-tests.yml`` running the documentation test modules.
@@ -137,7 +137,7 @@ class CommittedFilesTest(unittest.TestCase):
         self.assertFalse((WORKFLOWS / "controller-tests.yml").exists())
 
     def test_the_tag_triggered_release_workflow_and_main_yml_are_retired(self) -> None:
-        self.assertEqual(ci.RETIRED_WORKFLOWS, ("release.yml", "main.yml"))
+        self.assertEqual(ci.RETIRED_WORKFLOWS, ("release.yml", "main.yml", "validate.yml"))
         for name in ci.RETIRED_WORKFLOWS:
             with self.subTest(name=name):
                 self.assertNotIn(name, ci.WORKFLOWS)
@@ -166,7 +166,7 @@ class CommittedFilesTest(unittest.TestCase):
 
     def test_the_generated_files(self) -> None:
         self.assertEqual(sorted(ci.WORKFLOWS), ["build-publish.yml", "ci.yml", "main-reuse-report.yml",
-                                                "pr-title.yml", "validate.yml"])
+                                                "pr-title.yml", "tests.yml"])
         self.assertEqual(sorted(ci.render()), sorted(ci.WORKFLOWS))
         self.assertTrue((WORKFLOWS / "pr-title.yml").is_file())
 
@@ -298,8 +298,8 @@ class CoverageTest(unittest.TestCase):
         for name in ("CONTROLLER_SHARDS", "EXCLUDED_TEST_MODULES", "CONFORMANCE_SUITES"):
             with self.subTest(name=name):
                 self.assertFalse(hasattr(ci, name))
-        self.assertNotIn("conformance", _jobs(ci.validate_workflow()))
-        self.assertNotIn("controller", _jobs(ci.validate_workflow()))
+        self.assertNotIn("conformance", _jobs(ci.tests_workflow()))
+        self.assertNotIn("controller", _jobs(ci.tests_workflow()))
 
     def test_every_test_module_is_in_the_inventory(self) -> None:
         discovered = {f"tests.{path.stem}" for path in (fixtures.REPO_ROOT / "tests").glob("test_*.py")}
@@ -331,7 +331,7 @@ class CoverageTest(unittest.TestCase):
 
     def test_package_job_runs_the_package_placed_modules(self) -> None:
         self.assertEqual(ci.PACKAGE_TEST_MODULES, ("tests.test_packaged_runtime",))
-        package = _jobs(ci.validate_workflow())["package"]
+        package = _jobs(ci.tests_workflow())["package"]
         runs = [_run(step) for step in _steps(package)]
         self.assertIn("CONTROLLER_REQUIRE_PACKAGING_TESTS=1 python -m unittest "
                       "tests.test_packaged_runtime -v", runs)
@@ -352,7 +352,7 @@ class ValidatePlanTest(unittest.TestCase):
     """``plan`` -> ``tests`` (one job per planned shard) -> ``tests-result``."""
 
     def setUp(self) -> None:
-        self.jobs = _jobs(ci.validate_workflow())
+        self.jobs = _jobs(ci.tests_workflow())
 
     def _argv(self, job: str, fragment: str) -> list[str]:
         steps = _steps(self.jobs[job])
@@ -431,7 +431,7 @@ class ValidatePlanTest(unittest.TestCase):
                           {"pattern": "results-*", "path": "results/shards"}])
         self.assertEqual(downloads[1]["if"],
                          "inputs.tests-from-run == '' && needs.changes.outputs.code == 'true'")
-        self.assertNotIn("merge-multiple", ci.emit(ci.validate_workflow()))
+        self.assertNotIn("merge-multiple", ci.emit(ci.tests_workflow()))
         # A missing artifact must reach aggregate (which exits 2, naming it),
         # not end the job before it can say so.
         self.assertTrue(all(s["continue-on-error"] is True for s in downloads))
@@ -479,7 +479,7 @@ class ValidatePlanTest(unittest.TestCase):
         self.assertEqual(steps[step_index], {"name": "allow unprivileged user namespaces", "run": guarded})
 
     def test_validate_keeps_major_tag_actions(self) -> None:
-        # ADR 0002: validate.yml's actions keep their major tags; the jobs
+        # ADR 0002: tests.yml's actions keep their major tags; the jobs
         # outside it are pinned to commits.
         for job_name, job in self.jobs.items():
             for step in _steps(job):
@@ -496,7 +496,7 @@ class ChangeDetectionTest(unittest.TestCase):
     CODE = "needs.changes.outputs.code == 'true'"
 
     def setUp(self) -> None:
-        self.validate = ci.validate_workflow()
+        self.validate = ci.tests_workflow()
         self.jobs = _jobs(self.validate)
         self.result_steps = _steps(self.jobs["tests-result"])
 
@@ -598,9 +598,9 @@ class ChangeDetectionTest(unittest.TestCase):
 
     def test_ci_and_build_publish_call_validate_unchanged_and_ignore_changes(self) -> None:
         models = _models()
-        self.assertEqual(_jobs(models["ci.yml"])["validate"]["uses"], "./.github/workflows/validate.yml")
+        self.assertEqual(_jobs(models["ci.yml"])["validate"]["uses"], "./.github/workflows/tests.yml")
         self.assertEqual(_jobs(models["build-publish.yml"])["validate"]["uses"],
-                         "./.github/workflows/validate.yml")
+                         "./.github/workflows/tests.yml")
         for name in ("ci.yml", "build-publish.yml"):
             self.assertNotIn("changes", ci.emit(models[name]).replace("tests-from-run", ""))
 
@@ -615,7 +615,7 @@ class ChangeDetectionTest(unittest.TestCase):
 
 class AllJobsTest(unittest.TestCase):
     #: The reusable workflows a job may call instead of running steps.
-    CALLED = {"./.github/workflows/validate.yml", "./.github/workflows/build-publish.yml",
+    CALLED = {"./.github/workflows/tests.yml", "./.github/workflows/build-publish.yml",
               "RodrigoFAbreu/action-workflows/.github/workflows/python-tests.yml@main"}
 
     def test_matrix_jobs_do_not_fail_fast(self) -> None:
@@ -641,7 +641,7 @@ class AllJobsTest(unittest.TestCase):
         self.assertEqual(called, self.CALLED)
 
     def test_validate_jobs_are_read_only(self) -> None:
-        for job_name, job in _jobs(ci.validate_workflow()).items():
+        for job_name, job in _jobs(ci.tests_workflow()).items():
             with self.subTest(job=job_name):
                 # tests-result alone may read another run's artifact (reuse).
                 expected = {"contents": "read", "actions": "read"} \
@@ -682,14 +682,14 @@ class AllJobsTest(unittest.TestCase):
                                  ("build-publish.yml", "publish", "actions/download-artifact"),
                                  ("ci.yml", "reuse", "actions/download-artifact"),
                                  ("main-reuse-report.yml", "reuse-report", "actions/download-artifact"),
-                                 ("validate.yml", "plan", "actions/upload-artifact"),
-                                 ("validate.yml", "tests", "actions/upload-artifact"),
-                                 ("validate.yml", "tests-result", "actions/download-artifact"),
-                                 ("validate.yml", "tests-result", "actions/download-artifact"),
-                                 ("validate.yml", "tests-result", "actions/download-artifact"),
-                                 ("validate.yml", "tests-result", "actions/upload-artifact")])
-        # ci.yml calls validate.yml and build-publish.yml in one run, and a
-        # dispatched build-publish.yml calls validate.yml: no name may collide.
+                                 ("tests.yml", "plan", "actions/upload-artifact"),
+                                 ("tests.yml", "tests", "actions/upload-artifact"),
+                                 ("tests.yml", "tests-result", "actions/download-artifact"),
+                                 ("tests.yml", "tests-result", "actions/download-artifact"),
+                                 ("tests.yml", "tests-result", "actions/download-artifact"),
+                                 ("tests.yml", "tests-result", "actions/upload-artifact")])
+        # ci.yml calls tests.yml and build-publish.yml in one run, and a
+        # dispatched build-publish.yml calls tests.yml: no name may collide.
         names = [step["with"].get("name") for _, _, _, step in _all_steps()
                  if "upload-artifact" in _uses(step)]
         self.assertEqual(len(names), len(set(names)))
@@ -705,7 +705,7 @@ class AllJobsTest(unittest.TestCase):
                     self.assertNotEqual(match.group(1), '"$GITHUB_SHA"')
 
     def test_package_peels_github_sha(self) -> None:
-        package = _jobs(ci.validate_workflow())["package"]
+        package = _jobs(ci.tests_workflow())["package"]
         verify = [_run(s) for s in _steps(package) if "verify-wheel" in _run(s)]
         self.assertEqual(verify, ['python3 tools/release.py verify-wheel dist/*.whl --local '
                                   '--commit "$(git rev-parse "$GITHUB_SHA^{commit}")"'])
@@ -715,7 +715,7 @@ class AllJobsTest(unittest.TestCase):
 
     def test_validate_smoke_test_is_unchanged_in_text(self) -> None:
         # 1.3.0's text: the local build's version, now tag-derived after the cutover.
-        smoke = [_run(s) for s in _steps(_jobs(ci.validate_workflow())["package"])
+        smoke = [_run(s) for s in _steps(_jobs(ci.tests_workflow())["package"])
                  if s.get("name") == "pipx smoke test"]
         self.assertEqual(smoke, [PIPX_SMOKE_1_3_0])
 
@@ -758,15 +758,15 @@ class AllJobsTest(unittest.TestCase):
                     self.assertIs(persist, True)
                 else:
                     self.assertIs(persist, False)
-        # validate.yml's six step jobs; ci.yml's reuse and two after-merge jobs;
+        # tests.yml's six step jobs; ci.yml's reuse and two after-merge jobs;
         # build-publish.yml's two after-merge, release-plan, two release-target,
         # build and publish; reuse-report; title.
         self.assertEqual(checkouts, 6 + 3 + 7 + 1 + 1)
 
     def test_the_two_reusable_workflows_are_also_dispatchable_without_inputs(self) -> None:
-        # A manual run hands nothing in: validate.yml never reuses, and
+        # A manual run hands nothing in: tests.yml never reuses, and
         # build-publish.yml cannot claim a validation it did not run.
-        for workflow in (ci.validate_workflow(), ci.build_publish_workflow()):
+        for workflow in (ci.tests_workflow(), ci.build_publish_workflow()):
             with self.subTest(workflow=workflow["name"]):
                 self.assertEqual(list(workflow["on"]), ["workflow_call", "workflow_dispatch"])
                 self.assertIsNone(workflow["on"]["workflow_dispatch"])
@@ -842,7 +842,7 @@ class CiWorkflowTest(unittest.TestCase):
         self.assertEqual(self.jobs["validate"], {
             "needs": ["reuse"], "if": "!cancelled()",
             "permissions": {"contents": "read", "actions": "read"},
-            "uses": "./.github/workflows/validate.yml",
+            "uses": "./.github/workflows/tests.yml",
             "with": {"tests-from-run": "${{ vars.CI_MAIN_REUSE == 'on' && "
                                        "needs.reuse.outputs.run-id || '' }}"}})
         self.assertEqual(self.jobs["build-publish"], {
@@ -862,11 +862,11 @@ class CiWorkflowTest(unittest.TestCase):
         # Branch protection requires "validate / plan", "validate / tests-result",
         # "validate / package" (a called job's context is "<caller job> / <job name>"),
         # "PR title" and the managed "workflow-conformance".
-        validate_jobs = _jobs(ci.validate_workflow())
+        validate_jobs = _jobs(ci.tests_workflow())
         contexts = {f"validate / {validate_jobs[job].get('name', job)}"
                     for job in ("plan", "tests-result", "package")}
         self.assertEqual(contexts, {"validate / plan", "validate / tests-result", "validate / package"})
-        self.assertEqual(self.jobs["validate"]["uses"], "./.github/workflows/validate.yml")
+        self.assertEqual(self.jobs["validate"]["uses"], "./.github/workflows/tests.yml")
         self.assertEqual(ci.pr_title_workflow()["jobs"]["title"]["name"], "PR title")
         self.assertIn("workflow-conformance:", CONFORMANCE_YML.read_text(encoding="utf-8"))
 
@@ -904,7 +904,7 @@ class CiWorkflowTest(unittest.TestCase):
             self.assertTrue(_gh_eval(job["if"], {"github.event_name": "workflow_dispatch"}))
 
     def test_validate_is_workflow_call_and_dispatch(self) -> None:
-        on = ci.validate_workflow()["on"]
+        on = ci.tests_workflow()["on"]
         self.assertEqual(list(on), ["workflow_call", "workflow_dispatch"])
         self.assertIsNone(on["workflow_dispatch"])
         self.assertEqual(list(on["workflow_call"]), ["inputs"])
@@ -913,7 +913,7 @@ class CiWorkflowTest(unittest.TestCase):
         self.assertEqual((inputs["tests-from-run"]["type"], inputs["tests-from-run"]["default"],
                           inputs["tests-from-run"]["required"]), ("string", "", False))
         # Dispatched, the input is null, which runs the shards like ''.
-        tests_if = _jobs(ci.validate_workflow())["tests"]["if"]
+        tests_if = _jobs(ci.tests_workflow())["tests"]["if"]
         self.assertTrue(_gh_eval(tests_if, {"needs.changes.outputs.code": "true"}))
 
 
@@ -922,7 +922,7 @@ class DocsTestsTest(unittest.TestCase):
     generic ``python-tests.yml``."""
 
     def setUp(self) -> None:
-        self.job = _jobs(ci.validate_workflow())["docs-tests"]
+        self.job = _jobs(ci.tests_workflow())["docs-tests"]
 
     def test_the_job_calls_the_shared_workflow_through_its_structured_inputs(self) -> None:
         self.assertEqual(self.job, {
@@ -931,7 +931,7 @@ class DocsTestsTest(unittest.TestCase):
             "with": {"python-version": "3.12", "test-directory": "tests",
                      "top-level-directory": ".", "test-pattern": ci.DOCS_TEST_PATTERN}})
         self.assertEqual(self.job["with"]["python-version"], ci.PYTHON_VERSION)
-        self.assertNotIn("test-command", ci.render()["validate.yml"])
+        self.assertNotIn("test-command", ci.render()["tests.yml"])
 
     def test_the_pattern_selects_exactly_the_documentation_test_modules(self) -> None:
         # unittest discover matches the pattern against file names in tests/
@@ -994,7 +994,7 @@ class BuildPublishWorkflowTest(unittest.TestCase):
         self.assertEqual(self.jobs["validate"], {
             "if": "inputs.validate-result == ''",
             "permissions": {"contents": "read", "actions": "read"},
-            "uses": "./.github/workflows/validate.yml"})
+            "uses": "./.github/workflows/tests.yml"})
         for check in ("determinism", "mutations"):
             self.assertEqual(self.jobs[f"after-merge-{check}"]["if"], "inputs.validate-result == ''")
             self.assertNotIn("needs", self.jobs[f"after-merge-{check}"])
@@ -1253,16 +1253,16 @@ class AfterMergeChecksTest(unittest.TestCase):
             for kind in ("after-merge", "release-target"):
                 with self.subTest(job=f"{kind}-{check}"):
                     self.assertIn(f"{kind}-{check}", self.jobs)
-                    self.assertNotIn(f"{kind}-{check}", _jobs(ci.validate_workflow()))
+                    self.assertNotIn(f"{kind}-{check}", _jobs(ci.tests_workflow()))
             self.assertIn(f"after-merge-{check}", self.ci_jobs)
             self.assertNotIn(f"release-target-{check}", self.ci_jobs)
             # ci.yml's job and the dispatched one are the same job but for their if.
             self.assertEqual(ci.emit({k: v for k, v in self.ci_jobs[f"after-merge-{check}"].items() if k != "if"}),
                              ci.emit({k: v for k, v in self.jobs[f"after-merge-{check}"].items() if k != "if"}))
-        self.assertNotIn("main-check", ci.render()["validate.yml"])
+        self.assertNotIn("main-check", ci.render()["tests.yml"])
 
     def test_each_job_has_the_shard_jobs_setup_and_the_fail_closed_command(self) -> None:
-        shard = _steps(_jobs(ci.validate_workflow())["tests"])
+        shard = _steps(_jobs(ci.tests_workflow())["tests"])
         for check, module in self.CHECKS.items():
             for kind in ("after-merge", "release-target"):
                 steps = _steps(self.jobs[f"{kind}-{check}"])
@@ -1296,7 +1296,7 @@ class AfterMergeChecksTest(unittest.TestCase):
         self.assertEqual(self.jobs["release-plan"]["needs"], ["validate"])
 
     def test_no_if_reads_a_job_outside_its_own_needs(self) -> None:
-        for workflow in (ci.build_publish_workflow(), ci.ci_workflow(), ci.validate_workflow()):
+        for workflow in (ci.build_publish_workflow(), ci.ci_workflow(), ci.tests_workflow()):
             for name, job in _jobs(workflow).items():
                 with self.subTest(workflow=workflow["name"], job=name):
                     for needed in re.findall(r"needs\.([a-z-]+)\.", job.get("if", "")):
@@ -1379,7 +1379,7 @@ class ReuseTest(unittest.TestCase):
         self.reuse = _jobs(self.ci)["reuse"]
         self.report_workflow = ci.reuse_report_workflow()
         self.report = _jobs(self.report_workflow)["reuse-report"]
-        self.validate = _jobs(ci.validate_workflow())
+        self.validate = _jobs(ci.tests_workflow())
 
     def test_reuse_job_is_least_privilege_and_cannot_write(self) -> None:
         self.assertEqual(self.reuse["permissions"],
@@ -1433,8 +1433,8 @@ class ReuseTest(unittest.TestCase):
         find = self.reuse["steps"][_index(self.reuse["steps"], lambda s: s.get("id") == "find")]
         self.assertIn('--mode "$CI_MAIN_REUSE"', find["run"])
         self.assertNotIn("${{", find["run"])
-        # validate.yml and build-publish.yml do not know the variable.
-        self.assertNotIn("vars.", ci.render()["validate.yml"] + ci.render()["build-publish.yml"])
+        # tests.yml and build-publish.yml do not know the variable.
+        self.assertNotIn("vars.", ci.render()["tests.yml"] + ci.render()["build-publish.yml"])
 
     def test_the_lookup_steps_only_run_with_a_candidate_and_the_report_cannot_fail_ci(self) -> None:
         steps = self.reuse["steps"]
@@ -1537,7 +1537,7 @@ class ReuseTest(unittest.TestCase):
         self.assertIn("# reuse (read-only, never on a pull request) is switched by the repository variable", text)
         self.assertIn("main-reuse-report.yml", text)
         self.assertIn("A workflow apart from ci.yml", ci.render()["main-reuse-report.yml"])
-        self.assertIn("tests-from-run", ci.render()["validate.yml"].split("name: Validate")[0])
+        self.assertIn("tests-from-run", ci.render()["tests.yml"].split("name: Validate")[0])
 
 
 class PrTitleWorkflowTest(unittest.TestCase):
@@ -1591,7 +1591,7 @@ class PrTitleWorkflowTest(unittest.TestCase):
         self.assertEqual(steps[1]["with"], {"python-version": "3.12"})
 
 
-#: ``validate.yml``'s and 1.3.0's ``main.yml``'s pipx smoke test (``build-publish.yml``'s with
+#: ``tests.yml``'s and 1.3.0's ``main.yml``'s pipx smoke test (``build-publish.yml``'s with
 #: ``$RELEASE_VERSION``).
 PIPX_SMOKE_1_3_0 = "\n".join([
     "pipx install dist/*.whl",

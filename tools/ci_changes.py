@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Decide whether a pull request changes only documentation. Stdlib only.
 
-``validate.yml`` runs the plan and the test shards only when a pull request
+``tests.yml`` runs the plan and the test shards only when a pull request
 changes something a test can read. This file is the decision (CI1a, #317);
 ``tools/ci_workflows.py`` wires it into the generated workflow.
 

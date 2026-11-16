@@ -9,7 +9,7 @@
 # docs-tests and docs jobs run on every event and tests-result requires docs, which
 # needs docs-tests. docs-tests is the shared python-tests.yml of
 # RodrigoFAbreu/action-workflows.
-name: Validate
+name: Tests
 "on":
   workflow_call:
     inputs:

@@ -59,7 +59,7 @@ The fourth half's recogniser is also run over the operator documents,
 ``README.md`` and the ADRs (automatic-lifecycle-orchestration CP8; ADR 0002
 added by release-runtime-observability CP10): every Controller invocation
 line they state must parse under the live parser. The README must also
-name every job of ``.github/workflows/validate.yml`` (release-runtime-
+name every job of ``.github/workflows/tests.yml`` (release-runtime-
 observability CP10), read from the ``tools/ci_workflows.py`` model the
 committed file is rendered from.
 """
@@ -444,21 +444,21 @@ def command_line_violations(text: str, parser) -> list[str]:
 
 
 def validate_job_ids() -> list[str]:
-    """The job ids of ``validate.yml``, from the model it is rendered
+    """The job ids of ``tests.yml``, from the model it is rendered
     from (``tools/ci_workflows.py``, whose ``--check`` and
     ``tests.test_ci_workflows`` pin the committed file to it)."""
     spec = importlib.util.spec_from_file_location("ci_workflows", CI_WORKFLOWS_PY)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return list(module.validate_workflow()["jobs"])
+    return list(module.tests_workflow()["jobs"])
 
 
 def readme_validate_job_violations(readme_text: str, job_ids: list[str]) -> list[str]:
-    """Every ``validate.yml`` job id must appear in the README as a code
+    """Every ``tests.yml`` job id must appear in the README as a code
     span of its own (`` `controller` ``), so a job added to the required
     validation cannot go undocumented."""
     spans = set(re.findall(r"`([^`\n]+)`", readme_text))
-    return [f"README does not name validate.yml job {job!r} as a code span"
+    return [f"README does not name tests.yml job {job!r} as a code span"
             for job in job_ids if job not in spans]
 
 

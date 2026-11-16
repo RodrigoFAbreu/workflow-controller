@@ -77277,7 +77277,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-cm1-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-cm1-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 4,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -77421,12 +77421,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
+          "local": 1,
           "external": 0
         }
       },
-      "state_revision": 22,
-      "last_transition": "2026-11-16T01:08:48Z",
+      "state_revision": 23,
+      "last_transition": "2026-11-16T01:12:27Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -77547,6 +77547,20 @@
               "review_content_id": "e527c7bef9d826b55df7ef1b4b07eb16f14939c46aad2f75cbab9ba75fd02eb0",
               "verdict": "APPROVE",
               "at": "2026-11-16T00:33:42Z"
+            }
+          ]
+        },
+        "F-1792efd34a92": {
+          "digest": "1792efd34a925822a89650b1b8c4609e44402c06c3f6e08061a137882dd85852",
+          "text": "**O1. `explain`'s read-only behaviour is pinned by a source-text check, not by behaviour.** `test_explain_builds_its_routing_options_read_only` asserts that `\"allow_run=False\"` appears in `inspect.getsource(cli.cmd_explain)`. With `test_a_read_only_call_runs_nothing_and_writes_no_catalogue` it covers the plan's CP2 case (\"`explain` on a route naming an unlisted Codex model never calls the runner and writes no `model-catalog` file\"), but only indirectly. A comment or a refactor that keeps the string while the call changes would pass. Consider a test that runs `cmd_explain` (or `cli.main([\"explain\", ...])`) on a route naming `gpt-6.1-terra`, with `review.run_bounded` patched to record calls, and asserts no call, no `model-catalog/` and a successful exit.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "073c39a27fa168b2d7633e6e77571dac0505403c30cfef4c43acb430b367bec9",
+              "verdict": "REVISE",
+              "at": "2026-11-16T01:12:27Z"
             }
           ]
         }

@@ -8,6 +8,7 @@ working tree. An absent file means both switches are off.
 from __future__ import annotations
 
 import copy
+import importlib.util
 import json
 import os
 import re
@@ -79,6 +80,10 @@ class ReferencePolicyTest(unittest.TestCase):
         reference = json.loads(REFERENCE.read_text(encoding="utf-8"))
         pre = _plan_block(PLAN, PRE_CUTOVER_HEADING)
         post = _plan_block(SQUASH_PLAN, POST_CUTOVER_HEADING)
+        # The committed policy is one of the two plan blocks plus exactly the
+        # AO1 opt-in (the historical plan documents are not edited).
+        opt_in = reference["milestone_branches"]["pull_request"]
+        self.assertEqual((opt_in.pop("auto_merge"), opt_in.pop("release_workflow")), (True, "ci.yml"))
         self.assertIn(reference, (pre, post))
         self.assertEqual(reference["release"]["trigger"],
                          "version_change" if reference == pre else "conventional_commit")
@@ -729,8 +734,23 @@ class AutoMergePolicyTest(_RefusalCase):
                 branches = self.parse(data)
                 self.assertIs(branches.auto_merge, False)
                 self.assertEqual(branches.release_workflow, "main.yml")
-        reference = repo_policy.parse_policy(REFERENCE.read_bytes()).milestone_branches
-        self.assertEqual((reference.auto_merge, reference.release_workflow), (False, "main.yml"))
+
+    def test_the_committed_policy_opts_in_to_a_real_publishing_workflow(self) -> None:
+        # AO1: this repository opts in, and the release workflow it names is
+        # one the repository really has, whose build-publish job calls the
+        # publishing workflow (a retired name would make the release wait
+        # look for a workflow that no longer exists).
+        branches = repo_policy.parse_policy(REFERENCE.read_bytes()).milestone_branches
+        self.assertIs(branches.auto_merge, True)
+        self.assertEqual(branches.release_workflow, "ci.yml")
+        spec = importlib.util.spec_from_file_location("ci_workflows",
+                                                      fixtures.REPO_ROOT / "tools" / "ci_workflows.py")
+        ci = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = ci
+        spec.loader.exec_module(ci)
+        self.assertIn(branches.release_workflow, ci.WORKFLOWS)
+        build, _ = ci.WORKFLOWS[branches.release_workflow]
+        self.assertEqual(build()["jobs"]["build-publish"]["uses"], "./.github/workflows/build-publish.yml")
 
     def test_true_with_squash_and_green_checks_is_admitted(self) -> None:
         self.assertIs(self.parse(self.with_keys(auto_merge=True)).auto_merge, True)

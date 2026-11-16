@@ -681,48 +681,58 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-ao1` (AO1), implementation revision 1, plan `docs/ai-workflow/CONTROLLER_AO1_PLAN.md` (revision 2), base commit
-`7eb15d2`. Two checkpoints, both complete: CP1 (`.workflow-controller/policy.json`'s `pull_request` block gains `"auto_merge": true` and
-`"release_workflow": "ci.yml"`, with a test in `tests.test_repo_policy` that keeps the named workflow real and publishing) and CP2 (the opt-in and the
-`ci.yml` release workflow stated in `docs/guide/ci-and-releases.md` and `docs/guide/milestone-branches.md`, and the item page).
+Item `workflow-controller-ci3` (CI3), implementation revision 1, plan `docs/ai-workflow/CONTROLLER_CI3_PLAN.md` (revision 3), base commit
+`3166305`. Four checkpoints, all complete: CP1 (the reusable test workflow is `tests.yml`, workflow name `Tests`), CP2 (`build-publish.yml` only builds
+and publishes), CP3 (the six-runner limit, shard cap three, and its proof) and CP4 (the pages and the item record).
 Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the
 system directories, and no write inside the read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write only
 to the scratch `TMPDIR`. No flow needs a pull request or a forge call, and none runs the full suite.
 
 Setup: `export TMPDIR=$(mktemp -d)`. No data to seed.
 
-**Flow 1: the committed policy.**
-Run `python3 -B -c "import json; print(json.load(open('.workflow-controller/policy.json'))['pull_request'])"`.
-Expected: the printed block holds `'auto_merge': True` and `'release_workflow': 'ci.yml'`; the rest of the file is otherwise unchanged
-(`git diff 7eb15d2 -- .workflow-controller/policy.json` shows only those two keys added).
+**Flow 1: the workflow files and the generated models.**
+Run `ls .github/workflows` and `python3 -B tools/ci_workflows.py --check; echo rc=$?`.
+Expected: `tests.yml` exists and `validate.yml` does not; the other files are `build-publish.yml`, `ci.yml`, `main-reuse-report.yml`, `pr-title.yml` and
+`workflow-conformance.yml`; `--check` reports the committed files match the models, `rc=0`.
 
-**Flow 2: the policy test and its neighbours.**
-Run `python3 -B tools/run_tests.py tests.test_repo_policy tests.test_ci_workflows tests.test_version_authority tests.test_milestone_branch; echo rc=$?`.
-Expected: `# Test run: PASS`, exact coverage, `rc=0`. A `namespace: none` line is expected in this sandbox. Look for
-`test_the_committed_policy_opts_in_to_a_real_publishing_workflow` (policy parses with both keys, `ci.yml` is a model of `tools/ci_workflows.py`, its
-`build-publish` job calls `build-publish.yml`).
+**Flow 2: the names.**
+Run `grep -n "^name:" .github/workflows/tests.yml .github/workflows/ci.yml .github/workflows/build-publish.yml` and `grep -n "validate:\|uses:" .github/workflows/ci.yml`.
+Expected: `tests.yml` is named `Tests`; `ci.yml`'s calling job keeps the id `validate` (so the five required check names are unchanged) and calls
+`./.github/workflows/tests.yml`.
 
-**Flow 3: the release workflow is real.**
-Run `ls .github/workflows/ci.yml .github/workflows/build-publish.yml; grep -n "build-publish" .github/workflows/ci.yml`.
-Expected: both files exist and `ci.yml` has a job that calls `build-publish.yml`.
+**Flow 3: build and publish only builds and publishes.**
+Run `grep -n "^  [a-z-]*:$" .github/workflows/build-publish.yml` and `grep -n "validate-result\|concurrency\|group:" .github/workflows/build-publish.yml`.
+Expected: no `validate`, `after-merge-determinism` or `after-merge-mutations` job in `build-publish.yml`; `build`, `publish` and the `release-target-*`
+jobs carry `inputs.validate-result == 'success'`; the concurrency group is `build-publish-<run id>`; `ci.yml`'s `build-publish` call grants `contents: write` alone.
 
-**Flow 4: the pages and the item record.**
-Run `grep -n -i "auto_merge\|release_workflow\|ci.yml" docs/guide/ci-and-releases.md docs/guide/milestone-branches.md`, then read
-`docs/items/workflow-controller-ao1.md`.
-Expected: the Repository settings section of the CI guide and the reference-configuration paragraph of the milestone-branches guide state the opt-in
-(its own sentence) and the `ci.yml` release workflow, with the caveat that a milestone bound before the change never auto-merges; the generic `main.yml`
-example stays (it shows the parser's default); the item page records the status, what was done and the first later milestone as the live check.
+**Flow 4: the six-runner limit and the shard cap.**
+Run `grep -n "RUNNER_LIMIT\|TEST_MAX_PARALLEL" tools/ci_workflows.py | head`, `grep -n "CI_MAX_SHARDS" tools/test_shards.py | head -3` and
+`grep -n "max-parallel" .github/workflows/tests.yml`.
+Expected: `RUNNER_LIMIT = 6`, `TEST_MAX_PARALLEL = 3`, `CI_MAX_SHARDS = 3`; `max-parallel` is set on the shard matrix in `tests.yml`; `ci.yml`'s two `after-merge-*`
+jobs wait for `validate`.
 
-**Flow 5: the docs checks.**
+**Flow 5: the proofs.**
+Run `python3 -B tools/run_tests.py tests.test_ci_workflows tests.test_ci_changes tests.test_ci_reuse tests.test_test_shards tests.test_package_structure; echo rc=$?`.
+Expected: `# Test run: PASS`, exact coverage, `rc=0`. A `namespace: none` line is expected in this sandbox. Look for `RunnerLimitTest` in `tests.test_ci_workflows`
+(the flattened job graph never exceeds six concurrent runners for any event or `CI_MAIN_REUSE` mode).
+
+**Flow 6: the pages and the item record.**
+Read `docs/guide/ci-and-releases.md` ("The six-runner limit", the manual publish route as a CI dispatch from `main`, the release latency) and
+`docs/items/workflow-controller-ci3.md`.
+Expected: the guide describes `tests.yml`, the six-runner limit with its mutable-ref assumption about `docs-tests`, and the push-to-`main` after-merge checks
+waiting for `validate`; `docs/guide/development.md` states the shard ceiling of three; the item page records the status, the owner's choice of option B for
+O1, what was done and the measured run (PR #370's `CI` run 43844429224, 63.6 minutes).
+
+**Flow 7: the docs checks.**
 Run `python3 -B tools/run_tests.py tests.test_docs tests.test_plan_document_consistency; echo rc=$?`, `python3 -B tools/check_docs.py; echo rc=$?`,
-`python3 -B scripts/workflow_backlog.py check; echo rc=$?` and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-ao1; echo rc=$?`.
+`python3 -B scripts/workflow_backlog.py check; echo rc=$?` and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-ci3; echo rc=$?`.
 Expected: `# Test run: PASS`, exact coverage, every `rc=0`, `preflight-accept` `"ok": true`.
 
-**Known limitations / out of scope.** The opt-in takes effect only for a milestone bound after this change; the live auto-merge is checked by the first
-later milestone, not here (no real `gh`, no pull request in the sandbox). The full suite is CI's on the pull request; the self-review run's five
-failures (three `tests.test_fake_codex_contract` cases from the operator's `~/.codex/config.toml`, two timing/ownership cases that pass alone) are in
-code this item does not touch and are not flows.
+**Known limitations / out of scope.** The workflows run only on GitHub; the sandbox has no forge, so a real `CI` run, a real release and the six-runner limit
+under load are not flows (the model-level proof in Flow 5 and the recorded run in the item page stand in). The full suite is CI's on the pull request; the
+self-review run's six failures (three `tests.test_fake_codex_contract` cases from the operator's `~/.codex/config.toml`, and `tests.test_job_codex_review`,
+`tests.test_codex_worker`, `tests.test_job_codex_worker` timing under load, which pass alone) are in code this item does not touch and are not flows.
 
 ## Next action
 
-Manual functional review of `workflow-controller-ao1` (Opt this repository in to the Controller's auto-merge): see the checklist above.
+Manual functional review of `workflow-controller-ci3` (Align CI with the agreed standard): see the checklist above.

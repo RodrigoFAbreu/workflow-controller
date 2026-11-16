@@ -671,43 +671,52 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-cx2` (CX2), implementation revision 4, plan `docs/ai-workflow/CONTROLLER_CX2_PLAN.md` (revision 2), base commit
-`2eeb5d4`. Two checkpoints, both complete: CP1 (`gitrepo.filter_disabling_config` names a driver set in `config.worktree`, in whatever it includes, or in a
-worktree `includeIf "hasconfig:remote.*.url:"`, through one combined read), CP2 (the harnesses guide, common problems and the item page carry the three
-documented dispositions of #344). Revisions 2 to 4 hold the fixes of the local and external implementation reviews (`CX2-I-L1-*`, `CX2-E-I01`, `CX2-I-L3-*`).
+Item `workflow-controller-cm1` (CM1), implementation revision 2, plan `docs/ai-workflow/CONTROLLER_CM1_PLAN.md` (revision 4), base commit
+`9f73ca7`. Three checkpoints, all complete: CP1 (`controller/model_discovery.py`: `lookup`, the 24-hour cache under `model-catalog/<harness>.json`,
+`codex debug models` under a 20 second deadline, only `visibility: "list"` slugs), CP2 (`routing.RoutingOptions.discovery`, the refusal text naming
+declared, discovered and added models, `cli._routing_options` retrying with a lookup, `explain` reading the cache only), CP3 (the guides, common
+problems and the item page). Revision 2 holds the fix of review finding I1 (a deeply nested answer or cache is unreadable, not an exception).
 Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the
 system directories, and no write inside the read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write only
-to the scratch `TMPDIR`. No flow needs a pull request, a forge call or a model turn, and none runs the full suite.
+to the scratch `TMPDIR`. No flow needs a pull request, a forge call or a model turn (the lookup is exercised with stub runners), and none runs the full suite.
 
-Setup: `export TMPDIR=$(mktemp -d)`. No data to seed; the tests build their own scratch repositories.
+Setup: `export TMPDIR=$(mktemp -d)`. No data to seed; the tests build their own scratch directories and stub the `codex` runner.
 
-**Flow 1: the worktree-scope filter is switched off (#344 item 1).**
-Run `python3 -B tools/run_tests.py tests.test_gitrepo tests.test_codex_worker_landing; echo rc=$?`.
-Expected: `# Test run: PASS`, exact coverage, `rc=0`. Cases to look for with `-v`: a driver in `config.worktree` is named; a single-worktree repository without the
-extension is unchanged; a linked worktree without the extension, and the extension with no `config.worktree` file, give the `--local` options; an unreadable
-`config.worktree` raises; a worktree `includeIf "hasconfig:remote.*.url:"` satisfied by `.git/config` is named and its clean filter does not run; and
-`unfinished_work` on a clone whose `config.worktree` plants a clean filter leaves the marker absent.
+**Flow 1: the lookup and its cache.**
+Run `python3 -B tools/run_tests.py tests.test_model_discovery; echo rc=$?`.
+Expected: `# Test run: PASS`, exact coverage, `rc=0`. Cases to look for with `-v`: only listed models are kept and cached; unreadable answers and failures are
+`unavailable` with a reason, never an exception; a fresh cache runs nothing; a stale cache re-runs and is rewritten; a failed lookup with a stale cache answers
+`stale`; a deeply nested answer or cache is unreadable (I1); a `fetched_at` in the future is stale; the environment holds only `PATH`, `HOME`, `CODEX_HOME`
+and a unique tag; `allow_run=False` runs and writes nothing; an unwritable cache does not raise; a harness without a lookup is unsupported.
 
-**Flow 2: the combined read, by hand.**
-Run `python3 -B -c "import inspect; from controller import gitrepo; print(inspect.getsource(gitrepo.filter_disabling_config))"`.
-Expected: one `git config --includes --name-only --list -z` read; no `--worktree` read, no `_worktree_config_keys`, no tolerated refusal; any failure raises.
+**Flow 2: the route check and the CLI.**
+Run `python3 -B tools/run_tests.py tests.test_routing tests.test_routing_chain tests.test_cli; echo rc=$?`.
+Expected: `# Test run: PASS`, exact coverage, `rc=0`. Cases (`DiscoveredModelRouteTest`, and the CLI cases): a route naming a discovered model is accepted;
+a model in no list is refused with `accepted for <harness>: declared [...]; <discovered | not looked up | unavailable: <reason> | stale cache from <time>>;
+added by harness.models [...]` before the `harness.models` hint, as exit 20 for `step` and `run`; a configuration of declared or added models never calls the
+lookup; `explain` never runs the runner and writes no `model-catalog` file; the `claude-code` refusal has no discovery part.
 
-**Flow 3: the pages and the item record (#344 items 2 to 4).**
-Run `grep -n -i "reconcile_invalid\|ai-review/\|amendment witness\|amendment_history" docs/common-problems.md docs/guide/harnesses.md`, then read
-`docs/items/workflow-controller-cx2.md`.
-Expected: the pages say `state_touched` limits fields, not values, that `reconcile` judges them and what to do after `reconcile_invalid` (read the landed commits,
-restore the state file from the base, run again); that the `.ai-review/` ignore rule is assumed and the remedy; that an absent amendment witness reads as
-"no amendment" and worktrees that disagree must be reconciled before routing a Codex checkpoint. The item page records the four dispositions (one code, three words).
+**Flow 3: the refusal text, by hand.**
+Run `python3 -B -c "from controller import model_discovery as m; print(sorted(m.LOOKUPS))"` and `grep -n "accepted for" controller/routing.py`.
+Expected: `['codex']` (one entry); the message built in `routing.py` from the `discovery` record, with `routing` importing no `model_discovery`
+(`grep -n "^import\|^from" controller/routing.py` lists no `model_discovery`; the two `model_discovery` mentions are comments).
 
-**Flow 4: the guards and the docs checks.**
-Run `python3 -B tools/run_tests.py tests.test_gitrepo tests.test_codex_worker_landing tests.test_write_containment tests.test_package_structure tests.test_docs tests.test_plan_document_consistency; echo rc=$?`
+**Flow 4: the pages and the item record.**
+Run `grep -n -i "debug models\|model-catalog\|24-hour\|hidden" docs/guide/runtime.md docs/guide/harnesses.md docs/guide/commands.md docs/common-problems.md`,
+then read `docs/items/workflow-controller-cm1.md`.
+Expected: the runtime guide's routing section has the Codex model lookup paragraph (cache, 24 hours, hidden models); the harnesses and commands guides
+describe the lookup and that `explain` reads the cache only; common problems gives the refusal's new text and the remedy; the item page records the
+status, what was built and what is deferred (the read-only command, the unpriced report, the effort lookup).
+
+**Flow 5: the guards and the docs checks.**
+Run `python3 -B tools/run_tests.py tests.test_model_discovery tests.test_routing tests.test_cli tests.test_write_containment tests.test_package_structure tests.test_docs tests.test_plan_document_consistency; echo rc=$?`
 (a `namespace: none` line is expected in this sandbox), then `python3 -B tools/check_docs.py; echo rc=$?`, `python3 -B scripts/workflow_backlog.py check; echo rc=$?`
-and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-cx2; echo rc=$?`.
+and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-cm1; echo rc=$?`.
 Expected: `# Test run: PASS`, exact coverage, every `rc=0`, `preflight-accept` `"ok": true`.
 
-**Known limitations / out of scope.** State value legality, the `.ai-review/` ignore rule and the absent amendment witness are documented, not enforced (by choice; each could be its own
-item). The disabling set now also names drivers from the user's global and system configuration, which `git status` honours too (the safe side). The H4e items' follow-ups (CX1, done),
-routing further roles and new Codex worker features are out of scope. The full suite is CI's on the pull request; it is not a flow.
+**Known limitations / out of scope.** Only the Codex harness has a lookup; `claude-code` keeps declared models only. The lookup is not a read-only
+command, the unpriced report and an effort lookup are deferred. A live `codex debug models` call is not a flow (no real `codex` in the sandbox; the opt-in
+live check is the owner's). The full suite is CI's on the pull request; it is not a flow.
 
 ## Next action
 

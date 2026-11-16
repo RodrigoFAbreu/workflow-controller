@@ -784,8 +784,15 @@ class FilterAndStatusTest(unittest.TestCase):
     def config(self, *args: str) -> None:
         run(["git", "-C", str(self.repo), "config", *args], cwd=self.repo)
 
+    def disabling(self, repo: Path) -> tuple[str, ...]:
+        """``filter_disabling_config`` under a hermetic Git configuration: no system file, no global file, no
+        inherited ``GIT_CONFIG_*``, so the exact option sets asserted here do not depend on the host (``CX2-I-L3-I01``)."""
+        env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_CONFIG")}
+        env.update({"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull})
+        return gitrepo.filter_disabling_config(repo, runner=gitrepo.subprocess_runner(env))
+
     def test_no_filter_gives_no_options(self) -> None:
-        self.assertEqual(gitrepo.filter_disabling_config(self.repo), ())
+        self.assertEqual(self.disabling(self.repo), ())
 
     def test_every_named_driver_is_switched_off_whatever_its_variables(self) -> None:
         self.config("filter.lfs.clean", "prog clean")
@@ -793,7 +800,7 @@ class FilterAndStatusTest(unittest.TestCase):
         self.config("filter.dotted.name.process", "p")  # a subsection with a dot in it
         self.config("filter.only.smudge", "s")
         self.config("core.autocrlf", "false")  # not a filter
-        options = gitrepo.filter_disabling_config(self.repo)
+        options = self.disabling(self.repo)
         pairs = [options[i + 1] for i in range(0, len(options), 2)]
         self.assertTrue(all(options[i] == "-c" for i in range(0, len(options), 2)))
         for name in ("lfs", "dotted.name", "only"):
@@ -804,12 +811,12 @@ class FilterAndStatusTest(unittest.TestCase):
     def test_a_driver_an_included_file_defines_is_named_too(self) -> None:
         (self.repo / "extra.cfg").write_text('[filter "inc"]\n\tclean = prog\n')
         self.config("include.path", str(self.repo / "extra.cfg"))
-        options = gitrepo.filter_disabling_config(self.repo)
+        options = self.disabling(self.repo)
         self.assertIn("filter.inc.clean=", options)
 
     def test_a_name_is_one_argument_never_a_shell_word(self) -> None:
         self.config("filter.a b;c.clean", "prog")
-        options = gitrepo.filter_disabling_config(self.repo)
+        options = self.disabling(self.repo)
         self.assertIn("filter.a b;c.clean=", options)
 
     def test_status_counts_tracked_staged_and_untracked_and_ignores_ignored(self) -> None:
@@ -841,10 +848,108 @@ class FilterAndStatusTest(unittest.TestCase):
         # Racy stat data: the file's content is unchanged but its recorded stat no longer matches, so Git must look.
         (self.repo / "a.txt").write_text("a\n")
         os.utime(self.repo / "a.txt", (1, 1))
-        config = gitrepo.filter_disabling_config(self.repo)
+        config = self.disabling(self.repo)
         self.assertEqual(gitrepo.status_counts(self.repo, config=config), (0, 0))
         self.assertFalse(marker.exists())
         gitrepo.status_counts(self.repo)  # without the set the configured program is what Git runs
+        self.assertTrue(marker.exists())
+
+    # ``workflow-controller-cx2`` D1: the worktree scope.
+    def worktree_config(self, *args: str) -> None:
+        run(["git", "-C", str(self.repo), "config", "--worktree", *args], cwd=self.repo)
+
+    def plant_attributes(self) -> None:
+        (self.repo / ".gitattributes").write_text("a.txt filter=plant\n")
+        run(["git", "add", ".gitattributes"], cwd=self.repo)
+        run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "attrs"], cwd=self.repo)
+
+    def test_a_driver_in_the_worktree_configuration_is_named(self) -> None:
+        self.config("extensions.worktreeConfig", "true")
+        self.worktree_config("filter.wt.clean", "prog")
+        self.config("filter.loc.clean", "prog")
+        options = self.disabling(self.repo)
+        self.assertIn("filter.wt.clean=", options)
+        self.assertIn("filter.loc.clean=", options)
+        self.assertEqual(len(options), 16)
+
+    def test_a_single_worktree_repository_without_the_extension_is_unchanged(self) -> None:
+        self.config("filter.loc.clean", "prog")
+        options = self.disabling(self.repo)
+        self.assertEqual(len(options), 8)
+
+    def test_a_linked_worktree_without_the_extension_gives_the_local_options(self) -> None:
+        self.config("filter.loc.clean", "prog")
+        run(["git", "worktree", "add", "-q", str(self.base_dir / "linked")], cwd=self.repo)
+        options = self.disabling(self.repo)
+        self.assertIn("filter.loc.clean=", options)
+        self.assertEqual(len(options), 8)
+
+    def test_the_extension_without_a_worktree_configuration_file_gives_the_local_options(self) -> None:
+        self.config("extensions.worktreeConfig", "true")
+        self.config("filter.loc.clean", "prog")
+        self.assertFalse((self.repo / ".git" / "config.worktree").exists())
+        options = self.disabling(self.repo)
+        self.assertIn("filter.loc.clean=", options)
+        self.assertEqual(len(options), 8)
+
+    def test_a_linked_worktree_with_the_extension_and_no_file_gives_the_local_options(self) -> None:
+        self.config("extensions.worktreeConfig", "true")
+        self.config("filter.loc.clean", "prog")
+        linked = self.base_dir / "linked"
+        run(["git", "worktree", "add", "-q", str(linked)], cwd=self.repo)
+        options = self.disabling(linked)
+        self.assertIn("filter.loc.clean=", options)
+        self.assertEqual(len(options), 8)
+
+    def test_an_unreadable_worktree_configuration_file_raises(self) -> None:
+        self.config("extensions.worktreeConfig", "true")
+        (self.repo / ".git" / "config.worktree").mkdir()  # a directory: Git cannot read it, and it is not absent
+        with self.assertRaises(GitOperationError):
+            self.disabling(self.repo)
+
+    def test_another_failure_of_the_worktree_read_raises(self) -> None:
+        self.config("extensions.worktreeConfig", "true")
+        (self.repo / ".git" / "config.worktree").write_text("[filter \"x\"\n\tclean = [broken\n")
+        with self.assertRaises(GitOperationError):
+            self.disabling(self.repo)
+
+    def conditional_include(self, marker: Path) -> None:
+        """``config.worktree`` includes a clean filter only when ``.git/config``'s remote URL matches (``CX2-E-I01``)."""
+        self.config("extensions.worktreeConfig", "true")
+        self.config("remote.origin.url", "https://example.invalid/repo")
+        (self.base_dir / "cond.cfg").write_text(f'[filter "plant"]\n\tclean = "sh -c \'touch {marker}; cat\'"\n')
+        (self.repo / ".git" / "config.worktree").write_text(
+            f'[includeIf "hasconfig:remote.*.url:https://example.invalid/**"]\n\tpath = {self.base_dir / "cond.cfg"}\n')
+
+    def test_a_worktree_conditional_include_satisfied_by_the_local_config_is_named(self) -> None:
+        self.conditional_include(self.base_dir / "ran")
+        options = self.disabling(self.repo)
+        self.assertIn("filter.plant.clean=", options)
+        self.assertEqual(len(options), 4 * 2)
+
+    def test_a_worktree_conditional_include_filter_does_not_run_under_the_disabling_set(self) -> None:
+        marker = self.base_dir / "ran"
+        self.plant_attributes()
+        self.conditional_include(marker)
+        (self.repo / "a.txt").write_text("a\n")
+        os.utime(self.repo / "a.txt", (1, 1))
+        config = self.disabling(self.repo)
+        self.assertEqual(gitrepo.status_counts(self.repo, config=config), (0, 0))
+        self.assertFalse(marker.exists())
+        gitrepo.status_counts(self.repo)
+        self.assertTrue(marker.exists())
+
+    def test_a_worktree_clean_filter_runs_only_without_the_disabling_set(self) -> None:
+        marker = self.base_dir / "ran"
+        self.plant_attributes()
+        self.config("extensions.worktreeConfig", "true")
+        self.worktree_config("filter.plant.clean", f"sh -c 'touch {marker}; cat'")
+        (self.repo / "a.txt").write_text("a\n")
+        os.utime(self.repo / "a.txt", (1, 1))
+        config = self.disabling(self.repo)
+        self.assertEqual(gitrepo.status_counts(self.repo, config=config), (0, 0))
+        self.assertFalse(marker.exists())
+        gitrepo.status_counts(self.repo)
         self.assertTrue(marker.exists())
 
 

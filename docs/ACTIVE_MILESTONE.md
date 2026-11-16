@@ -1,6 +1,10 @@
 # Active Milestone
 
-## Latest milestone (CX1)
+## Latest milestone (CX2)
+
+**Complete: accepted by policy (`MILESTONE_COMPLETE`).** Plan `docs/ai-workflow/CONTROLLER_CX2_PLAN.md` (revision 2), two checkpoints; it closes the open review follow-ups of the Codex worker item H4f (#344). CP1 is complete: `gitrepo.filter_disabling_config` switches off a driver set in `config.worktree` (`extensions.worktreeConfig=true`) too; (as first built, two per-scope reads; the final form is the combined read of the paragraph on `CX2-E-I01` below, with no tolerated refusal). Tests: in `tests.test_gitrepo` a worktree-scope driver named, the single-worktree case unchanged, a linked worktree without the extension tolerated, a malformed `config.worktree` raising end to end (the first read fails there), runner-stub tests that prove the second read's narrowing (another failure raises, each tolerated refusal gives the `--local` options, a matching refusal with output raises), and a planted `--worktree` clean filter that runs only without the disabling set; in `tests.test_codex_worker_landing` `unfinished_work` on a clone whose `config.worktree` plants a clean filter keeps the marker absent. Verified with `tests.test_gitrepo`, `tests.test_codex_worker_landing`, `tests.test_write_containment`, `tests.test_package_structure` (208 tests, exact coverage, all passing). CP2 is complete: `docs/guide/harnesses.md` and `docs/common-problems.md` carry the wording of D2 to D4 (state value legality is `reconcile`'s and what to do after `reconcile_invalid`, the `.ai-review/` ignore assumption, the absent amendment witness), and `docs/items/workflow-controller-cx2.md` records the four dispositions of #344. Verified with `tests.test_docs`, `tests.test_plan_document_consistency` (108 tests, exact coverage, all passing), `tools/check_docs.py`, `workflow_backlog.py check` and `preflight-accept`. **Self-review finding (fixed):** with `extensions.worktreeConfig=true` but no `config.worktree` written, `git config --worktree --list` exits 128 with "unable to read config file '...config.worktree': No such file or directory", so CP1's read raised and `unfinished_work` would have kept a clean clone as unreadable. `gitrepo._worktree_config_keys` now treats that refusal, like the multiple-worktrees one, as no worktree scope (`_NO_WORKTREE_SCOPE`), and a directory in place of the file still raises. This goes further than D1, which tolerated only the multiple-worktrees refusal, because a missing file is Git's own "nothing set". Tests: in `tests.test_gitrepo` the extension with no file (main and linked worktree) gives the `--local` options, and an unreadable `config.worktree` raises; in `tests.test_codex_worker_landing` a clean clone with the extension and no file holds nothing. Verified with the CP1 selection (212 tests, exact coverage, all passing); the new tests fail without the fix. **External review finding `CX2-E-I01` (fixed):** per-scope reads could not resolve a worktree `includeIf "hasconfig:remote.*.url:..."` whose condition `.git/config`'s remote URL satisfies, so `filter_disabling_config` returned `()` and `unfinished_work` ran the filter. `filter_disabling_config` now makes one read in the combined context `git status` uses, `git config --includes --name-only --list -z`; this removes `_worktree_config_keys`, `_NO_WORKTREE_SCOPE` and the two tolerated refusals (a missing `config.worktree`, or a linked worktree without the extension, is simply no worktree scope there), and a malformed or unreadable `config.worktree` still raises. The names now also include drivers from the user's global and system configuration, which `git status` honours too, so switching them off is the safe side. Tests: in `tests.test_gitrepo` the conditional include is named and its clean filter does not run under the disabling set; in `tests.test_codex_worker_landing` `unfinished_work` keeps the marker absent; the runner-stub tests of the removed narrowing are deleted; the new tests fail on the previous code. Verified with `tests.test_gitrepo`, `tests.test_codex_worker_landing`, `tests.test_write_containment`, `tests.test_package_structure` (215 tests, exact coverage, all passing). The local review's optional `CX2-I-L2-O01` (the CP1 sentence naming one refusal) is applied by the CP1 rewording above.
+
+## Previous milestone (CX1)
 
 **Complete: accepted by policy (`MILESTONE_COMPLETE`).** Plan `docs/ai-workflow/CONTROLLER_CX1_PLAN.md` (revision 4), four checkpoints; it closes the open review follow-ups of the Codex worker items H4e2, H4e3 and H4e3b (#320, #339, #341). CP1 is complete: `workflow_contract._GIT_PINNED_CONFIG` pins `commit.gpgsign=false`, `tag.gpgsign=false` and `gpg.program=false`, so a target's own signing program never runs in a Workflow query or in the recorder's commit (#320's real defect); `codex_review_role._run` names a failed deletion of `last-message.md` once, as `last_message_removal_error`, in whatever ending it returns (the outcome is unchanged). Tests: the hostile-configuration commit in `tests.test_review_recorder`, the pin-in-force check in `tests.test_workflow_contract`, and in `tests.test_codex_review_role` the failed deletion on a failed and a successful worker, a `.git` input component refused as `submodule`, and a symlink replacing an input reported `non-regular`. Verified with `tests.test_workflow_contract`, `tests.test_review_recorder`, `tests.test_codex_review_role`, `tests.test_job_codex_review`, `tests.test_generator_run`, `tests.test_write_containment`, `tests.test_package_structure` (314 tests, exact coverage, all passing). CP2 is complete: `codex_review_role.after_check` now compares what it says it compares (D3). A recorded input's mode is compared with the file's (`input <path> changed mode`); a symlinked `.ai-review` is a problem (`lstat` of the directory before the walk); untracked and ignored paths are listed through the fresh index with `ls-files -z --others` (no exclude file is read), so a worker's `.gitignore` of `*` hides nothing; and tracked content is compared per `ls-tree -r` entry by `lstat` type, executable bit and raw bytes (`_tracked_problems`: a regular file passes when its blob id equals the entry's, computed in-process, or when both sides are equal after each CRLF becomes LF; a symlink's link text hashed as a blob; a gitlink must be a directory), so an unchanged clone holding a line-ending-normalised file (either direction) or a tracked symlink is no longer refused, while a mode change, a symlink swap, a deletion and a one-byte edit still are. `ident` and `working-tree-encoding` paths stay a declared false refusal, pinned by a test. Tests in `tests.test_codex_review_role` (the `after_check` cases through `run_review` and against scratch clones). Verified with `tests.test_codex_review_role`, `tests.test_job_codex_review`, `tests.test_codex_apply_safety`, `tests.test_write_containment`, `tests.test_package_structure` (209 tests, exact coverage, all passing). CP3 is complete: the guarded regeneration's `finished` block keeps the run's `ownership_tag`, so a kill past `regeneration_finished` still scans it on resume; `_interrupted_publication` now takes the repository root and, for the plan role only, accepts just the two torn-manifest shapes (a missing `current/MANIFEST.md`, or one already at the carried-out entry's `plan_revision`) and never a `REJECTED` bundle, while the two implementation roles keep today's check (D4); `interpreter_environment` also drops `BASH_FUNC_*`, `SHELLOPTS` and `BASHOPTS` (D5). Tests: in `tests.test_job_codex_apply` the `finished` tag with a resume scan, and a `REJECTED` plan record ending with no second generator run (the existing torn-manifest and implementation-role resume tests still pass); in `tests.test_workflow_contract` and `tests.test_generator_run` the poisoned-environment cases (an exported `python3` function, `SHELLOPTS=xtrace` with a `PS4` command substitution). Verified with `tests.test_job_codex_apply`, `tests.test_codex_apply_regeneration`, `tests.test_workflow_contract`, `tests.test_generator_run`, `tests.test_resume`, `tests.test_write_containment`, `tests.test_package_structure` (all passing). CP4 is complete: the implementation role's gate text for `surface_landing_touched` (`job._carry_gate_text`) names the extra exposure of D7 (`explain` and every later Controller step run the landed `scripts/`), present for that cause only; `docs/common-problems.md` and `docs/guide/harnesses.md` carry the D6 and D7 wording, the D3 entry for the known false refusal of `ident` and `working-tree-encoding` paths, and the CP1 to CP3 behaviours; `docs/items/workflow-controller-cx1.md` records the status and what was built. Tests: the gate-text test in `tests.test_job_codex_apply` and, in `tests.test_codex_apply_regeneration`, a run past the regeneration gate without regenerating for both roles. **Finding:** the plan expected that run to end as a `FAILED` review job; in the current Workflow the protocol answers first (`bundle_unverified` / `bundle_generation_mismatch`), so the job ends `GATE_BLOCKED` with no review launched and nothing recorded, and the test and the page say that. Verified with the CP4 tests and `tools/check_docs.py`.
 
@@ -663,57 +667,44 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-cx1` (CX1), implementation revision 2, plan `docs/ai-workflow/CONTROLLER_CX1_PLAN.md` (revision 4), base commit
-`cd294d5`. Four checkpoints, all complete: CP1 (signing switch-offs, named failed deletion of `last-message.md`), CP2 (the review after-check
-compares mode, links, ignored files and raw bytes), CP3 (the regeneration record keeps its tag, narrow plan-role resume, clean generator
-environment), CP4 (gate text, pages, item record). Revision 2 holds the fixes of the local and manual external implementation reviews. It closes
-#320, #339 and #341. Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the
-sandbox's `bin/` and the system directories, and no write inside the read-only product clone. Run from the product clone with `python3 -B` and no
-`PYTHONPATH=.`; flows write only to the scratch `TMPDIR`. No flow needs a pull request, a forge call or a model turn, and none runs the full suite.
+Item `workflow-controller-cx2` (CX2), implementation revision 4, plan `docs/ai-workflow/CONTROLLER_CX2_PLAN.md` (revision 2), base commit
+`2eeb5d4`. Two checkpoints, both complete: CP1 (`gitrepo.filter_disabling_config` names a driver set in `config.worktree`, in whatever it includes, or in a
+worktree `includeIf "hasconfig:remote.*.url:"`, through one combined read), CP2 (the harnesses guide, common problems and the item page carry the three
+documented dispositions of #344). Revisions 2 to 4 hold the fixes of the local and external implementation reviews (`CX2-I-L1-*`, `CX2-E-I01`, `CX2-I-L3-*`).
+Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the
+system directories, and no write inside the read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write only
+to the scratch `TMPDIR`. No flow needs a pull request, a forge call or a model turn, and none runs the full suite.
 
 Setup: `export TMPDIR=$(mktemp -d)`. No data to seed; the tests build their own scratch repositories.
 
-**Flow 1: the signing switch-offs (#320).**
-Run `python3 -B tools/run_tests.py tests.test_workflow_contract tests.test_review_recorder; echo rc=$?`, then
-`python3 -B -c "from controller import workflow_contract as w; print([c for c in w._GIT_PINNED_CONFIG if 'gpg' in str(c)])"`.
-Expected: `# Test run: PASS`, `rc=0`; the printed list holds `commit.gpgsign=false`, `tag.gpgsign=false` and `gpg.program=false` (in whatever tuple form the table uses).
-The recorder's hostile-configuration test (a target whose `gpg.program` would leave a marker) leaves no marker.
+**Flow 1: the worktree-scope filter is switched off (#344 item 1).**
+Run `python3 -B tools/run_tests.py tests.test_gitrepo tests.test_codex_worker_landing; echo rc=$?`.
+Expected: `# Test run: PASS`, exact coverage, `rc=0`. Cases to look for with `-v`: a driver in `config.worktree` is named; a single-worktree repository without the
+extension is unchanged; a linked worktree without the extension, and the extension with no `config.worktree` file, give the `--local` options; an unreadable
+`config.worktree` raises; a worktree `includeIf "hasconfig:remote.*.url:"` satisfied by `.git/config` is named and its clean filter does not run; and
+`unfinished_work` on a clone whose `config.worktree` plants a clean filter leaves the marker absent.
 
-**Flow 2: the review role's ending and after-check (#320).**
-Run `python3 -B tools/run_tests.py tests.test_codex_review_role tests.test_job_codex_review tests.test_codex_apply_safety; echo rc=$?`.
-Expected: `PASS`, `rc=0`. The cases to look for in the listing (`-v`): a failed deletion of `last-message.md` is named once as `last_message_removal_error`; a changed
-input mode, a symlinked `.ai-review`, a `chmod +x`, a symlink swapped for identical content, a deleted tracked path, a worker's `.gitignore` of `*`, a one-byte edit and
-a file grown past twice its blob are each refused; an unchanged clone with a tracked symlink, a line-ending-normalised file or a non-UTF-8 tracked name passes; a forged
-loose blob is refused and a deleted loose blob is a named problem, not an exception; `ident` and `working-tree-encoding` paths are the declared false refusal.
+**Flow 2: the combined read, by hand.**
+Run `python3 -B -c "import inspect; from controller import gitrepo; print(inspect.getsource(gitrepo.filter_disabling_config))"`.
+Expected: one `git config --includes --name-only --list -z` read; no `--worktree` read, no `_worktree_config_keys`, no tolerated refusal; any failure raises.
 
-**Flow 3: the regeneration record and the generator's environment (#341).**
-Run `python3 -B tools/run_tests.py tests.test_job_codex_apply tests.test_codex_apply_regeneration tests.test_generator_run tests.test_resume; echo rc=$?`.
-Expected: `PASS`, `rc=0`: the `finished` block keeps `ownership_tag`; an unrelated invalid reason ends a plan-role record with no second generator run; a torn manifest
-still gets its rerun for each role; an exported bash function and `SHELLOPTS=xtrace` run nothing from the generator's environment.
+**Flow 3: the pages and the item record (#344 items 2 to 4).**
+Run `grep -n -i "reconcile_invalid\|ai-review/\|amendment witness\|amendment_history" docs/common-problems.md docs/guide/harnesses.md`, then read
+`docs/items/workflow-controller-cx2.md`.
+Expected: the pages say `state_touched` limits fields, not values, that `reconcile` judges them and what to do after `reconcile_invalid` (read the landed commits,
+restore the state file from the base, run again); that the `.ai-review/` ignore rule is assumed and the remedy; that an absent amendment witness reads as
+"no amendment" and worktrees that disagree must be reconciled before routing a Codex checkpoint. The item page records the four dispositions (one code, three words).
 
-**Flow 4: the gate text and a run past the regeneration gate (#341, #339).**
-Run `python3 -B tools/run_tests.py tests.test_job_codex_apply tests.test_codex_apply_regeneration -v 2>&1 | grep -i "exposure\|past_the_regeneration"; echo rc=$?`.
-Expected: both tests listed `ok`. The `surface_landing_touched` gate text says `explain` and every later Controller step also run the landed `scripts/` and names
-restoring or verifying `scripts/` and `.workflow-manager/`; the text is absent for every other cause. A run past the gate without regenerating ends `GATE_BLOCKED` on the
-protocol's answer, launches no review and records nothing.
+**Flow 4: the guards and the docs checks.**
+Run `python3 -B tools/run_tests.py tests.test_gitrepo tests.test_codex_worker_landing tests.test_write_containment tests.test_package_structure tests.test_docs tests.test_plan_document_consistency; echo rc=$?`
+(a `namespace: none` line is expected in this sandbox), then `python3 -B tools/check_docs.py; echo rc=$?`, `python3 -B scripts/workflow_backlog.py check; echo rc=$?`
+and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-cx2; echo rc=$?`.
+Expected: `# Test run: PASS`, exact coverage, every `rc=0`, `preflight-accept` `"ok": true`.
 
-**Flow 5: the pages and the item record (#339, #341, #320).**
-Read `docs/common-problems.md` (the `ended read_only_violated on a clone the worker did not change` entry, the carry-gate causes) and `docs/guide/harnesses.md`
-(`grep -n -i "not_written\|protected_paths\|BASH_FUNC\|gpgsign\|ownership_tag\|scripts/" docs/common-problems.md docs/guide/harnesses.md`), then `docs/items/workflow-controller-cx1.md`.
-Expected: the pages say a refusal at the check writes nothing and `not_written` names only the state file; an item whose artifacts file declares more plan-stage protected
-paths is refused and applied by hand; the false refusal of `ident` and `working-tree-encoding` paths is worded with its remedy; the landed `scripts/` exposure is stated; the
-item page records the status, the plan link, the built list and the deviation (GATE_BLOCKED, not FAILED).
-
-**Flow 6: the checkpoint selections together and the docs checks.**
-Run `python3 -B tools/run_tests.py tests.test_workflow_contract tests.test_review_recorder tests.test_codex_review_role tests.test_job_codex_review tests.test_codex_apply_safety tests.test_job_codex_apply tests.test_codex_apply_regeneration tests.test_generator_run tests.test_resume tests.test_write_containment tests.test_package_structure tests.test_docs tests.test_plan_document_consistency; echo rc=$?`
-(default namespace; a `namespace: none` line is expected in this sandbox), then `python3 -B tools/check_docs.py; echo rc=$?`, `python3 -B scripts/workflow_backlog.py check; echo rc=$?`
-and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-cx1; echo rc=$?`.
-Expected: `# Test run: PASS`, exact coverage, every `rc=0`.
-
-**Known limitations / out of scope.** `ident` and `working-tree-encoding` paths stay a declared false refusal (D3). #339 items 1 and 2 ship as words, not code (O1: either could be
-its own item). A run past `carry_bundle_regeneration_pending` ends `GATE_BLOCKED`, not `FAILED` as the issue said. H4f's follow-ups (CX2), routing further roles and new Codex worker
-features are out of scope. The full suite is CI's on the pull request; it is not a flow.
+**Known limitations / out of scope.** State value legality, the `.ai-review/` ignore rule and the absent amendment witness are documented, not enforced (by choice; each could be its own
+item). The disabling set now also names drivers from the user's global and system configuration, which `git status` honours too (the safe side). The H4e items' follow-ups (CX1, done),
+routing further roles and new Codex worker features are out of scope. The full suite is CI's on the pull request; it is not a flow.
 
 ## Next action
 
-`/milestone-plan` for `workflow-controller-cx2` (Review follow-ups of the Codex worker item H4f (#344)), ready for `PLANNING`.
+`/milestone-plan` for `workflow-controller-ci2` (CI follow-ups: the 20-minute PR CI target and the review follow-ups of CI1a-CI1c (#317, #322, #324)), ready for `PLANNING`.

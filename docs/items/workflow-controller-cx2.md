@@ -2,7 +2,7 @@
 
 Item id: `workflow-controller-cx2`.
 
-Not yet planned. Fix the open review follow-ups of the H4f item (the milestone-implement role in a private Codex clone). Source: [#344](https://github.com/RodrigoFAbreu/workflow-controller/issues/344). Complexity: low to medium. None is reachable today through the normal landing; all are defence in depth or missing operator guidance.
+Fix the open review follow-ups of the H4f item (the milestone-implement role in a private Codex clone). Source: [#344](https://github.com/RodrigoFAbreu/workflow-controller/issues/344). Complexity: low to medium. None is reachable today through the normal landing; all are defence in depth or missing operator guidance.
 
 ## Findings
 
@@ -15,6 +15,18 @@ Not yet planned. Fix the open review follow-ups of the H4f item (the milestone-i
 
 The H4e items' follow-ups (CX1) and any new role routing.
 
-## Not yet planned
+## Dispositions
 
-Not yet planned. The rules that apply (the sizing rule: at most one new mechanism, releasable alone) are on [Planning rules](../planning-rules.md#next-in-order-and-the-sizing-rules).
+All four findings of [#344](https://github.com/RodrigoFAbreu/workflow-controller/issues/344) are closed:
+
+1. **`config.worktree` filters: code.** `gitrepo.filter_disabling_config` reads the combined configuration, `git config --includes --name-only --list -z`, the context `git status` itself uses, so a driver in `.git/config`, in `config.worktree` (`extensions.worktreeConfig`) or in anything either includes is named, including a worktree `includeIf "hasconfig:remote.*.url:"` whose condition `.git/config` satisfies (external review `CX2-E-I01`). It first read `--local` and `--worktree` separately, which could not resolve that condition; the combined read also needs no tolerated refusal (a linked worktree without the extension, or the extension with no `config.worktree`, is simply no worktree scope). Every failure raises.
+2. **State value legality: words.** The harnesses guide and common problems say that the Workflow's `reconcile` judges the values and what to do after `reconcile_invalid` (CP2).
+3. **The `.ai-review/` assumption: words.** Both pages name it and its remedy (CP2).
+4. **The absent amendment witness: words.** Both pages name the case and its remedy (CP2).
+
+Code for items 2 to 4 would each add a mechanism (a value check, a probe ignore rule, a ported cross-worktree check); each can be its own item if the owner wants it.
+
+## Deviations from the plan
+
+- **D1:** the plan tolerated only the multiple-worktrees refusal; the self-review added the extension-on, no-`config.worktree` refusal (Git's own `status` treats a missing file as nothing set). The pull request description states it too.
+- **D2:** the plan said to read "the clone's commits" after `reconcile_invalid`. The landing removes a clean clone before the Workflow's `reconcile` runs, so both pages say to read the landed commits in the managed repository (`git log <base>..HEAD -- docs/ai-workflow/WORKFLOW_STATE.json`, `<base>` the job record's `codex_worker.clone.base`).

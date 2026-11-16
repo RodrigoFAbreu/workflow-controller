@@ -536,7 +536,7 @@ items:
     detail: docs/items/workflow-controller-cm1.md
   - id: workflow-controller-cx2
     title: "Review follow-ups of the Codex worker item H4f (#344)"
-    status: next
+    status: done
     order: 92
     depends_on: []
     detail: docs/items/workflow-controller-cx2.md

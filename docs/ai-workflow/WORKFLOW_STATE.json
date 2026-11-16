@@ -79491,8 +79491,8 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci2-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci2-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AMENDING_PLAN",
-      "plan_revision": 4,
+      "phase": "IMPLEMENTING",
+      "plan_revision": 5,
       "implementation_revision": null,
       "functional_review_round": null,
       "base_commit": "a785d4f8a645f54618779fbf93a58a1f51559165",
@@ -79500,24 +79500,24 @@
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": null,
       "checkpoints": {},
-      "current_bundle_id": "faa8e6d849b9dc5a88f50a2bc79cb17081eb3460514b1c48be3b2107f0c76891",
+      "current_bundle_id": "08334acd4223cc77287a99b2f0c514d3fef46421487cefecf805dea06118b6c1",
       "plan_approval": {
-        "status": "SUPERSEDED",
+        "status": "CURRENT",
         "basis": "POLICY_SATISFIED",
-        "reviewed_bundle_id": "faa8e6d849b9dc5a88f50a2bc79cb17081eb3460514b1c48be3b2107f0c76891",
-        "approved_review_content_id": "055aff70969d3be095dde5fbcd4bd5a64ee57c4d33da8e3a29e9a16b7270260d",
+        "reviewed_bundle_id": "08334acd4223cc77287a99b2f0c514d3fef46421487cefecf805dea06118b6c1",
+        "approved_review_content_id": "37f1e1f592560d89279cbf0428d4b4e386e1b6a3beed1e2f2a7c485ab681eb76",
         "review_content_manifest": [
           {
             "path": "docs/ai-workflow/CONTROLLER_CI2_PLAN.md",
             "exists": true,
             "mode": "100644",
-            "blob": "f5945cee6091fa4cc3b476ef2c71fe1d79e8c67a"
+            "blob": "168bdf1bd4eb0ed18a7bb108b5cb818f668db1c3"
           },
           {
             "path": "docs/ai-workflow/registry/workflow-controller-ci2-registry.json",
             "exists": true,
             "mode": "100644",
-            "blob": "bec395c9d252ecaadded665dd46a8ed9b001faac"
+            "blob": "57659b8e0ef00796e9f0b982de91e537925ad07c"
           },
           {
             "path": "docs/ai-workflow/requirements/workflow-controller-ci2-mapping.json",
@@ -79530,7 +79530,7 @@
         "legacy_evidence": null,
         "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
         "waived_guarantees": [],
-        "recorded_at": "2026-11-16T16:13:57Z",
+        "recorded_at": "2026-11-16T17:45:53Z",
         "policy_evidence": {
           "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
           "policy_source": "default",
@@ -79560,24 +79560,24 @@
             }
           ],
           "inputs": {
-            "review_content_id": "055aff70969d3be095dde5fbcd4bd5a64ee57c4d33da8e3a29e9a16b7270260d",
+            "review_content_id": "37f1e1f592560d89279cbf0428d4b4e386e1b6a3beed1e2f2a7c485ab681eb76",
             "ledger": {
               "local": {
-                "bundle_id": "faa8e6d849b9dc5a88f50a2bc79cb17081eb3460514b1c48be3b2107f0c76891",
+                "bundle_id": "08334acd4223cc77287a99b2f0c514d3fef46421487cefecf805dea06118b6c1",
                 "verdict": "APPROVE",
-                "round": 4,
-                "verdict_sha256": "1fee28e73c2aab448d60dbda2253cfbd27049d1909d19894871ad2bc10880938",
-                "ledger_entry_sha256": "2cf7c022d8466c975872bba6128542b363c6d835e2dcacba560c21ffa6f0b9ff",
+                "round": 5,
+                "verdict_sha256": "6c05caa9baa23d5f3110f0eac9a3418beb64534e4abe05beebfdd8bd533f8136",
+                "ledger_entry_sha256": "3b7db993c97ca3e38c30251545ad0a4ccb132afbd3d73166db9fc7c3853462d3",
                 "run_ref": "session:local .ai-review/workflow-controller-ci2/feedback/REVIEW_FEEDBACK.md",
                 "reviewer_model": "anthropic/claude-opus-5-5"
               },
               "manual": {
-                "bundle_id": "faa8e6d849b9dc5a88f50a2bc79cb17081eb3460514b1c48be3b2107f0c76891",
+                "bundle_id": "08334acd4223cc77287a99b2f0c514d3fef46421487cefecf805dea06118b6c1",
                 "verdict": "APPROVE",
-                "round": 4,
-                "verdict_sha256": "f98771c721dfb39dd3b52c86550953ce7c84279952347362fdf82fb3375359ab",
-                "ledger_entry_sha256": "6fde39aa5ccb8530efc3ba8ade46d4e57ec74bb2ef9801caf4f5b298bcf2c34f",
-                "run_ref": "codex:20261116T161011Z-eda4cd93",
+                "round": 5,
+                "verdict_sha256": "e826c8c6385b8693a94bab9396bedf19809863a6033d0705e021f6e443b442cd",
+                "ledger_entry_sha256": "e688734c2d96362a4add50977a402074d0214770b1b848991bd7851a9f078c72",
+                "run_ref": "codex:20261116T173816Z-7e70e0f7",
                 "reviewer_model": "openai/gpt-6.1-sol"
               }
             },
@@ -79587,30 +79587,30 @@
           "trust": {
             "review_verdicts": "orchestrator"
           },
-          "evaluated_at": "2026-11-16T16:13:57Z",
+          "evaluated_at": "2026-11-16T17:45:53Z",
           "workflow_release": "2.29.3"
         }
       },
       "technical_approval": null,
       "technical_review_block_pins": [],
       "plan_review_stages": {
-        "review_content_id": "055aff70969d3be095dde5fbcd4bd5a64ee57c4d33da8e3a29e9a16b7270260d",
+        "review_content_id": "37f1e1f592560d89279cbf0428d4b4e386e1b6a3beed1e2f2a7c485ab681eb76",
         "LOCAL_MODEL_PLAN_REVIEW": {
-          "bundle_id": "faa8e6d849b9dc5a88f50a2bc79cb17081eb3460514b1c48be3b2107f0c76891",
+          "bundle_id": "08334acd4223cc77287a99b2f0c514d3fef46421487cefecf805dea06118b6c1",
           "verdict": "APPROVE",
-          "round": 4,
-          "completed_at": "2026-11-16T15:34:35Z",
-          "verdict_sha256": "1fee28e73c2aab448d60dbda2253cfbd27049d1909d19894871ad2bc10880938",
+          "round": 5,
+          "completed_at": "2026-11-16T17:37:46Z",
+          "verdict_sha256": "6c05caa9baa23d5f3110f0eac9a3418beb64534e4abe05beebfdd8bd533f8136",
           "run_ref": "session:local .ai-review/workflow-controller-ci2/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
         "MANUAL_EXTERNAL_PLAN_REVIEW": {
-          "bundle_id": "faa8e6d849b9dc5a88f50a2bc79cb17081eb3460514b1c48be3b2107f0c76891",
+          "bundle_id": "08334acd4223cc77287a99b2f0c514d3fef46421487cefecf805dea06118b6c1",
           "verdict": "APPROVE",
-          "round": 4,
-          "completed_at": "2026-11-16T16:12:05Z",
-          "verdict_sha256": "f98771c721dfb39dd3b52c86550953ce7c84279952347362fdf82fb3375359ab",
-          "run_ref": "codex:20261116T161011Z-eda4cd93",
+          "round": 5,
+          "completed_at": "2026-11-16T17:41:54Z",
+          "verdict_sha256": "e826c8c6385b8693a94bab9396bedf19809863a6033d0705e021f6e443b442cd",
+          "run_ref": "codex:20261116T173816Z-7e70e0f7",
           "reviewer_model": "openai/gpt-6.1-sol"
         }
       },
@@ -79618,27 +79618,34 @@
       "blocking_decisions": [],
       "review_round_counts": {
         "plan": {
-          "local": 4,
-          "external": 2
+          "local": 5,
+          "external": 3
         },
         "implementation": {
           "local": 0,
           "external": 0
         }
       },
-      "state_revision": 19,
-      "last_transition": "2026-11-16T17:34:13Z",
+      "state_revision": 25,
+      "last_transition": "2026-11-16T17:45:53Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
-        "status": "CONSUMED",
-        "at": "2026-11-16T17:34:13Z",
+        "status": "BOUND",
+        "at": "2026-11-16T17:35:37Z",
         "consumed": {
           "review_content_id": "055aff70969d3be095dde5fbcd4bd5a64ee57c4d33da8e3a29e9a16b7270260d",
           "plan_revision": 4,
           "legacy": false
         },
-        "published": null,
-        "bound": null
+        "published": {
+          "review_content_id": "37f1e1f592560d89279cbf0428d4b4e386e1b6a3beed1e2f2a7c485ab681eb76",
+          "plan_revision": 5
+        },
+        "bound": {
+          "review_content_id": "37f1e1f592560d89279cbf0428d4b4e386e1b6a3beed1e2f2a7c485ab681eb76",
+          "bundle_id": "08334acd4223cc77287a99b2f0c514d3fef46421487cefecf805dea06118b6c1",
+          "plan_revision": 5
+        }
       },
       "consumed_plan_review_content_ids": [
         "055aff70969d3be095dde5fbcd4bd5a64ee57c4d33da8e3a29e9a16b7270260d",
@@ -79772,6 +79779,48 @@
               "at": "2026-11-16T15:29:15Z"
             }
           ]
+        },
+        "F-18978102dd0b": {
+          "digest": "18978102dd0ba5b012c58d4791a5894a80c8d5ac468a07c418d75e8ddbb30f1e",
+          "text": "**O1.** D1 calls `tree.txt` \"the commit the run tested\", but it holds a git\n  tree id (`cc2aae76...` is the tree of `703c9e7` and of the squash `e1ba083`;\n  `git log -1 cc2aae76...` fails with \"is a tree, not a commit\"). Say \"the tree\n  the run tested\", or record the run's head commit (989d74ed, db4da6c6,\n  703c9e71) on the item page, so the provenance CP3 records is a commit a\n  reader can check out.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "37f1e1f592560d89279cbf0428d4b4e386e1b6a3beed1e2f2a7c485ab681eb76",
+              "verdict": "APPROVE",
+              "at": "2026-11-16T17:37:46Z"
+            }
+          ]
+        },
+        "F-31724bace976": {
+          "digest": "31724bace9761d295e68a7eb731021e12aa992bc7eeace1b74b3546961d12376",
+          "text": "**O2.** The inputs live under `/tmp`, a tmpfs cleared on reboot, and CP2\n  (D3's ratios) and CP3 (D5's observed `wall_seconds` per shard) need them\n  after CP1. D1's blocker clause makes a vanished directory safe, but it\n  would stall the item for an operator re-download. CP1 could record each\n  run's per-shard `wall_seconds` and shard atom sets (or the files' sha256)\n  on the item page, so later checkpoints do not depend on `/tmp` surviving.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "37f1e1f592560d89279cbf0428d4b4e386e1b6a3beed1e2f2a7c485ab681eb76",
+              "verdict": "APPROVE",
+              "at": "2026-11-16T17:37:46Z"
+            }
+          ]
+        },
+        "F-85a57e27fac4": {
+          "digest": "85a57e27fac4cff47660ec7caa0c773e2773a81cac8561254e284a936887e538",
+          "text": "Consider recording the stop conditions already apparent in the newly supplied artifacts. An in-memory merge yields **210.643 seconds** for `tests.test_codex_apply_regeneration.PlanRegenerationTest`, exceeding CP1’s 200-second ratchet. The refreshed matrix-shard ratios also remain below D3’s 1.15 qualification threshold. The plan explicitly handles both outcomes by stopping and reporting; the supplied inputs therefore support that reporting path rather than completing the proposed contention change.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "37f1e1f592560d89279cbf0428d4b4e386e1b6a3beed1e2f2a7c485ab681eb76",
+              "verdict": "APPROVE",
+              "at": "2026-11-16T17:41:54Z"
+            }
+          ]
         }
       },
       "amendment_history": [
@@ -79873,7 +79922,13 @@
           },
           "checkpoints_snapshot": {},
           "pre_amendment_approval_commit": "77ee65caa960c2c1737917a30a7ff1b48424a7e1",
-          "resolved_at_plan_revision": null
+          "resolved_at_plan_revision": 5,
+          "reconciliation_outcome": {
+            "CP1": "needs_revalidation",
+            "CP2": "needs_revalidation",
+            "CP3": "retained"
+          },
+          "resolved_review_content_id": "37f1e1f592560d89279cbf0428d4b4e386e1b6a3beed1e2f2a7c485ab681eb76"
         }
       ],
       "amendment_base_commit": "77ee65caa960c2c1737917a30a7ff1b48424a7e1"

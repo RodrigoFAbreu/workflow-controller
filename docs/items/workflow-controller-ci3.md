@@ -50,4 +50,4 @@ Consequence for releases: the `after-merge-*` jobs now run after `validate`, so 
 
 ## Measured run
 
-Not measured yet when this checkpoint was written: the pull request's `CI` run at its head was still queued. The figure is recorded here, and CI2 starts from it, once that run has finished; the planner estimate for option B is about 54 minutes.
+The pull request's `CI` run at `b5dc86b` (run 43844429224, 2026-11-16, three shards, `max-parallel: 3`) passed in **63.6 minutes**, from 09:57:22 to 11:01:00 UTC, against the planner estimate of about 54 minutes for option B and the 15 to 20 minute target. The three shards took 41.2, 55.6 and 62.1 minutes; `changes`, `docs-tests`, `plan`, `docs` and `package` together under 2 minutes, all before the first shard ended; the managed `workflow-conformance` run took 13.2 minutes beside them. The slowest shard sets the time, so the imbalance (41 to 62 minutes) is CI2's first lever. CI2 starts from this figure.

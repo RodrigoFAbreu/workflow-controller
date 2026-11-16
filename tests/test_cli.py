@@ -976,8 +976,17 @@ class RoutingOptionsPassThroughTest(_StepFixture, unittest.TestCase):
         self.assertEqual(calls, [])
 
     def test_a_read_only_call_runs_nothing_and_writes_no_catalogue(self) -> None:
+        from controller import model_discovery
         ran: list = []
-        self.enterContext(unittest.mock.patch.object(review, "run_bounded", lambda *a, **k: ran.append(a)))
+        real_lookup = model_discovery.lookup
+
+        def lookup_spy(name, runtime_root, **k):
+            # the lookup's run/resolve defaults are bound at definition, so patching
+            # review.run_bounded would prove nothing: hand it recording fakes instead
+            k["run"] = lambda *a, **kw: ran.append(a)
+            k["resolve"] = lambda _n: (_ for _ in ()).throw(RuntimeError("no binary may be resolved"))
+            return real_lookup(name, runtime_root, **k)
+        self.enterContext(unittest.mock.patch.object(model_discovery, "lookup", lookup_spy))
         with self.assertRaises(RoutingConfigError) as ctx:
             cli._routing_options(self._codex_route_args("gpt-6.1-terra"), self.runtime_root, allow_run=False)
         self.assertEqual(ran, [])

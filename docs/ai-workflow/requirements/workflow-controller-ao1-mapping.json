@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ao1",
+  "requirements": {
+    "R1": {
+      "description": "The committed policy sets auto_merge true and release_workflow ci.yml, and a test keeps the named workflow real and publishing",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The pages and the item record state the opt-in, the ci.yml release workflow and the caveat that a milestone bound before the change never auto-merges",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    }
+  }
+}

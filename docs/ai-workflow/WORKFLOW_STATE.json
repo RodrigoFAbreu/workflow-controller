@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-ao1",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -78031,6 +78031,247 @@
         },
         "evaluated_at": "2026-11-16T02:35:03Z",
         "workflow_release": "2.29.3"
+      }
+    },
+    "workflow-controller-ao1": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-ao1",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_AO1_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-ao1-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ao1-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 2,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "7eb15d2eae784f550873b291443d26ea1f73f227",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "a4e742b5a751f72fa0ceaa8add20fd4d5ae8106785b764d2e1bdd603cea4dcfb",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "a4e742b5a751f72fa0ceaa8add20fd4d5ae8106785b764d2e1bdd603cea4dcfb",
+        "approved_review_content_id": "65e97684e9648afb6fa73a16deb631d881f44d143c00d7ef83baa806f4693065",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_AO1_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "aab96f61f35b7b6f549aecca12dea98f304b71da"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-ao1-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d6d70828477f8c356b49f483c8388a8e27eebfbb"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-ao1-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c2902fd0dae8c3f962cc9362ea6cf50a832c91a9"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-16T05:36:03Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "65e97684e9648afb6fa73a16deb631d881f44d143c00d7ef83baa806f4693065",
+            "ledger": {
+              "local": {
+                "bundle_id": "a4e742b5a751f72fa0ceaa8add20fd4d5ae8106785b764d2e1bdd603cea4dcfb",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "d6b2f17adf1b0a6a3f399f400e5a77924fb9996641f8054334d76a9eb501ba1d",
+                "ledger_entry_sha256": "96cc9c072ac71b8d99c76a7cae29406cd4f67052370fcd968fed58b66546bd2f",
+                "run_ref": "session:local .ai-review/workflow-controller-ao1/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "a4e742b5a751f72fa0ceaa8add20fd4d5ae8106785b764d2e1bdd603cea4dcfb",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "11af9a7a0ec7d2559b5d271e1270ce73e0b9c29d902eb5fb2930f61a4c731b13",
+                "ledger_entry_sha256": "9e0baac1d596c159f0a17dc6b462361126b7c71bccfe49a852bd7559e9290ae4",
+                "run_ref": "codex:20261116T053216Z-ea7d4cbb",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-16T05:36:03Z",
+          "workflow_release": "2.29.3"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "65e97684e9648afb6fa73a16deb631d881f44d143c00d7ef83baa806f4693065",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "a4e742b5a751f72fa0ceaa8add20fd4d5ae8106785b764d2e1bdd603cea4dcfb",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-16T03:24:00Z",
+          "verdict_sha256": "d6b2f17adf1b0a6a3f399f400e5a77924fb9996641f8054334d76a9eb501ba1d",
+          "run_ref": "session:local .ai-review/workflow-controller-ao1/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "a4e742b5a751f72fa0ceaa8add20fd4d5ae8106785b764d2e1bdd603cea4dcfb",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-16T05:34:36Z",
+          "verdict_sha256": "11af9a7a0ec7d2559b5d271e1270ce73e0b9c29d902eb5fb2930f61a4c731b13",
+          "run_ref": "codex:20261116T053216Z-ea7d4cbb",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 2,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 9,
+      "last_transition": "2026-11-16T05:36:03Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-16T03:21:31Z",
+        "consumed": {
+          "review_content_id": "0650f58716b5a5688e12f31efe13092b393a448285527fcdb132752d5587b2d0",
+          "plan_revision": 1,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "65e97684e9648afb6fa73a16deb631d881f44d143c00d7ef83baa806f4693065",
+          "plan_revision": 2
+        },
+        "bound": {
+          "review_content_id": "65e97684e9648afb6fa73a16deb631d881f44d143c00d7ef83baa806f4693065",
+          "bundle_id": "a4e742b5a751f72fa0ceaa8add20fd4d5ae8106785b764d2e1bdd603cea4dcfb",
+          "plan_revision": 2
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "0650f58716b5a5688e12f31efe13092b393a448285527fcdb132752d5587b2d0"
+      ],
+      "optional_findings": {
+        "F-837703dad905": {
+          "digest": "837703dad90511cf3e7d653681db7cd98478444289e90a71d7a39a3fd48521ca",
+          "text": "**O1.** CP1's `**Tests:**` names `tests.test_milestone_branch`, but the prose lists only `tests.test_repo_policy`, `tests.test_ci_workflows` and `tests.test_version_authority`. Make the two consistent.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "0650f58716b5a5688e12f31efe13092b393a448285527fcdb132752d5587b2d0",
+              "verdict": "REVISE",
+              "at": "2026-11-16T03:20:19Z"
+            }
+          ]
+        },
+        "F-79cb2a05fe9b": {
+          "digest": "79cb2a05fe9bbae5b3757071d48d8a5fffcab7ce65e96c53488e85a0d7028fc8",
+          "text": "**O2.** D4's check that `ci.yml` \"has a `build-publish` job\" should say how the test reads the file. The repository is stdlib-only, so there is no YAML parser. `tests/test_ci_workflows.py` already loads the workflow files, and reusing that helper would keep the test from being a fragile substring match.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "0650f58716b5a5688e12f31efe13092b393a448285527fcdb132752d5587b2d0",
+              "verdict": "REVISE",
+              "at": "2026-11-16T03:20:19Z"
+            }
+          ]
+        },
+        "F-24714994db26": {
+          "digest": "24714994db268baea936d6beba8833a812fe784742079f48358fa5f6f6331b12",
+          "text": "**O3.** CP2 should also say that `docs/guide/milestone-branches.md`'s generic example (line 386, `\"release_workflow\": \"main.yml\"`) stays as it is. It shows the parser's default, not this repository's policy, so the \"drop any statement that `main.yml` is the release workflow\" sweep should not change it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "0650f58716b5a5688e12f31efe13092b393a448285527fcdb132752d5587b2d0",
+              "verdict": "REVISE",
+              "at": "2026-11-16T03:20:19Z"
+            }
+          ]
+        },
+        "F-eadac39a7d0a": {
+          "digest": "eadac39a7d0a8651598ec45284f713da06bdc17e18f6917ff71e088dfc805317",
+          "text": "**O1.** CP1 says `tests.test_milestone_branch` \"reads the committed policy through the milestone-branch code\". It does not read this repository's committed policy. It writes fixture policies into a scratch clone (`build_origin_pair`, `write_policy`), and its `read_committed_policy(self.clone)` at line 817 reads that clone. Running it is harmless, but the stated reason is wrong. Drop the module, or give the reason it is run (it exercises the milestone-branch code that reads `auto_merge` and `release_workflow`).",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "65e97684e9648afb6fa73a16deb631d881f44d143c00d7ef83baa806f4693065",
+              "verdict": "APPROVE",
+              "at": "2026-11-16T03:24:00Z"
+            }
+          ]
+        },
+        "F-9d4d990a6bb6": {
+          "digest": "9d4d990a6bb652abbd73195f82d155e01d72d95223c6a80f166913055ecfa6d3",
+          "text": "CP1’s testing rationale at `docs/ai-workflow/CONTROLLER_AO1_PLAN.md:45` is imprecise: `tests.test_milestone_branch` reads fixture policies committed in disposable repositories, rather than this repository’s committed policy. Describe it as milestone-branch regression coverage. Running it remains appropriate.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "65e97684e9648afb6fa73a16deb631d881f44d143c00d7ef83baa806f4693065",
+              "verdict": "APPROVE",
+              "at": "2026-11-16T05:34:36Z"
+            }
+          ]
+        }
       }
     }
   }

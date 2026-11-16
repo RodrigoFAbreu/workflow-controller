@@ -96,7 +96,7 @@
 | 90 | [Review follow-ups of the Codex worker items H4e2, H4e3 and H4e3b (#320, #339, #341)](items/workflow-controller-cx1.md) `workflow-controller-cx1` | Done | - | - |
 | 91 | [List the Codex models in use instead of one fixed model](items/workflow-controller-cm1.md) `workflow-controller-cm1` | Done | - | - |
 | 92 | [Review follow-ups of the Codex worker item H4f (#344)](items/workflow-controller-cx2.md) `workflow-controller-cx2` | Done | - | - |
-| 93 | [Opt this repository in to the Controller's auto-merge](items/workflow-controller-ao1.md) `workflow-controller-ao1` | Next | - | - |
+| 93 | [Opt this repository in to the Controller's auto-merge](items/workflow-controller-ao1.md) `workflow-controller-ao1` | Done | - | - |
 | 94 | [Align CI with the agreed standard: CI, Tests and Build and publish](items/workflow-controller-ci3.md) `workflow-controller-ci3` | Next | - | - |
 | 95 | [Owner-requested backlog and docs changes run through the Controller](items/workflow-controller-bl1.md) `workflow-controller-bl1` | Next | - | - |
 | 96 | [A manifest.json version source for the version_change release trigger](items/workflow-controller-vs1.md) `workflow-controller-vs1` | Next | - | - |

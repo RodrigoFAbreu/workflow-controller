@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-cm1",
+  "requirements": {
+    "R1": {
+      "description": "A route naming an undeclared Codex model is accepted when codex debug models lists it, cached with a timestamp, and no lookup runs when all models are declared or added",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    },
+    "R2": {
+      "description": "The pinned list is the floor: a failed lookup falls back to declared and added models, using a stale cache when present",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "An unknown model is refused with exit 20 naming declared, discovered and added models and the harness.models setting",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "The pages and the item record describe the lookup, cache, refusal and deferred follow-ups",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    }
+  }
+}

@@ -126,7 +126,6 @@ jobs:
     if: "!cancelled() && needs.validate.result == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'"
     permissions:
       contents: write
-      actions: read
     uses: "./.github/workflows/build-publish.yml"
     with:
       validate-result: "${{ needs.validate.result }}"

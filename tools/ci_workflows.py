@@ -569,8 +569,7 @@ GIT_CREDENTIAL_ENV = {
 def _after(*jobs: str) -> str:
     """Every job in ``jobs`` must have succeeded, explicitly. ``validate``
     has a skipped ``reuse`` ancestor whenever ``CI_MAIN_REUSE`` is not
-    ``on``, and a called ``build-publish.yml`` has a skipped ``validate`` of
-    its own; the implicit ``success()`` of a job looks at its whole
+    ``on``; the implicit ``success()`` of a job looks at its whole
     ``needs`` ancestry, so without this the release jobs would never run.
     ``!cancelled()`` is not ``always()``: a cancelled run still stops, and
     each prerequisite is still required to be ``success``."""
@@ -581,23 +580,19 @@ def _after(*jobs: str) -> str:
 #: the caller's ``validate`` and ``after-merge-<check>`` jobs on the same
 #: ``github.sha``. Empty (the default) means no caller validated anything.
 #: ``workflow_dispatch`` declares no inputs, so a manual run cannot claim a
-#: result: its ``inputs`` are null, and it validates itself.
+#: result: its ``inputs`` are null, which compares equal to ``''``.
 VALIDATE_RESULT_INPUT = "validate-result"
-#: The workflow validates the revision itself: nothing was handed in.
-SELF_VALIDATING = f"inputs.{VALIDATE_RESULT_INPUT} == ''"
-#: Exactly one of the two sources says the validation succeeded: the
-#: caller's result (the own ``validate`` is then skipped), or the own
-#: ``validate`` job (the input is then empty or null).
-VALIDATED = (f"(inputs.{VALIDATE_RESULT_INPUT} == 'success' || "
-             "needs.validate.result == 'success')")
+#: The caller validated the revision. Every job that builds or publishes
+#: requires exactly this, as a conjunct, so no input combination (null and
+#: empty included) reaches them without the caller's result (CI3 D2).
+VALIDATED = f"inputs.{VALIDATE_RESULT_INPUT} == 'success'"
+#: Nothing was handed in: a direct dispatch of ``build-publish.yml``.
+NO_RESULTS = f"inputs.{VALIDATE_RESULT_INPUT} != 'success'"
 
 
 def _after_merge_ok(check: str) -> str:
-    """The ``after-merge-<check>`` result for the pushed commit: the caller's
-    (handed in) or the own job's (dispatched). The own job runs only when
-    nothing was handed in, so the two never both count."""
-    return (f"(inputs.after-merge-{check} == 'success' || "
-            f"needs.after-merge-{check}.result == 'success')")
+    """The caller's ``after-merge-<check>`` result for the pushed commit."""
+    return f"inputs.after-merge-{check} == 'success'"
 
 
 def _publishing_condition() -> str:
@@ -612,9 +607,8 @@ TARGET_IS_PUSHED = "needs.release-plan.outputs.commit == github.sha"
 TARGET_IS_ANCESTOR = "needs.release-plan.outputs.commit != github.sha"
 
 
-#: The four jobs ``build`` and ``publish`` read through ``_coverage_condition``.
-CHECK_JOBS = tuple(f"{kind}-{check}" for kind in ("after-merge", "release-target")
-                   for check in MAIN_TEST_MODULES)
+#: The jobs ``build`` and ``publish`` read through ``_coverage_condition``.
+CHECK_JOBS = tuple(f"release-target-{check}" for check in MAIN_TEST_MODULES)
 
 
 def _coverage_condition() -> str:
@@ -645,7 +639,8 @@ def _main_check_job(check: str, *, release_target: bool, condition: str | None =
     if release_target:
         job.update({
             "needs": ["release-plan"],
-            "if": f"{_after('release-plan')} && {_publishing_condition()} && {TARGET_IS_ANCESTOR}",
+            "if": f"{_after('release-plan')} && {VALIDATED} && {_publishing_condition()} "
+                  f"&& {TARGET_IS_ANCESTOR}",
         })
     job.update({
         "runs-on": RUNNER,
@@ -743,11 +738,17 @@ def _validate_call(*, needs: list[str] | None = None, condition: str | None = No
 
 def build_publish_workflow() -> dict:
     """``build-publish.yml``: classify the trunk commit and, when a release
-    is due or resumable, build, verify and publish it. Called by ``ci.yml``
-    with its results (the revision is validated once); dispatched by hand,
-    it validates the revision itself first, with no reuse."""
+    is due or resumable, build, verify and publish it. It only builds and
+    publishes: ``ci.yml`` calls it with the results of the revision's
+    validation (tests.yml and the after-merge checks), and every job that
+    builds or publishes requires them. Dispatched by hand it is handed
+    nothing, so it classifies, names the CI dispatch that publishes, and
+    runs no test job (CI3 D2, D3)."""
     classify = ('python3 tools/release.py classify '
                 '--commit "$(git rev-parse "$GITHUB_SHA^{commit}")"')
+    notice = ("echo '::notice::Build and publish was handed no test results, so it builds "
+              "nothing. To publish, dispatch the CI workflow on main: it runs the tests and "
+              "calls this workflow with their results.'")
     caller_result = {"type": "string", "required": False, "default": ""}
     read = {"contents": "read"}
     return {
@@ -755,32 +756,23 @@ def build_publish_workflow() -> dict:
         "on": {
             "workflow_call": {"inputs": {
                 VALIDATE_RESULT_INPUT: {
-                    "description": "The caller's tests.yml result for github.sha; empty: validate here.",
+                    "description": "The caller's tests.yml result for github.sha.",
                     **caller_result},
                 **{f"after-merge-{check}": {
                     "description": f"The caller's after-merge-{check} result for github.sha.",
                     **caller_result} for check in MAIN_TEST_MODULES},
             }},
-            # No inputs: a manual run cannot hand in a result, so it validates.
+            # No inputs: a manual run cannot hand in a result, so it publishes nothing.
             "workflow_dispatch": None,
         },
-        # Dispatched on main, it takes the release slot like ci.yml's main
-        # runs. Called, its caller already holds that slot, and the same
-        # group here would deadlock, so a called run has a group of its own.
-        "concurrency": {"group": f"${{{{ {SELF_VALIDATING} && {ON_TRUNK} && '{RELEASE_SLOT}' || "
-                                 "format('build-publish-{0}', github.run_id) }}",
+        # Called, the caller holds the release slot; a group of its own here
+        # cannot deadlock against it, and no self-run test job remains.
+        "concurrency": {"group": "build-publish-${{ github.run_id }}",
                         "cancel-in-progress": False},
         "permissions": {"contents": "read"},
         "jobs": {
-            # Only when dispatched: called, the caller's results stand in.
-            "validate": _validate_call(condition=SELF_VALIDATING),
-            "after-merge-determinism": _main_check_job("determinism", release_target=False,
-                                                       condition=SELF_VALIDATING),
-            "after-merge-mutations": _main_check_job("mutations", release_target=False,
-                                                     condition=SELF_VALIDATING),
             "release-plan": {
-                "needs": ["validate"],
-                "if": f"!cancelled() && {VALIDATED} && {ON_TRUNK}",
+                "if": f"!cancelled() && {ON_TRUNK}",
                 "runs-on": RUNNER,
                 "permissions": dict(read),
                 "env": {"GH_TOKEN": "${{ github.token }}"},
@@ -789,12 +781,13 @@ def build_publish_workflow() -> dict:
                     _checkout(pinned=True, fetch_depth=0, fetch_tags=True),
                     _setup_python(pinned=True),
                     {"name": "classify", "id": "classify", "env": dict(GIT_CREDENTIAL_ENV), "run": classify},
+                    {"name": "no test results", "if": NO_RESULTS, "run": notice},
                 ],
             },
             "release-target-determinism": _main_check_job("determinism", release_target=True),
             "release-target-mutations": _main_check_job("mutations", release_target=True),
             "build": {
-                "needs": ["validate", "release-plan", *CHECK_JOBS],
+                "needs": ["release-plan", *CHECK_JOBS],
                 "if": f"!cancelled() && {VALIDATED} && needs.release-plan.result == 'success' "
                       f"&& {_publishing_condition()} && {_coverage_condition()}",
                 "runs-on": RUNNER,
@@ -814,7 +807,7 @@ def build_publish_workflow() -> dict:
                 ],
             },
             "publish": {
-                "needs": ["validate", "release-plan", "build", *CHECK_JOBS],
+                "needs": ["release-plan", "build", *CHECK_JOBS],
                 "if": f"!cancelled() && {VALIDATED} && needs.release-plan.result == 'success' "
                       f"&& needs.build.result == 'success' && {_publishing_condition()} "
                       f"&& {_coverage_condition()}",
@@ -878,9 +871,8 @@ def ci_workflow() -> dict:
             "build-publish": {
                 "needs": ["validate", "after-merge-determinism", "after-merge-mutations"],
                 "if": f"{_after('validate')} && {NOT_PULL_REQUEST} && {ON_TRUNK}",
-                # The union of what build-publish.yml's jobs ask for: publish
-                # writes; its validate (skipped here) reads actions.
-                "permissions": {"contents": "write", "actions": "read"},
+                # The most build-publish.yml's jobs ask for: publish writes.
+                "permissions": {"contents": "write"},
                 "uses": BUILD_PUBLISH_WORKFLOW,
                 "with": {VALIDATE_RESULT_INPUT: "${{ needs.validate.result }}",
                          **{f"after-merge-{check}": f"${{{{ needs.after-merge-{check}.result }}}}"
@@ -953,8 +945,7 @@ WORKFLOWS = {
                "checks on the pushed commit (tools/run_tests.py main-check); they are never reused or\n"
                "skipped. Every action outside validate is pinned to a full commit SHA."),
     "tests.yml": (tests_workflow,
-                     "The required validation, called by ci.yml (and by build-publish.yml when that is\n"
-                     "dispatched), or dispatched by hand. Its input tests-from-run is empty except when\n"
+                     "The required validation, called by ci.yml, or dispatched by hand. Its input tests-from-run is empty except when\n"
                      "ci.yml reuses a pull request run on main (CI_MAIN_REUSE=on); then the shards are\n"
                      "skipped and tests-result re-verifies that run's recorded results. A pull request\n"
                      "that changes only documentation (tools/ci_changes.py) skips plan and tests; the\n"
@@ -966,13 +957,15 @@ WORKFLOWS = {
                           "resumable, build, verify and publish it as one release transaction\n"
                           "(tools/release.py over controller/release_txn.py). Called by ci.yml on main after\n"
                           "its validate succeeded, with the validate and after-merge results for the same\n"
-                          "commit, so nothing is validated twice. Dispatched by hand (no inputs), it has no\n"
-                          "results and runs tests.yml and the after-merge checks itself first, taking the\n"
-                          "main-release slot on main. Every action outside validate is pinned to a full commit\n"
-                          "SHA; publish is the only job that can write.\n\n"
-                          "build and publish need the after-merge checks of the commit being published: the\n"
-                          "after-merge results when it is the pushed commit, otherwise release-target-* run on\n"
-                          "it.\n\n"
+                          "commit, so nothing is validated twice. It runs no test of the pushed commit and\n"
+                          "orchestrates none: build and publish require the caller's validate result. Dispatched\n"
+                          "by hand (no inputs) it classifies, names the CI dispatch that publishes, and builds\n"
+                          "nothing. Every action is pinned to a full commit SHA; publish is the only job that\n"
+                          "can write.\n\n"
+                          "build and publish also need the after-merge checks of the commit being published: the\n"
+                          "caller's after-merge results when it is the pushed commit, otherwise release-target-*,\n"
+                          "the one test run left here, on the ancestor release-plan picked (only inside a run the\n"
+                          "caller validated).\n\n"
                           + GITHUB_SHA_NOTE + "\n\n" + GH_RELEASE_CREATE_NOTE),
     "main-reuse-report.yml": (reuse_report_workflow,
                               "Report-only reuse (CI_MAIN_REUSE unset, report or an unknown value): logs, in\n"

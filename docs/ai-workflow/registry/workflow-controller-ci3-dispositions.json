@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ci3",
+  "dispositions": {
+    "F-0aeeff3d218e": {"disposition": "fixed", "reason": "The item page no longer says \"8-shard plan\"."},
+    "F-13608add1f75": {"disposition": "fixed", "reason": "Plan D1 now says validate_workflow() becomes tests_workflow() and names the callers updated with it."},
+    "F-16a916fa7ef0": {"disposition": "dropped", "reason": "Maintainability nit on a generator helper (the validate needs coupling is correct for ci.yml, the only caller). Editing now would stale the technical approval for no behavioural gain."},
+    "F-3054b54d1dfa": {"disposition": "fixed", "reason": "Plan CP3 now names the three dispatchable workflows (ci.yml on main and on another branch, tests.yml alone, build-publish.yml)."},
+    "F-3cc9d8085626": {"disposition": "dropped", "reason": "The redundant first assertion is harmless; the test still pins the job ids and the PR title name. Editing now would stale the technical approval for no behavioural gain."},
+    "F-43054b27e2a9": {"disposition": "dropped", "reason": "Two pre-CI3 timing figures in a guide paragraph and a planner comment, both labelled as measured on their date. Editing now would stale the technical approval; CI2 re-measures and rewrites the timing text."},
+    "F-48296eac3a09": {"disposition": "fixed", "reason": "docs/guide/ci-and-releases.md no longer names validate.yml anywhere."},
+    "F-70013bc42689": {"disposition": "fixed", "reason": "Plan O1 now says the CP3 implementer asks the owner through SignalHub and the Controller does not pause."},
+    "F-b1bbf533e2f3": {"disposition": "fixed", "reason": "docs/items/workflow-controller-ci3.md now says \"a direct dispatch runs no test job\"."},
+    "F-b3367dcfb35b": {"disposition": "dropped", "reason": "Wording nit in the approved plan about an existing planner load; the plan is a historical record and the implemented test reads CI_MAX_SHARDS as specified."},
+    "F-bcf2c971b8ff": {"disposition": "dropped", "reason": "The release-latency cost lacked a number in the approved plan; the plan is a historical record and CP3's measured run is recorded in the item page."},
+    "F-eb48ea51d1db": {"disposition": "dropped", "reason": "R3 wording differs slightly from D4's arithmetic in the approved plan; the implemented test counts the outside runners as D4 states. The plan is a historical record."}
+  }
+}

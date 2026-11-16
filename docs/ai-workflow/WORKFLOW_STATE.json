@@ -78042,7 +78042,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ao1-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ao1-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 2,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -78151,7 +78151,108 @@
           "workflow_release": "2.29.3"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "81f9a4e546a9cc137e19d2da5018fb30a2d5b71d5c3238ddf2647932786c281f",
+        "approved_review_content_id": "b14d83ddca81c888b490fd69f0ddfacf4652ac535ec9f57c2b177a955ad8bb11",
+        "review_content_manifest": [
+          {
+            "path": ".workflow-controller/policy.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6597afbc505de16062cc9ce5165eb745bd7590f8"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-ao1-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b0ac633304a9628c8a71d1ade2aff54e17c591a0"
+          },
+          {
+            "path": "docs/guide/ci-and-releases.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "263f77d519336988c274a5c035c3b49076782b6f"
+          },
+          {
+            "path": "docs/guide/milestone-branches.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5db48df581967ed1e36cca7617a402a42d99138c"
+          },
+          {
+            "path": "tests/test_repo_policy.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "bc163666f4a96de5b0caec36190f1dec7683c3e2"
+          }
+        ],
+        "reviewed_content_commit": "e50bf9a8838f226b1ad88873ddba53ccdad7cc9d",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-16T06:02:51Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "b14d83ddca81c888b490fd69f0ddfacf4652ac535ec9f57c2b177a955ad8bb11",
+            "ledger": {
+              "local": {
+                "bundle_id": "81f9a4e546a9cc137e19d2da5018fb30a2d5b71d5c3238ddf2647932786c281f",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "d5673e3a34e811135fde204926d1f48ed7389a1e966682abb496278f718eb324",
+                "ledger_entry_sha256": "9f227a384ab44603656f621a02139ec3de5e011a327fd365119a3e9ce1e050b1",
+                "run_ref": "session:local .ai-review/workflow-controller-ao1/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "81f9a4e546a9cc137e19d2da5018fb30a2d5b71d5c3238ddf2647932786c281f",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "853dd20d817eb2614edabf0ef537fd649c417c65be195b5a67bcab1f106b132b",
+                "ledger_entry_sha256": "09c3f1628d279c40c220c77227999e7926e6943abf74f09e4190ee33e47eda00",
+                "run_ref": "codex:20261116T055911Z-40835407",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-16T06:02:51Z",
+          "workflow_release": "2.29.3"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "65e97684e9648afb6fa73a16deb631d881f44d143c00d7ef83baa806f4693065",
@@ -78182,12 +78283,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 14,
-      "last_transition": "2026-11-16T05:56:12Z",
+      "state_revision": 17,
+      "last_transition": "2026-11-16T06:02:51Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -78280,6 +78381,55 @@
               "at": "2026-11-16T05:34:36Z"
             }
           ]
+        },
+        "F-0b5d3e38cabf": {
+          "digest": "0b5d3e38cabf9b05790cda8a7b33b2e7826ba704997ac7f8af020481d8394f65",
+          "text": "**O1.** `docs/guide/ci-and-releases.md`, Repository settings: \"The operator switch `merge.auto` in the settings file (default true) still turns the merge off\" can be read as the switch turning the merge off by default. Say that setting `merge.auto` to false turns the merge off.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "b14d83ddca81c888b490fd69f0ddfacf4652ac535ec9f57c2b177a955ad8bb11",
+              "verdict": "APPROVE",
+              "at": "2026-11-16T05:58:52Z"
+            }
+          ]
+        },
+        "F-0e494cc0fa33": {
+          "digest": "0e494cc0fa3330244196e33b5474489ff6da28a0a4a10f928606179c6b457f70",
+          "text": "**O2.** `docs/guide/milestone-branches.md` line 21: \"By its opt-in the Controller merges them itself\" leaves \"its\" without a clear referent. Name the policy, e.g. \"This repository's policy opts in, so the Controller merges them itself and waits for the `ci.yml` release workflow\".",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "b14d83ddca81c888b490fd69f0ddfacf4652ac535ec9f57c2b177a955ad8bb11",
+              "verdict": "APPROVE",
+              "at": "2026-11-16T05:58:52Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "b14d83ddca81c888b490fd69f0ddfacf4652ac535ec9f57c2b177a955ad8bb11",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "81f9a4e546a9cc137e19d2da5018fb30a2d5b71d5c3238ddf2647932786c281f",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-16T05:58:52Z",
+          "verdict_sha256": "d5673e3a34e811135fde204926d1f48ed7389a1e966682abb496278f718eb324",
+          "run_ref": "session:local .ai-review/workflow-controller-ao1/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "81f9a4e546a9cc137e19d2da5018fb30a2d5b71d5c3238ddf2647932786c281f",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-16T06:01:11Z",
+          "verdict_sha256": "853dd20d817eb2614edabf0ef537fd649c417c65be195b5a67bcab1f106b132b",
+          "run_ref": "codex:20261116T055911Z-40835407",
+          "reviewer_model": "openai/gpt-6.1-sol"
         }
       }
     }

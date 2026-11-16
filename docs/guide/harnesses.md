@@ -62,7 +62,9 @@ adapter does not declare, the Controller looks up the models the Codex CLI
 lists, caches the answer for 24 hours and accepts them (see
 [the Codex model lookup](runtime.md#the-routing-section)). Only `step` and
 `run` run that lookup; `explain` never runs `codex` or writes the cache, and
-answers from the cache, or reports `not looked up`.
+answers from the cache only. With no cache it shows no lookup status and no route
+refusal: it carries on as if the route had no override, and `step` and `run`
+are the commands that report the refusal.
 
 The tables change when an adapter gains or loses a role, so a role that is
 `no` today (the Codex worker, the Codex tester) becomes `yes` in the same change

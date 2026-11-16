@@ -748,8 +748,9 @@ the lookup again and rewrites it. The declared and added models are the floor:
 a lookup that fails (no binary, an error, a timeout, an unreadable answer)
 accepts them and uses a stale cache when there is one. A configuration whose
 models are all declared or added never runs `codex`, and `explain` never runs
-it or writes the cache: it answers from the cache, or reports `not looked up`.
-A model still unknown is refused with exit `20`, and the message ends with
+it or writes the cache: it answers from the cache only, and with no cache it
+shows no lookup status (it shows no route refusal either).
+A model still unknown is refused by `step` and `run` with exit `20`, and the message ends with
 `(accepted for codex: declared [...]; discovered [...] | not looked up |
 unavailable: <reason> | stale cache from <time> [...]; added by harness.models
 [...])` followed by the `harness.models` hint, so the refusal names every

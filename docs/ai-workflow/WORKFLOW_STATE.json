@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-ci2",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -79480,6 +79480,305 @@
         },
         "evaluated_at": "2026-11-16T12:11:38Z",
         "workflow_release": "2.29.3"
+      }
+    },
+    "workflow-controller-ci2": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-ci2",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CI2_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-ci2-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci2-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 4,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "a785d4f8a645f54618779fbf93a58a1f51559165",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "faa8e6d849b9dc5a88f50a2bc79cb17081eb3460514b1c48be3b2107f0c76891",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "faa8e6d849b9dc5a88f50a2bc79cb17081eb3460514b1c48be3b2107f0c76891",
+        "approved_review_content_id": "055aff70969d3be095dde5fbcd4bd5a64ee57c4d33da8e3a29e9a16b7270260d",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CI2_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f5945cee6091fa4cc3b476ef2c71fe1d79e8c67a"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-ci2-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "bec395c9d252ecaadded665dd46a8ed9b001faac"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-ci2-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d7b9d45176bdb75b3bdab2ba4e5b5204a75cb159"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-16T16:13:57Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "055aff70969d3be095dde5fbcd4bd5a64ee57c4d33da8e3a29e9a16b7270260d",
+            "ledger": {
+              "local": {
+                "bundle_id": "faa8e6d849b9dc5a88f50a2bc79cb17081eb3460514b1c48be3b2107f0c76891",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "1fee28e73c2aab448d60dbda2253cfbd27049d1909d19894871ad2bc10880938",
+                "ledger_entry_sha256": "2cf7c022d8466c975872bba6128542b363c6d835e2dcacba560c21ffa6f0b9ff",
+                "run_ref": "session:local .ai-review/workflow-controller-ci2/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "faa8e6d849b9dc5a88f50a2bc79cb17081eb3460514b1c48be3b2107f0c76891",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "f98771c721dfb39dd3b52c86550953ce7c84279952347362fdf82fb3375359ab",
+                "ledger_entry_sha256": "6fde39aa5ccb8530efc3ba8ade46d4e57ec74bb2ef9801caf4f5b298bcf2c34f",
+                "run_ref": "codex:20261116T161011Z-eda4cd93",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-16T16:13:57Z",
+          "workflow_release": "2.29.3"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "055aff70969d3be095dde5fbcd4bd5a64ee57c4d33da8e3a29e9a16b7270260d",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "faa8e6d849b9dc5a88f50a2bc79cb17081eb3460514b1c48be3b2107f0c76891",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-11-16T15:34:35Z",
+          "verdict_sha256": "1fee28e73c2aab448d60dbda2253cfbd27049d1909d19894871ad2bc10880938",
+          "run_ref": "session:local .ai-review/workflow-controller-ci2/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "faa8e6d849b9dc5a88f50a2bc79cb17081eb3460514b1c48be3b2107f0c76891",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-11-16T16:12:05Z",
+          "verdict_sha256": "f98771c721dfb39dd3b52c86550953ce7c84279952347362fdf82fb3375359ab",
+          "run_ref": "codex:20261116T161011Z-eda4cd93",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 4,
+          "external": 2
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 16,
+      "last_transition": "2026-11-16T16:13:57Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-16T15:32:53Z",
+        "consumed": {
+          "review_content_id": "3015037d976d46c186b34b9a69c637204cdb1fc9e41f7b5f541c64e0511c2455",
+          "plan_revision": 3,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "055aff70969d3be095dde5fbcd4bd5a64ee57c4d33da8e3a29e9a16b7270260d",
+          "plan_revision": 4
+        },
+        "bound": {
+          "review_content_id": "055aff70969d3be095dde5fbcd4bd5a64ee57c4d33da8e3a29e9a16b7270260d",
+          "bundle_id": "faa8e6d849b9dc5a88f50a2bc79cb17081eb3460514b1c48be3b2107f0c76891",
+          "plan_revision": 4
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "3015037d976d46c186b34b9a69c637204cdb1fc9e41f7b5f541c64e0511c2455",
+        "998a3c4667ff722ec3207c9a213df838072ba6ba038840fbe7e657dc9b0711c9",
+        "c7cc415c3ed26a166e0f0fc8f4f53e25f86073aa7b6ce46fd13d8041936155e8"
+      ],
+      "optional_findings": {
+        "F-0f5413a60ac9": {
+          "digest": "0f5413a60ac9978e1ecad80c7d7c7860e63e031975ed5ef90ffcf9c08ce772dc",
+          "text": "O1. The goal table puts scope item 1 in two slices: the refresh and estimates here, \"the automation of the timings refresh\" in ci2d. The table states this, but the claim that each scope item is in exactly one slice is then not literally true. Say that item 1 is split, and why.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "998a3c4667ff722ec3207c9a213df838072ba6ba038840fbe7e657dc9b0711c9",
+              "verdict": "REVISE",
+              "at": "2026-11-16T15:22:46Z"
+            }
+          ]
+        },
+        "F-9d88f611170c": {
+          "digest": "9d88f611170cdae185e0f0bd2151633fd0538c548860afe6a47dcb5e0b2991b5",
+          "text": "O2. D1 should state that a `main` run that reused a pull request's results (`CI_MAIN_REUSE`) does not qualify and that duplicate `shard-*.json` records are dropped before `timings merge`. A reuse run re-uploads the pull request's records byte for byte, and `update_timings` would fold the same observation twice. \"That ran the shards\" implies this but does not say it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "998a3c4667ff722ec3207c9a213df838072ba6ba038840fbe7e657dc9b0711c9",
+              "verdict": "REVISE",
+              "at": "2026-11-16T15:22:46Z"
+            }
+          ]
+        },
+        "F-60dca9e48ea1": {
+          "digest": "60dca9e48ea1d79366b6f3ab2c383a152e33d6d20faa004180f075db4a939199",
+          "text": "O3. D4's test, \"the set of test ids in the CI plan at the base commit equals the set after the change\", cannot be a lasting unit test, because the base commit's inventory is not available later. Phrase it as: plans built over the same selection with and without `CONFORMANCE_CONTENTION` have identical `selected_ids` and identical test-id sets across shards.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "998a3c4667ff722ec3207c9a213df838072ba6ba038840fbe7e657dc9b0711c9",
+              "verdict": "REVISE",
+              "at": "2026-11-16T15:22:46Z"
+            }
+          ]
+        },
+        "F-4c01fe429cda": {
+          "digest": "4c01fe429cda20d5a047ee5f6f92559a31c505d748d7f9a36fb477c2997d71fa",
+          "text": "O4. Backlog `order` values are unique integers and run contiguously (95 is ci2, 96 is bl1, and so on). Placing four items \"directly after\" ci2 means renumbering every later item. CP3 should say so, along with whether ci2b to ci2e carry `depends_on: [workflow-controller-ci2]`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "998a3c4667ff722ec3207c9a213df838072ba6ba038840fbe7e657dc9b0711c9",
+              "verdict": "REVISE",
+              "at": "2026-11-16T15:22:46Z"
+            }
+          ]
+        },
+        "F-8e74d4253df1": {
+          "digest": "8e74d4253df1b9adea8e10b335ddfdef65710fec92ed1441495cc72874952f20",
+          "text": "O5. The item page names #317 as a source. The plan says how #322 and #324 are handled but not what happens to #317 (closed by which slice, or left open until ci2d).",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "998a3c4667ff722ec3207c9a213df838072ba6ba038840fbe7e657dc9b0711c9",
+              "verdict": "REVISE",
+              "at": "2026-11-16T15:22:46Z"
+            }
+          ]
+        },
+        "F-4f223b93c17d": {
+          "digest": "4f223b93c17dcd413ade2224b6b083b4c827ca4656107fd82e568375fba043bd",
+          "text": "O1. D3's observed `wall_seconds` includes the shard's fixed costs (process start, inventory and plan load) as well as its atoms, and the shards without the matrix carry those costs too. If the ratio on the shards without the matrix also comes out well above 1.15, part of the matrix shard's gap is common overhead and not matrix contention. Putting all of it into `CONFORMANCE_CONTENTION` would then over-penalise that one shard. CP2 should record both ratios side by side, as D3 says. When the shards without the matrix also drift from 1.15, it should report that gap on the page and not fold it into the matrix factor.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "c7cc415c3ed26a166e0f0fc8f4f53e25f86073aa7b6ce46fd13d8041936155e8",
+              "verdict": "APPROVE",
+              "at": "2026-11-16T15:26:27Z"
+            }
+          ]
+        },
+        "F-db7eece81e1c": {
+          "digest": "db7eece81e1c44af479ce185ca3eb2d21ae78983fa1db2a42b1cb726671bb9e8",
+          "text": "O2. `tools/test_timings.json` changed once after `065ca1e`: commit `9117db9` (#357, 2026-11-15) rewrote 10 lines. D2's derivation (\"drift per day from the git history since `065ca1e`\") should say whether that commit added timed atoms. If it did, the drift baseline moves with it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "c7cc415c3ed26a166e0f0fc8f4f53e25f86073aa7b6ce46fd13d8041936155e8",
+              "verdict": "APPROVE",
+              "at": "2026-11-16T15:26:27Z"
+            }
+          ]
+        },
+        "F-ff87edb6fb4c": {
+          "digest": "ff87edb6fb4cc233f45b2422bbd3f4a24c1de344af96536501184adbaf0ba7db",
+          "text": "O3. `tests/test_scenarios.py` pins no estimate figure. Its planner check is `test_the_ci_plan_stays_within_the_shard_ceiling`, which a larger factor on the matrix shard could push over the ceiling. CP2's \"update the pinned numbers … that the new estimates move\" should say that this ceiling check is the one to re-run, and that it must pass and not be loosened.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "c7cc415c3ed26a166e0f0fc8f4f53e25f86073aa7b6ce46fd13d8041936155e8",
+              "verdict": "APPROVE",
+              "at": "2026-11-16T15:26:27Z"
+            }
+          ]
+        },
+        "F-4ae1d0d843fb": {
+          "digest": "4ae1d0d843fb970f2abfc4e8ab9ea2dec92492b1376b5c7da7a8858b944ef5c5",
+          "text": "**O1. Describe D3 as calibration using the refreshed profile.** Its ratio depends on CP1’s refresh: `update_timings` incorporates the same observations used in the numerator. The shard-level calculation can calibrate the resulting estimator, but “independent of the refresh by construction” overstates what it establishes.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "c7cc415c3ed26a166e0f0fc8f4f53e25f86073aa7b6ce46fd13d8041936155e8",
+              "verdict": "REVISE",
+              "at": "2026-11-16T15:29:15Z"
+            }
+          ]
+        }
       }
     }
   }

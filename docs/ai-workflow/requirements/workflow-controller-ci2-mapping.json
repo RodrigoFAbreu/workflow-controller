@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ci2",
+  "requirements": {
+    "R1": {
+      "description": "The committed timings are measured on CI and cover the inventory, and a ratchet fails when the untimed share grows past its limit",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The planner applies a measured contention factor to the acceptance matrix and leaves every other suite and every selected test unchanged",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "The guides, the item pages and the backlog state the result, the measured effect and the split into ci2b to ci2e",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    }
+  }
+}

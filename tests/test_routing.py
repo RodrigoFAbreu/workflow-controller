@@ -674,6 +674,24 @@ class CodexTesterRouteTest(unittest.TestCase):
         route = routing.RoutingOptions().resolve("functional-tester")
         self.assertEqual((route.harness, route.model, route.effort), ("claude-code", "claude-sonnet-5-5", "medium"))
 
+class ModelDiscoveryRecordTest(unittest.TestCase):
+    """``routing.ModelDiscovery`` and its source names (CM1, D2)."""
+
+    def test_the_record_is_frozen(self) -> None:
+        record = routing.ModelDiscovery(("a",), routing.SOURCE_DISCOVERED, "2026-11-16T00:00:00Z")
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            record.models = ("b",)  # type: ignore[misc]
+        self.assertEqual(routing.ModelDiscovery(["a"]).models, ("a",))
+
+    def test_the_sources_are_the_six_names(self) -> None:
+        self.assertEqual(
+            set(routing.DISCOVERY_SOURCES),
+            {"cache", "discovered", "stale", "not_looked_up", "unavailable", "unsupported"},
+        )
+        self.assertEqual(len(routing.DISCOVERY_SOURCES), 6)
+        with self.assertRaises(ValueError):
+            routing.ModelDiscovery(source="guessed")
+
 
 if __name__ == "__main__":
     unittest.main()

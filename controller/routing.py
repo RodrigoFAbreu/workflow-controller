@@ -704,6 +704,38 @@ def resolve_route(
     )
 
 
+#: How the models a harness lists were obtained (CM1, D2). ``model_discovery``
+#: builds the record; this module only reads it, so it never imports
+#: ``model_discovery`` (which needs ``review``, later in the dependency order).
+SOURCE_CACHE = "cache"
+SOURCE_DISCOVERED = "discovered"
+SOURCE_STALE = "stale"
+SOURCE_NOT_LOOKED_UP = "not_looked_up"
+SOURCE_UNAVAILABLE = "unavailable"
+SOURCE_UNSUPPORTED = "unsupported"
+DISCOVERY_SOURCES = (
+    SOURCE_CACHE, SOURCE_DISCOVERED, SOURCE_STALE, SOURCE_NOT_LOOKED_UP, SOURCE_UNAVAILABLE, SOURCE_UNSUPPORTED,
+)
+
+
+@dataclasses.dataclass(frozen=True)
+class ModelDiscovery:
+    """The answer of one model lookup for one harness: the listed ``models``,
+    where they came from (``source``, one of :data:`DISCOVERY_SOURCES`), when
+    they were fetched (``fetched_at``, UTC ISO 8601, ``None`` when nothing was
+    read) and, for a lookup that failed or did not run, why (``reason``)."""
+
+    models: tuple[str, ...] = ()
+    source: str = SOURCE_NOT_LOOKED_UP
+    fetched_at: str | None = None
+    reason: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.source not in DISCOVERY_SOURCES:
+            raise ValueError(f"source {self.source!r} is not one of {DISCOVERY_SOURCES}")
+        object.__setattr__(self, "models", tuple(self.models))
+
+
 def check_route_values(
     role: str, harness_name: str, model: str | None, effort: str | None,
     extra_models: Mapping[str, tuple[str, ...]],

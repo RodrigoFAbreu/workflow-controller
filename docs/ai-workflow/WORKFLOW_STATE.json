@@ -77277,7 +77277,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-cm1-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-cm1-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 4,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -77390,7 +77390,156 @@
           "workflow_release": "2.29.3"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "3d8c46972d9fe7d8b56d466060a62eca4967ec2aa36e061f964cc1654d7ad35b",
+        "approved_review_content_id": "51c80fd4994bdea2faadebfa1210d05d85c66d43c7f45d27cda3722f1d6d8a65",
+        "review_content_manifest": [
+          {
+            "path": "controller/__init__.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d57984862fc4009690b95b81b79c6baf5101248e"
+          },
+          {
+            "path": "controller/cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e0c9b7dea4b712125e54eb2ef67972656b61933f"
+          },
+          {
+            "path": "controller/model_discovery.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "29ab613342c73ff6754e97081f0cf87f39c09718"
+          },
+          {
+            "path": "controller/routing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f5f5ca8dcdda87d02ff6686df3fd6f1ee730bc16"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-cm1-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c7594e85d88a1d6dc80aac8282426efc63851741"
+          },
+          {
+            "path": "docs/common-problems.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "03e8b1a662d9c731ac064c220e99792f94685ee7"
+          },
+          {
+            "path": "docs/guide/commands.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "34d9f0c5c9a26f0cb7e27a0f2a860d4cfea92c9f"
+          },
+          {
+            "path": "docs/guide/harnesses.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "34abb1dd534595d46fcc62e5208a6c6a6f5ab982"
+          },
+          {
+            "path": "docs/guide/runtime.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1875e53943bfaad39c9deffce8795e91def47e7e"
+          },
+          {
+            "path": "tests/test_cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b7e77820a340a41c790d836fb1689de3301ed2d3"
+          },
+          {
+            "path": "tests/test_model_discovery.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "eda6f0461004ef4a95681265111d0807b510b81d"
+          },
+          {
+            "path": "tests/test_package_structure.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "db7cc45c0b6a879e52470fc377adcfb3f1ea0b63"
+          },
+          {
+            "path": "tests/test_routing.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "7266f415d0ff8bbf0ead3a49badcda400971c04f"
+          }
+        ],
+        "reviewed_content_commit": "3e5ae1a73b817f75ef117a53d0822ebffdd21624",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-16T01:23:54Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "51c80fd4994bdea2faadebfa1210d05d85c66d43c7f45d27cda3722f1d6d8a65",
+            "ledger": {
+              "local": {
+                "bundle_id": "3d8c46972d9fe7d8b56d466060a62eca4967ec2aa36e061f964cc1654d7ad35b",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "de711f85a6103c8f74553079fcb375b8fdd9a6784fc8cbc7f1ac3916e2385257",
+                "ledger_entry_sha256": "b7373056d9b2051fcea80ebfe79708f709c2d40db8c072f5a1d54150fc8f9804",
+                "run_ref": "session:local .ai-review/workflow-controller-cm1/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "3d8c46972d9fe7d8b56d466060a62eca4967ec2aa36e061f964cc1654d7ad35b",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "c2abf4d723e5c1db9fdef31cd5579c03d5e516ee3e29a9944fec7ad1ac585343",
+                "ledger_entry_sha256": "18f8d47d20e17acc098e5684919cf3e1f5e15155655812951da58c802a2b38fa",
+                "run_ref": "codex:20261116T011751Z-802b8fe2",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-16T01:23:54Z",
+          "workflow_release": "2.29.3"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "e527c7bef9d826b55df7ef1b4b07eb16f14939c46aad2f75cbab9ba75fd02eb0",
@@ -77421,12 +77570,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 1,
-          "external": 0
+          "local": 2,
+          "external": 1
         }
       },
-      "state_revision": 24,
-      "last_transition": "2026-11-16T01:14:40Z",
+      "state_revision": 27,
+      "last_transition": "2026-11-16T01:23:54Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -77563,6 +77712,55 @@
               "at": "2026-11-16T01:12:27Z"
             }
           ]
+        },
+        "F-147b7ebe4a7d": {
+          "digest": "147b7ebe4a7dbb5063eb13dc125022d6c2345ab89efc9a3bc442b9fc658608ed",
+          "text": "**O1. `explain`'s read-only behaviour is still pinned by a source-text check, not by behaviour.** This carries over from round 1 and was not applied (the summary states that). `test_explain_builds_its_routing_options_read_only` asserts that `\"allow_run=False\"` appears in `inspect.getsource(cli.cmd_explain)`. A test that runs `explain` on a route naming an unlisted Codex model, with `review.run_bounded` patched to record calls, and asserts no call, no `model-catalog/` and a successful exit would pin the CP2 case directly.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "51c80fd4994bdea2faadebfa1210d05d85c66d43c7f45d27cda3722f1d6d8a65",
+              "verdict": "APPROVE",
+              "at": "2026-11-16T01:17:16Z"
+            }
+          ]
+        },
+        "F-276a58c2ca99": {
+          "digest": "276a58c2ca99885a41419dc8a384949572a145e2930a01be9b4310b915de4553",
+          "text": "**O1 — Test `explain` behavior directly.** `tests/test_cli.py:988` checks only whether `allow_run=False` appears in the function’s source. Consider invoking `cmd_explain` with an unknown Codex model and asserting successful completion, no lookup execution, and no cache write.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "51c80fd4994bdea2faadebfa1210d05d85c66d43c7f45d27cda3722f1d6d8a65",
+              "verdict": "APPROVE",
+              "at": "2026-11-16T01:22:19Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "51c80fd4994bdea2faadebfa1210d05d85c66d43c7f45d27cda3722f1d6d8a65",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "3d8c46972d9fe7d8b56d466060a62eca4967ec2aa36e061f964cc1654d7ad35b",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-16T01:17:16Z",
+          "verdict_sha256": "de711f85a6103c8f74553079fcb375b8fdd9a6784fc8cbc7f1ac3916e2385257",
+          "run_ref": "session:local .ai-review/workflow-controller-cm1/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "3d8c46972d9fe7d8b56d466060a62eca4967ec2aa36e061f964cc1654d7ad35b",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-16T01:22:19Z",
+          "verdict_sha256": "c2abf4d723e5c1db9fdef31cd5579c03d5e516ee3e29a9944fec7ad1ac585343",
+          "run_ref": "codex:20261116T011751Z-802b8fe2",
+          "reviewer_model": "openai/gpt-6.1-sol"
         }
       }
     }

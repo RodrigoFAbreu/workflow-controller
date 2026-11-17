@@ -81390,12 +81390,12 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci2c-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci2c-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_FUNCTIONAL_REVIEW",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 2,
-      "implementation_revision": 1,
+      "implementation_revision": 2,
       "functional_review_round": null,
       "base_commit": "04ad54507224072eb375d30d31fd5adb2358b056",
-      "reviewed_implementation_head": "8d84f6d4a8b99d5e6d894567043fc29285a6056c",
+      "reviewed_implementation_head": "91db51c47220873ab1d081705f611b652b32538a",
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": "CP4",
       "checkpoints": {
@@ -81661,8 +81661,8 @@
           "external": 1
         }
       },
-      "state_revision": 23,
-      "last_transition": "2026-11-17T18:49:41Z",
+      "state_revision": 25,
+      "last_transition": "2026-11-17T18:54:16Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -81955,7 +81955,9 @@
           "reopened_for": [
             "[376,\"checks_failed\",\"84a24097a50b43e52e0911c476a3b2daf959b8aa\",[\"validate / tests (0)\",\"validate / tests-result\"]]"
           ],
-          "applied": [],
+          "applied": [
+            "[376,\"checks_failed\",\"84a24097a50b43e52e0911c476a3b2daf959b8aa\",[\"validate / tests (0)\",\"validate / tests-result\"]]"
+          ],
           "ingest_seq": 1
         }
       },

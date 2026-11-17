@@ -724,53 +724,51 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-ci2c` (CI2c: fixture snapshot reuse), implementation revision 3 (technical approval by policy `e744898`), plan
-`docs/ai-workflow/CONTROLLER_CI2C_PLAN.md` (revision 3), base commit `04ad545`. Revision 3 follows the red pull request: `AdoptedPolicyLoopTest` is now `SHARE_SNAPSHOT = False` (flow 7). Four checkpoints, all complete: CP1 (snapshot outcome counters and
-`WFC_SNAPSHOT_REPORT`), CP2 (a snapshot key holds what the drive reads: `late` parts and the `life.late` guard), CP3 (the review case reaches
-`to_manual_plan_review` once per process) and CP4 (the figures, the pages and the CI2f/CI2g split). A `ci:` change that edits tests, test helpers and pages
-only; it publishes no release.
-Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the
-system directories, and no write inside the read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write only
-to the scratch `TMPDIR`. No flow needs a pull request or a forge call, and none runs the full suite.
+Item `workflow-controller-ci2d` (CI2d: after-merge and trigger policy, and the automated timings refresh), implementation revision 3 (technical approval by policy `a07deab`), plan
+`docs/ai-workflow/CONTROLLER_CI2D_PLAN.md` (revision 4), base commit `a9a25a5`. Five checkpoints, all complete: CP1 (change detection classifies a push and a Draft head), CP2 (the trigger policy in the generated
+workflows), CP3 (the mutation check in three legs), CP4 (the automated timings refresh) and CP5 (the pages and the follow-up). Revisions 2 and 3 are review fixes: a documentation-only push never builds or
+publishes (I1), the refresh merges its runs oldest first (I1), and the runner-limit proof activates the release-target legs (O1). A `ci:` change that edits CI tooling, the generated workflows, tests and pages; it
+publishes no release.
+Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the system directories, and no write inside the read-only
+product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write only to the scratch `TMPDIR`. No flow needs a pull request or a forge call, and none runs the full suite.
 
-Setup: `export TMPDIR=$(mktemp -d)`. No data to seed.
+Setup: `export TMPDIR=$(mktemp -d); P=$PWD` (the product clone). No data to seed.
 
-**Flow 1: the snapshot mechanism tests.**
-Run `python3 -B tools/run_tests.py tests.test_shared_snapshot tests.test_review_job; echo rc=$?`.
-Expected: `# Test run: PASS`, exact coverage, `rc=0` (a `namespace: none` line is expected in this sandbox).
+**Flow 1: change detection tests.**
+Run `python3 -B tools/run_tests.py tests.test_ci_changes; echo rc=$?`.
+Expected: `# Test run: PASS`, `rc=0` (a `namespace: none` line is expected in this sandbox).
 
-**Flow 2: the lifecycle modules that use the keyed rows.**
-Run `python3 -B tools/run_tests.py tests.test_protocol_lifecycle tests.test_protocol_job tests.test_functional_codex_route; echo rc=$?`.
-Expected: `PASS`, `rc=0`; the `life.late` guard does not trip in any of the three modules.
+**Flow 2: a push is classified over the pushed range (scratch repo).**
+Run `git clone -q $P $TMPDIR/s && cd $TMPDIR/s`; make a base commit (`git -c user.name=t -c user.email=t@t commit -q --allow-empty -m base; B=$(git rev-parse HEAD)`); append a line to `docs/README.md` and commit; write `{"before":"<B>","after":"<HEAD>"}` to `$TMPDIR/ev.json`;
+run `GITHUB_EVENT_NAME=push GITHUB_EVENT_PATH=$TMPDIR/ev.json python3 -B $P/tools/ci_changes.py detect`. Repeat after one more commit that edits `tools/ci_changes.py` (payload `before` still `B`), and with a `before` of forty zeros.
+Expected: `code=false (push: 1 changed path(s), all documentation)`; then `code=true (tools/ci_changes.py is not documentation: everything runs)`; then `code=true (the push has no previous commit (a new branch): everything runs)`. Also try a payload that is not JSON or has no `before`: `code=true`.
 
-**Flow 3: the counters.**
-Run `WFC_SNAPSHOT_REPORT=$TMPDIR/snap.jsonl python3 -B tools/run_tests.py tests.test_review_job; echo rc=$?; cat $TMPDIR/snap.jsonl`.
-Expected: `rc=0`; one JSON line per process; `to_manual_plan_review` built once per shard process and restored by the rest (summed: about 6 built, 74 restored over
-84 tests). Without `WFC_SNAPSHOT_REPORT` no file is written.
+**Flow 3: the Draft pull request rule.**
+Read the review-bound set in `tools/ci_changes.py` (`REVIEW_BOUND_PHASES`, `review_bound_item`) and the Draft cases in `tests/test_ci_changes.py`.
+Expected: a Draft head skips the shards until a work item reaches a review-bound phase (base lacks it or holds it outside the set); any unreadable state, a non-merge HEAD, or a non-object `pull_request` payload runs everything; a non-draft pull request is classified by its diff.
 
-**Flow 4: the late-part guard.**
-Read `tests/test_shared_snapshot.py` for the new cases and `grep -n "late" tests/fixtures.py tests/test_protocol_lifecycle.py`.
-Expected: `reach(name, drive, *, late=())` leaves the `late` parts out of the key; `checks` is late for `to_plan_gate` and `to_acceptance`, `refused` for
-`to_plan_gate`; `life.late(name)` raises while a drive that declared the part late runs; `LoopLifecycle`'s `world` stays in the key.
+**Flow 4: the generated workflows match the model and carry the policy.**
+Run `python3 -B tools/ci_workflows.py --check; echo rc=$?` and `python3 -B tools/run_tests.py tests.test_ci_workflows; echo rc=$?`; then `grep -n "ready_for_review\|code ==" .github/workflows/ci.yml .github/workflows/tests.yml .github/workflows/build-publish.yml`.
+Expected: both `rc=0`, `PASS`; `ci.yml` also triggers on `ready_for_review`; `build`, `publish` and the `release-target-*` checks require `code == 'true'`; the `after-merge-*` jobs and the managed `workflow-conformance` job are not gated by `code`.
 
-**Flow 5: the item page and the measured figures.**
-Read `docs/items/workflow-controller-ci2c.md`, `docs/items/workflow-controller-ci2f.md` and `docs/items/workflow-controller-ci2g.md`.
-Expected: the baseline and after-CP2 table (for example `to_acceptance` 11/1 then 10/2, `to_38e` 14/24); the review case 54.6 s then 37.0 s; the "path in use"
-limit stated as inherent; the figures declared local and single-run; scope items 8 and 9 on CI2f and item 10 on CI2g; `#317` stays open.
+**Flow 5: the mutation check in three legs.**
+Run `python3 -B tools/run_tests.py tests.test_run_tests tests.test_test_shards; echo rc=$?`; then `python3 -B tools/run_tests.py main-check tests.test_scenarios_negative --shard 3 --of 3; echo rc=$?` and `... main-check tests.test_scenarios_negative --shard 0; echo rc=$?`; then `grep -n -A6 "after-merge-mutations\|release-target-mutations" .github/workflows/ci.yml .github/workflows/build-publish.yml | head -60`.
+Expected: the tests `PASS`; the two `main-check` calls refuse at once (`--shard must be in 0..2, not 3`; `--shard and --of go together`) with a non-zero `rc`, without running any test; the two mutation jobs are a matrix of three legs, with the job ids unchanged. (Do not run a real leg: it takes about 5 minutes.)
 
-**Flow 6: the guide and docs checks.**
-Read the snapshot part of `docs/guide/development.md`, then run `python3 -B tools/check_docs.py; echo rc=$?`,
-`python3 -B tools/run_tests.py tests.test_docs tests.test_plan_document_consistency; echo rc=$?`, `python3 -B scripts/workflow_backlog.py check; echo rc=$?` and
-`python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-ci2c; echo rc=$?`.
-Expected: the guide describes the counters, the `late` keying and the review case; every `rc=0`; `# Test run: PASS`; `preflight-accept` `"ok": true`.
+**Flow 6: the automated timings refresh.**
+Run `python3 -B tools/run_tests.py tests.test_timings_refresh; echo rc=$?`; read `.github/workflows/timings-refresh.yml` and `python3 -B tools/timings_refresh.py --help`.
+Expected: `PASS`, `rc=0`; a weekly cron (`17 5 * * 1`); the job takes `TIMINGS_REFRESH_TOKEN` and fails naming it when it is missing; `collect`, `plan-change` and `propose` exist; runs merge oldest first; a change that fails the staleness ratchet is not proposed. Do not run `collect` or `propose` (they need the network and `gh`).
 
-**Flow 7: the lowered-policy class stays out of the shared snapshot (revision 3).**
-Run `grep -n "SHARE_SNAPSHOT" tests/test_review_same_provider.py`, then `python3 -B tools/run_tests.py tests.test_review_same_provider; echo rc=$?`, and read the CP3 bullet of `docs/items/workflow-controller-ci2c.md`.
-Expected: `AdoptedPolicyLoopTest` sets `SHARE_SNAPSHOT = False` with the comment naming the policy the key does not carry; `# Test run: PASS`, `rc=0` (including `DefaultPolicyRefusalTest`); the page names the class, the cause and that CI found it.
+**Flow 7: the guide and the item pages.**
+Read `docs/guide/ci-and-releases.md` sections "Documentation-only pull requests" and "The automated timings refresh", `docs/items/workflow-controller-ci2d.md` and `docs/items/workflow-controller-ci2h.md`.
+Expected: the push rule, the Draft rule and the three legs are described as the code does; the mutation estimate (959.7 s one shard, about 320 s per leg) is labelled an estimate; O1 (determinism split, now `ci2h`), O2 (the token, unproven until the first run) and O3 (the draft rule) are stated; `#317` stays open.
 
-**Known limitations / out of scope.** The gain of CP2 is small, because each shard process builds a row once whatever the key: the saving needs the tests that
-share a row on one shard (CI2g). Process starts per lifecycle step are CI2f. The figures are from this machine, one run each; the saving on a pull request is
-read from the first pull request run after the merge, which the sandbox cannot do. The full suite is CI's. `#317` (the 20-minute target) stays open.
+**Flow 8: the docs checks and the backlog.**
+Run `python3 -B tools/check_docs.py; echo rc=$?`, `python3 -B tools/run_tests.py tests.test_docs tests.test_plan_document_consistency tests.test_write_containment tests.test_package_structure; echo rc=$?`, `python3 -B scripts/workflow_backlog.py check; echo rc=$?` and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-ci2d; echo rc=$?`.
+Expected: every `rc=0`; `# Test run: PASS`; `preflight-accept` `"ok": true`.
+
+**Known limitations / out of scope.** The sandbox cannot run a pull request, a real workflow, the weekly refresh or its token: that the refresh pull request collects all five required checks (O2), the real mutation-leg times and the saving on a
+documentation-only merge are read from the first runs after the merge. A Draft pull request runs the shards from its first review-bound head, not "only when ready" (O3). The determinism split is `ci2h`. The full suite is CI's. `#317` stays open.
 
 ## Next action
 

@@ -708,53 +708,49 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-ci2b` (CI2b: run each test once), implementation revision 2 (technical approval by policy `7c3cddc`), plan
-`docs/ai-workflow/CONTROLLER_CI2B_PLAN.md` (revision 2), base commit `e30d790`. Three checkpoints, all complete: CP1 (the nine frozen conformance suites
-placed `EXCLUDED` from the CI shards), CP2 (`tests.test_functional_lifecycle` placed `EXCLUDED`; the leftover check moved into the isolation scenario; the
-"each `flow_*` body is called by exactly one scenario" pin) and CP3 (the guides and the item page with the measured effect), plus the self-review and
-review-round fixes (the 456 s explained as the contention factor, the after-CP1 digest, the attribute-access test message).
+Item `workflow-controller-ci2c` (CI2c: fixture snapshot reuse), implementation revision 1 (technical approval by policy `e13ac0e`), plan
+`docs/ai-workflow/CONTROLLER_CI2C_PLAN.md` (revision 2), base commit `04ad545`. Four checkpoints, all complete: CP1 (snapshot outcome counters and
+`WFC_SNAPSHOT_REPORT`), CP2 (a snapshot key holds what the drive reads: `late` parts and the `life.late` guard), CP3 (the review case reaches
+`to_manual_plan_review` once per process) and CP4 (the figures, the pages and the CI2f/CI2g split). A `ci:` change that edits tests, test helpers and pages
+only; it publishes no release.
 Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the
 system directories, and no write inside the read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write only
 to the scratch `TMPDIR`. No flow needs a pull request or a forge call, and none runs the full suite.
 
 Setup: `export TMPDIR=$(mktemp -d)`. No data to seed.
 
-**Flow 1: the placement and the kept proof.**
-Run `python3 -B tools/run_tests.py tests.test_test_shards tests.test_ci_workflows; echo rc=$?` and `python3 -B tools/ci_workflows.py --check; echo rc=$?`.
-Expected: `# Test run: PASS`, exact coverage, both `rc=0` (a `namespace: none` line is expected in this sandbox). `grep -n "EXCLUDED" tools/test_shards.py`
-shows the `conformance` and `tests.test_functional_lifecycle` placements, each with a reason.
+**Flow 1: the snapshot mechanism tests.**
+Run `python3 -B tools/run_tests.py tests.test_shared_snapshot tests.test_review_job; echo rc=$?`.
+Expected: `# Test run: PASS`, exact coverage, `rc=0` (a `namespace: none` line is expected in this sandbox).
 
-**Flow 2: the CI plan against the local plan.**
-Run `python3 -B tools/run_tests.py plan --profile ci --ci-placement` and the same without `--ci-placement`.
-Expected: the first prints `plan_digest` beginning `edeab4d7` with three shards; the second prints a different digest (a local plan keeps the nine `conformance:`
-suites and the four `tests.test_functional_lifecycle` classes). A CI plan holds no `conformance:` id.
+**Flow 2: the lifecycle modules that use the keyed rows.**
+Run `python3 -B tools/run_tests.py tests.test_protocol_lifecycle tests.test_protocol_job tests.test_functional_codex_route; echo rc=$?`.
+Expected: `PASS`, `rc=0`; the `life.late` guard does not trip in any of the three modules.
 
-**Flow 3: the functional flows run once.**
-Run `python3 -B tools/run_tests.py tests.test_scenarios tests.test_run_scenarios; echo rc=$?` and
-`grep -n "tfl.short_folders_made\|flow_isolation_holds" tests/scenarios/lifecycle.py`.
-Expected: `PASS`, `rc=0`; the isolation scenario wraps `flow_isolation_holds` in `short_folders_made()` and asserts that a sandbox was built and no short
-`TMPDIR` folder remains. `tests.test_test_shards` (Flow 1) pins that every `flow_*` body is called by exactly one scenario.
+**Flow 3: the counters.**
+Run `WFC_SNAPSHOT_REPORT=$TMPDIR/snap.jsonl python3 -B tools/run_tests.py tests.test_review_job; echo rc=$?; cat $TMPDIR/snap.jsonl`.
+Expected: `rc=0`; one JSON line per process; `to_manual_plan_review` built once per shard process and restored by the rest (summed: about 6 built, 74 restored over
+84 tests). Without `WFC_SNAPSHOT_REPORT` no file is written.
 
-**Flow 4: the item page and the measured effect.**
-Read `docs/items/workflow-controller-ci2b.md`.
-Expected: base digest `3198ddc7` (3,494.0 s per shard), after CP1 `d01bdb71` (3,038.2 s), after CP2 `edeab4d7` (2,808.0 s); a predicted gain of 686 s; the excluded
-atoms (2,271.4 s of conformance, 690.9 s of lifecycle); the 456 s explained as the 0.15 contention factor on 3,038.2 s; the elapsed time of this pull request's
-own run stated as not yet measured; O1 (scope item 7) and O2 (the moved-base residual) recorded as later backlog items.
+**Flow 4: the late-part guard.**
+Read `tests/test_shared_snapshot.py` for the new cases and `grep -n "late" tests/fixtures.py tests/test_protocol_lifecycle.py`.
+Expected: `reach(name, drive, *, late=())` leaves the `late` parts out of the key; `checks` is late for `to_plan_gate` and `to_acceptance`, `refused` for
+`to_plan_gate`; `life.late(name)` raises while a drive that declared the part late runs; `LoopLifecycle`'s `world` stays in the key.
 
-**Flow 5: the guides.**
-Read the conformance and placement parts of `docs/guide/ci-and-releases.md` and `docs/guide/development.md`.
-Expected: the shards hold no conformance suites; the managed `workflow-conformance` job is the gate; the conformance lane is local-only under `--ci-placement`;
-the moved-base residual (a squash commit can be released although the conformance suites never ran on its tree, because `build-publish` does not wait for the
-managed job) is stated; `workflow-conformance` being a required check is a ruleset setting, documented and not tested.
+**Flow 5: the item page and the measured figures.**
+Read `docs/items/workflow-controller-ci2c.md`, `docs/items/workflow-controller-ci2f.md` and `docs/items/workflow-controller-ci2g.md`.
+Expected: the baseline and after-CP2 table (for example `to_acceptance` 11/1 then 10/2, `to_38e` 14/24); the review case 54.6 s then 37.0 s; the "path in use"
+limit stated as inherent; the figures declared local and single-run; scope items 8 and 9 on CI2f and item 10 on CI2g; `#317` stays open.
 
-**Flow 6: docs checks.**
-Run `python3 -B tools/run_tests.py tests.test_docs tests.test_plan_document_consistency; echo rc=$?`, `python3 -B tools/check_docs.py; echo rc=$?`,
-`python3 -B scripts/workflow_backlog.py check; echo rc=$?` and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-ci2b; echo rc=$?`.
-Expected: `# Test run: PASS`, every `rc=0`, `preflight-accept` `"ok": true`.
+**Flow 6: the guide and docs checks.**
+Read the snapshot part of `docs/guide/development.md`, then run `python3 -B tools/check_docs.py; echo rc=$?`,
+`python3 -B tools/run_tests.py tests.test_docs tests.test_plan_document_consistency; echo rc=$?`, `python3 -B scripts/workflow_backlog.py check; echo rc=$?` and
+`python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-ci2c; echo rc=$?`.
+Expected: the guide describes the counters, the `late` keying and the review case; every `rc=0`; `# Test run: PASS`; `preflight-accept` `"ok": true`.
 
-**Known limitations / out of scope.** The workflows run only on GitHub; the sandbox has no forge, so this pull request's own elapsed CI time, and whether
-`workflow-conformance` is a required check, cannot be checked here. The full suite is CI's. Scope item 7 (the Codex loops, about 1 minute) and the moved-base
-release residual are not in this item (O1, O2). `#317` (the 20-minute target) stays open.
+**Known limitations / out of scope.** The gain of CP2 is small, because each shard process builds a row once whatever the key: the saving needs the tests that
+share a row on one shard (CI2g). Process starts per lifecycle step are CI2f. The figures are from this machine, one run each; the saving on a pull request is
+read from the first pull request run after the merge, which the sandbox cannot do. The full suite is CI's. `#317` (the 20-minute target) stays open.
 
 ## Next action
 

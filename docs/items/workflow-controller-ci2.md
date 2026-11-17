@@ -4,13 +4,15 @@ Item id: `workflow-controller-ci2`.
 
 Status: implemented on the milestone branch (three checkpoints); plan: [CONTROLLER_CI2_PLAN.md](../ai-workflow/CONTROLLER_CI2_PLAN.md) (revision 12). Complexity: medium. Sources: [#317](https://github.com/RodrigoFAbreu/workflow-controller/issues/317) (the 20-minute target, stays open until the last slice merges) and [#324](https://github.com/RodrigoFAbreu/workflow-controller/issues/324) (done here). A `ci:` change that edits the committed timings, tests and pages only; it publishes no release.
 
-CI2 was large and said "split at planning". By the sizing rule (at most one new mechanism per releasable item) the owner's fourteen scope items (below) are split into five slices:
+CI2 was large and said "split at planning". By the sizing rule (at most one new mechanism per releasable item) the owner's fourteen scope items (below) are split into five slices, and the third (ci2c) was split again at its planning into ci2c, ci2f and ci2g:
 
 | slice | scope items | mechanism |
 | --- | --- | --- |
 | this item, `workflow-controller-ci2` | 1 (refresh and estimates), 2 (contention) | the planner estimates from measured data |
 | [`workflow-controller-ci2b`](workflow-controller-ci2b.md) | 3, 4, 7 | run each test once |
-| [`workflow-controller-ci2c`](workflow-controller-ci2c.md) | 5, 6, 8, 9, 10 | fixture snapshots and process starts |
+| [`workflow-controller-ci2c`](workflow-controller-ci2c.md) | 5, 6 | fixture snapshot reuse |
+| [`workflow-controller-ci2f`](workflow-controller-ci2f.md) | 8, 9 | process starts per lifecycle step (split out of ci2c) |
+| [`workflow-controller-ci2g`](workflow-controller-ci2g.md) | 10 | shard affinity for tests that share a snapshot (split out of ci2c) |
 | [`workflow-controller-ci2d`](workflow-controller-ci2d.md) | 11, 12, 13 and the automation of the timings refresh | after-merge and trigger policy |
 | [`workflow-controller-ci2e`](workflow-controller-ci2e.md) | [#322](https://github.com/RodrigoFAbreu/workflow-controller/issues/322) | a runtime check replacing the static repo-reach heuristic |
 

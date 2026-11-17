@@ -326,8 +326,10 @@ class CoverageTest(unittest.TestCase):
         self.assertEqual(by_place, {shards.PACKAGE: ["tests.test_packaged_runtime"],
                                     shards.MAIN: ["tests.test_catalogue_determinism",
                                                   "tests.test_scenarios_negative"],
-                                    shards.EXCLUDED: ["tests.test_integration_disposable_repo"]})
+                                    shards.EXCLUDED: ["tests.test_integration_disposable_repo",
+                                                      shards.CONFORMANCE]})
         self.assertIn("claude", shards.CI_PLACEMENT["tests.test_integration_disposable_repo"][1])
+        self.assertIn("workflow-conformance", shards.CI_PLACEMENT[shards.CONFORMANCE][1])
 
     def test_package_job_runs_the_package_placed_modules(self) -> None:
         self.assertEqual(ci.PACKAGE_TEST_MODULES, ("tests.test_packaged_runtime",))
@@ -341,11 +343,43 @@ class CoverageTest(unittest.TestCase):
                             for test_id in package_ids))
 
     def test_conformance_family_equals_the_managed_workflow(self) -> None:
+        # D1/D2(b): the suites are excluded from the shards, and the excluded ids are exactly
+        # the suites the managed file lists, so no suite can be dropped from both places.
         managed = _managed_suites(CONFORMANCE_YML.read_text(encoding="utf-8"))
         self.assertTrue(managed)
-        conformance = [test_id for test_id in self.partition[shards.SHARDS]
-                       if test_id.startswith(shards.CONFORMANCE_PREFIX)]
-        self.assertEqual(conformance, [shards.CONFORMANCE_PREFIX + suite for suite in managed])
+        expected = [shards.CONFORMANCE_PREFIX + suite for suite in managed]
+        excluded = [test_id for test_id in self.partition[shards.EXCLUDED]
+                    if test_id.startswith(shards.CONFORMANCE_PREFIX)]
+        self.assertEqual(excluded, expected)
+        for where in (shards.SHARDS, shards.MAIN, shards.PACKAGE):
+            self.assertFalse([i for i in self.partition[where]
+                              if i.startswith(shards.CONFORMANCE_PREFIX)], where)
+
+    def test_the_managed_job_is_the_conformance_gate(self) -> None:
+        # D2(a): the managed file runs on every pull request and on every push to main, and
+        # holds exactly the one job whose name is the required check. That the name is a
+        # required check is a ruleset setting, recorded in docs/guide/ci-and-releases.md and
+        # not visible to a test; the name itself is pinned here.
+        text = CONFORMANCE_YML.read_text(encoding="utf-8")
+        on_block = re.search(r"(?ms)^on:\n(.*?)(?=^\S)", text)
+        self.assertIsNotNone(on_block)
+        self.assertRegex(on_block.group(1), r"(?m)^  pull_request:\s*$")
+        self.assertRegex(on_block.group(1), r"(?m)^  push:\n    branches: \[main\]\s*$")
+        jobs_block = re.search(r"(?ms)^jobs:\n(.*?)(?=^\S|\Z)", text)
+        self.assertIsNotNone(jobs_block)
+        self.assertEqual(re.findall(r"(?m)^  ([A-Za-z0-9_-]+):\s*$", jobs_block.group(1)),
+                         ["workflow-conformance"])
+
+    def test_a_ci_plan_holds_no_conformance_suite_and_a_local_one_holds_all(self) -> None:
+        # D1/D4: the CI selection drops the family, a local full run keeps all nine.
+        managed = _managed_suites(CONFORMANCE_YML.read_text(encoding="utf-8"))
+        self.assertEqual(len(managed), 9)
+        ci_ids = self.inventory.select([], ci_placement=True).test_ids
+        self.assertFalse([i for i in ci_ids if i.startswith(shards.CONFORMANCE_PREFIX)])
+        local = self.inventory.select([shards.CONFORMANCE]).test_ids
+        self.assertEqual(list(local), [shards.CONFORMANCE_PREFIX + suite for suite in managed])
+        self.assertEqual(self.inventory.select([shards.CONFORMANCE], ci_placement=True).test_ids, ())
+        self.assertTrue(set(local) <= set(self.inventory.select([]).test_ids))
 
 
 class ValidatePlanTest(unittest.TestCase):

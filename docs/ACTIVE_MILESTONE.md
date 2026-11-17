@@ -1,6 +1,12 @@
 # Active Milestone
 
-## Latest milestone (CI2)
+## Latest milestone (CI2b)
+
+**In progress: `IMPLEMENTING`.** Plan `docs/ai-workflow/CONTROLLER_CI2B_PLAN.md` (revision 2), three checkpoints; it runs each test once on a pull request: the nine frozen conformance suites (CP1) and the four functional flows (CP2) leave the shard matrix through the committed CI placement.
+
+- **CP1 complete (verified state).** `CI_PLACEMENT["conformance"]` is `EXCLUDED` with a reason naming the managed `workflow-conformance` job (D1); the lane comment in `tools/test_shards.py` says the lane is local-only under `--ci-placement`. Plan before: digest `3198ddc7`, three shards each estimated at 3,493.95 s (committed timings). Plan after: digest `de9a5aa5`, three shards each estimated at 3,038.22 s, no `conformance:` id in it. `tests/test_ci_workflows.py` pins the kept proof (D2): the excluded conformance ids equal the suites the managed file lists, the managed file runs on `pull_request` and on `push` to `main` and holds one job named `workflow-conformance`, a CI selection holds no conformance id and a local one holds all nine (D4); `test_the_placed_modules` and `tests/test_test_shards.py`'s partition test follow. That `workflow-conformance` is a required check is a ruleset setting, documented in `docs/guide/ci-and-releases.md` (CP3), not tested. Figure sources, for CP3: the item page's flow figures of 738 s and 737 s are from the CI2 sizing; the plan's 691 s and 640 s are the committed timings. Verified with `tests.test_test_shards`, `tests.test_ci_workflows`, `tests.test_run_tests`, `tests.test_ci_changes` (466 tests, exact coverage, passing) and `python3 tools/ci_workflows.py --check`.
+
+## Previous milestone (CI2)
 
 **Complete: accepted by policy (`MILESTONE_COMPLETE`).** Accepted after the functional review passed (PR #373, checks green at the approved head). Plan `docs/ai-workflow/CONTROLLER_CI2_PLAN.md` (revision 12), three checkpoints; it refreshes the committed shard timings, adds a staleness ratchet, and measures the acceptance-matrix contention at the shard.
 

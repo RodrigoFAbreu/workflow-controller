@@ -408,10 +408,11 @@ class CiPlacementTest(unittest.TestCase):
         modules = {where: {a.module for a in self.inventory.atoms if set(a.test_ids) & set(ids)}
                    for where, ids in partition.items()}
         self.assertEqual(modules["package"], {"tests.test_packaged_runtime"})
-        self.assertEqual(modules["excluded"], {"tests.test_integration_disposable_repo"})
+        self.assertEqual(modules["excluded"], {"tests.test_integration_disposable_repo",
+                                               "conformance"})
         self.assertEqual(modules["main"], {"tests.test_catalogue_determinism",
                                            "tests.test_scenarios_negative"})
-        self.assertIn("conformance", modules["shards"])
+        self.assertNotIn("conformance", modules["shards"])
         self.assertIn("tests.test_scenarios", modules["shards"])
         self.assertIn("tests.test_run_scenarios", modules["shards"])
 

@@ -80702,14 +80702,14 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci2b-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci2b-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "IMPLEMENTING",
+      "phase": "SELF_REVIEWING_IMPLEMENTATION",
       "plan_revision": 2,
       "implementation_revision": null,
       "functional_review_round": null,
       "base_commit": "e30d790d4067af96d0b06127b1416754fc730e1d",
       "reviewed_implementation_head": null,
       "current_checkpoint_id": null,
-      "last_completed_checkpoint_id": "CP2",
+      "last_completed_checkpoint_id": "CP3",
       "checkpoints": {
         "CP1": {
           "status": "COMPLETE",
@@ -80718,6 +80718,10 @@
         "CP2": {
           "status": "COMPLETE",
           "start_commit": "7e95ce458902afcba2aa405a143dfdc058fd3588"
+        },
+        "CP3": {
+          "status": "COMPLETE",
+          "start_commit": "e900b61466bcfec38970b5ab6bb93cbe3042c60f"
         }
       },
       "current_bundle_id": "fe0543568a265a5d0f133a36b53470351e06d7ab599ce8953c656b10b1feda79",
@@ -80846,8 +80850,8 @@
           "external": 0
         }
       },
-      "state_revision": 13,
-      "last_transition": "2026-11-17T13:46:06Z",
+      "state_revision": 15,
+      "last_transition": "2026-11-17T13:48:23Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

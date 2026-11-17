@@ -56,15 +56,19 @@ Python 3.12 and read-only permissions (`tests-result` also has
   documentation checked;
 - `plan`: (only when `code` is `true`) plans the whole CI selection with
   `tools/run_tests.py plan --profile ci --ci-placement`: every test
-  `python3 -m unittest discover -s tests -t .` loads, plus the nine frozen
-  Workflow conformance suites, in duration-balanced shards, from the
-  committed `tools/test_timings.json`. Its outputs are the shard indexes,
+  `python3 -m unittest discover -s tests -t .` loads, except the modules the
+  committed CI placement (`CI_PLACEMENT`) moves elsewhere, in duration-balanced
+  shards, from the committed `tools/test_timings.json`. Since CI2b that
+  placement also excludes the nine frozen Workflow conformance suites (the
+  managed `workflow-conformance` job runs them) and
+  `tests.test_functional_lifecycle` (the `scenario-functional-*` scenarios run
+  the same flows). Its outputs are the shard indexes,
   their count and the plan's digest, and it uploads `plan.json`;
 - `tests`: (only when `code` is `true`) one matrix job per planned shard (`fail-fast: false`). Each
   recomputes the plan from the checked-out commit, refuses to run unless
   its digest equals `plan`'s, runs its shard (its Controller tests and,
-  beside them in a second process, its Workflow conformance suites; see
-  [How a shard runs](#how-a-shard-runs)) and uploads its result
+  beside them in a second process, its Workflow conformance suites in a local
+  run only, since CI2b; see [How a shard runs](#how-a-shard-runs)) and uploads its result
   record and log as the `results-<i>-attempt-<a>` artifact, where `<a>`
   is the run attempt (`github.run_attempt`), also written into the
   record. A shard that does not pass, or that leaked a process, fails its
@@ -128,13 +132,29 @@ point, is retired: `python3 tools/ci_workflows.py --check` fails while it
 exists.
 
 `workflow-conformance.yml` is managed by the Workflow Manager and is
-untouched. It still runs the nine conformance suites in one job, on every
-pull request (10 to 15 minutes in recent runs).
-`validate` runs the same suites through the planner as well; the
-acceptance-matrix suite (8 to 12 minutes on CI) is its own largest atom.
+untouched. It runs the nine conformance suites in one job, on every
+pull request and every push to `main` (10 to 15 minutes in recent runs), and it is
+the one place they run in CI: since CI2b `validate` no longer runs them through the
+planner (`CI_PLACEMENT["conformance"]` is `EXCLUDED`), so the managed job is the
+gate and its check name, `workflow-conformance`, is a required check (see
+[Repository settings](#repository-settings)). `tests-result`'s coverage proof
+therefore covers the Controller tests and no longer the conformance suites;
+`tools/test_shards.py`'s tests pin that the excluded conformance ids equal the
+suites the managed file lists, so a suite added to the managed file is excluded
+automatically and one dropped from it cannot stay in the shards. A local full run
+(`python3 tools/run_tests.py` with no `--ci-placement`) still runs all nine.
 The managed job is a floor on when all of a pull request's checks finish (10 to
 15 minutes); the three shards run much longer than that, so the wall time of a
 shard counts.
+
+The moved-base residual (accepted in CI2b, open decision O2). `workflow-conformance`
+runs on the pull request's own merge tree at its last run. When `main` moved after
+that run, the squash commit that lands is a different tree, and `build-publish`
+does not wait for the managed job's result on the pushed commit, so such a commit
+can be released although the conformance suites never ran on its tree. The managed
+job does run on the push to `main`, after or beside the release. Making
+`build-publish` wait for it is a change to the release workflow and is its own
+backlog item, not part of CI2b.
 `release.yml` is gone: pushing a `v*` tag by hand triggers nothing.
 
 The CI plan uses the `ci` profile: a target of 180 s of work per shard,
@@ -152,8 +172,8 @@ guide) when the longest shard drifts well past that estimate; it was refreshed o
 and 43879797542), and drifts within days as the Codex and scenario tests grow. A
 ratchet (`MAX_UNTIMED_TEST_SHARE`, 20 percent) fails the suite when the atoms
 without an entry hold too much of the CI-placed tests, so an overdue refresh is
-noticed. On the refreshed file the planner estimates 3494 s for each of the three
-shards. A stale or missing entry costs wall time
+noticed. On the refreshed file the planner estimated 3494 s for each of the three
+shards; CI2b's placement (below) takes that to 2808 s. A stale or missing entry costs wall time
 (the shard count and the balance), never coverage. The plan is
 deterministic: each `tests` job recomputes it and refuses to run on a
 digest mismatch, so the matrix carries only shard indexes. Every
@@ -163,19 +183,22 @@ the artifacts to download (`results-<i>-attempt-<a>` holds the log,
 `test-plan` the `plan.json` the replay command reads) and the
 reproduction commands.
 
-What bounds the longest shard. The conformance `acceptance_matrix` suite is one
-atom (1153.6 s in the committed timings); on a shard it shares with Controller
-tests the lane contention of 1.15 makes it about 1327 s. At three shards it is not
-the floor: the Controller lane is always the longer one (about 3038 s against the
-matrix's 1154 s on the shard that holds it, in the plan of CI2), so the shards
-balance on the Controller atoms. At the six to eight shards of CI1b the matrix
+What bounds the longest shard. Since CI2b the conformance suites are not in the
+shards, so the `acceptance_matrix` suite (1153.6 s in the committed timings) is no
+longer a floor of any shard; the managed `workflow-conformance` job carries it. Before
+that, on a shard it shared with Controller tests the lane contention of 1.15 made it
+about 1327 s, and at three shards it was never the floor: the Controller lane was
+always the longer one (about 3038 s against the matrix's 1154 s on the shard that held
+it, in the plan of CI2), so the shards balanced on the Controller atoms. At the six to eight shards of CI1b the matrix
 did set the estimate (at seven every shard was about 1288 s, and at eight it ran
 alone while the longest shard was 1233 s, only 55 s below seven). Cutting it
 needs the suite's `shards` option, which belongs to the frozen Workflow content, so
 that is a separate upstream step and is not done here. The other atoms that stay whole
-are the single-test ones: the conformance `protocol`, `state` and `gate_policy` suites,
-`IsolationTest`, `CycleClosesTest`, `PersonStopsTest` and the generated `Scenario_*`
-classes; a class of one test cannot be made smaller by moving methods. The largest
+are the single-test ones: the generated `Scenario_*` classes (the four
+`scenario-functional-*` ones are the largest) and, before CI2b, the conformance
+`protocol`, `state` and `gate_policy` suites and the four `tests.test_functional_lifecycle`
+classes, which have left the shards; a class of one test cannot be made smaller by
+moving methods. The largest
 check outside the shard estimate is `tests.test_catalogue_determinism.CatalogueDeterminismTest`
 (1075.4 s), which `CI_PLACEMENT` runs on `main` after the merge. Six classes of several
 tests that held a shard up were split along their test methods in CI1b, and a ratchet in
@@ -313,7 +336,11 @@ therefore found on `main`, before the release but after the merge.
 
 ### How a shard runs
 
-A shard has two lanes that run at the same time on its runner. The
+A shard has two lanes that run at the same time on its runner. Under
+`--ci-placement` (what CI plans with) the conformance family is excluded since
+CI2b, so a CI shard has only the Controller lane and the conformance lane below is
+local-only: a local plan (no `--ci-placement`) still holds the nine suites and
+runs both lanes. The
 Controller lane runs the shard's Controller tests through `unittest`, as
 before. The conformance lane runs the shard's frozen Workflow suites, one
 at a time in plan order, each as `cd scripts && python3 <file>`, in a helper

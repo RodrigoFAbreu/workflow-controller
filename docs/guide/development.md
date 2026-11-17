@@ -224,6 +224,12 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   (`CI_MAX_SHARDS`, tied to the six-runner limit; a higher ceiling is the owner's
   runner-budget decision, see
   [The six-runner limit](ci-and-releases.md#the-six-runner-limit)).
+  Under `--ci-placement` (what CI plans with) two more things are out of the
+  shards since CI2b: the nine conformance suites, which the managed
+  `workflow-conformance` job runs once on a pull request, and
+  `tests.test_functional_lifecycle`, whose four flows run as the four
+  `scenario-functional-*` scenarios. A local plan and a local full run (no
+  `--ci-placement`) keep both.
   Two modules stay out of the CI plan and run on `main` instead
   (`tests.test_catalogue_determinism` and `tests.test_scenarios_negative`, see
   [Checks that run after the merge](ci-and-releases.md#checks-that-run-after-the-merge));
@@ -231,8 +237,8 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   `python3 tools/run_tests.py main-check MODULE` runs one the way `CI` does
   on `main` (it fails on an empty selection, a skip or a failure). `--shards N` pins it, `--jobs J` runs at most `J` at
   once, and `--target-seconds`, `--min-shards` and `--max-shards`
-  override the planning parameters. A shard runs its conformance suites
-  in a helper process beside its Controller tests (the same executor in
+  override the planning parameters. A local shard runs its conformance suites
+  (CI's do not, see above) in a helper process beside its Controller tests (the same executor in
   CI and locally), so it lasts as long as its longer lane and the planner
   balances by that; see
   [How a shard runs](ci-and-releases.md#how-a-shard-runs).

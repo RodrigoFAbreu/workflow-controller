@@ -433,7 +433,10 @@ slot. `tools/timings_refresh.py` (standard library only) has three steps:
   event is `pull_request` (never `main`, whose reused runs would duplicate the
   records), downloads the `timings-ci-attempt-*` artifact of at most `--runs`
   of them (default 3) and drops a shard record whose `(plan_digest, shard)` was
-  already taken;
+  already taken (newest run first, so the newest record is kept). It lists the
+  runs in `dirs.txt` oldest first, because the merger's moving average weighs
+  a later observation more, so a growing test's estimate ends on its newest
+  run;
 - `plan-change` runs `run_tests.py timings merge` into a copy, prints the
   untimed share before and after, and writes the merged file only when its
   bytes differ (`changed=true|false`);

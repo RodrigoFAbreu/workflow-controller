@@ -9,6 +9,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import shutil
 import os
 import sys
 import tempfile
@@ -19,6 +20,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from tests import fixtures  # noqa: E402
+from tests.test_run_tests import SyntheticRepo  # noqa: E402
 
 _spec = importlib.util.spec_from_file_location("timings_refresh",
                                                fixtures.REPO_ROOT / "tools" / "timings_refresh.py")
@@ -122,7 +124,7 @@ class CollectTest(unittest.TestCase):
         self.assertEqual([p.name for p in kept], ["run-2", "run-1"])
         self.assertEqual(sorted(p.name for p in kept[0].glob("shard-*.json")), ["shard-0.json", "shard-1.json"])
         self.assertEqual([p.name for p in kept[1].glob("shard-*.json")], ["shard-0.json"])
-        self.assertEqual((self.out / tr.DIRS_FILE).read_text().split(), [str(p) for p in kept])
+        self.assertEqual((self.out / tr.DIRS_FILE).read_text().split(), [str(p) for p in reversed(kept)])
 
     def test_a_run_whose_records_are_all_duplicates_leaves_no_directory(self) -> None:
         gh = FakeGh(runs=[run(2), run(1)], artifacts={1: [artifact(1)], 2: [artifact(1)]},
@@ -143,6 +145,64 @@ class CollectTest(unittest.TestCase):
     def test_no_eligible_run_collects_nothing(self) -> None:
         self.assertEqual(self.collect(FakeGh(runs=[run(1, event="push")])), [])
         self.assertEqual((self.out / tr.DIRS_FILE).read_text(), "")
+
+
+class ChronologicalMergeTest(unittest.TestCase):
+    """The refresh hands the real merger its runs oldest first (CI2d review I1): ``collect`` keeps the
+    newest record of a duplicate, ``dirs.txt`` lists the runs oldest first, so the EWMA that weighs a
+    later observation more ends on the newest run."""
+
+    KEY = "tests.test_pass.PassTest"
+
+    def setUp(self) -> None:
+        self.repo = SyntheticRepo(self)
+        self.scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(self.scratch.cleanup)
+        self.root = Path(self.scratch.name)
+
+    def observed(self, shards: str, seconds: float) -> Path:
+        """A passing run whose ``PassTest`` atom took ``seconds``; each ``shards`` count is a plan of its own."""
+        completed, results = self.repo.run_selection("tests.test_pass", extra=["--shards", shards])
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        for record_path in results.glob("shard-*.json"):
+            record = json.loads(record_path.read_text())
+            if self.KEY in record["atoms"]:
+                record["atoms"][self.KEY] = seconds
+                record_path.write_text(json.dumps(record), encoding="utf-8")
+        return results
+
+    def merge(self, into: Path, directories, root: Path) -> None:
+        """The real ``timings merge``, run against the synthetic repository the plans came from."""
+        merged = self.repo.run("timings", "merge", "--into", str(into), *map(str, directories))
+        self.assertEqual(merged.returncode, 0, merged.stderr)
+
+    def test_the_refresh_produces_the_chronological_ewma_not_the_reverse(self) -> None:
+        seed = self.root / "timings.json"
+        merged = self.repo.run("timings", "merge", "--into", str(seed), str(self.observed("1", 4.0)))
+        self.assertEqual(merged.returncode, 0, merged.stderr)
+        runs = {1: self.observed("2", 4.0), 2: self.observed("3", 8.0), 3: self.observed("4", 16.0)}
+
+        class Download(FakeGh):
+            def __call__(inner, argv, env=None) -> str:
+                if list(argv)[:3] == ["gh", "run", "download"]:
+                    shutil.copytree(runs[int(argv[3])], argv[argv.index("--dir") + 1])
+                    return ""
+                return super().__call__(argv, env)
+
+        gh = Download(runs=[run(n) for n in (1, 2, 3)], artifacts={n: [artifact(1)] for n in (1, 2, 3)})
+        out = self.root / "out"
+        collected = tr.collect(gh, REPO, out, 3)
+        self.assertEqual([p.name for p in collected], ["run-3", "run-2", "run-1"])
+        listed = [Path(line).name for line in (out / tr.DIRS_FILE).read_text().split("\n") if line]
+        self.assertEqual(listed, ["run-1", "run-2", "run-3"])
+
+        output = self.root / "merged.json"
+        changed, _ = tr.plan_change(seed, [Path(line) for line in (out / tr.DIRS_FILE).read_text().split("\n")
+                                           if line], output, self.repo.root,
+                                    merge=self.merge, share=lambda path, root: (0, 1))
+        self.assertTrue(changed)
+        seconds = json.loads(output.read_text())["atoms"][self.KEY]["seconds"]
+        self.assertEqual(seconds, 11.0)  # chronological 4, 8, 16 from 4; newest first would give 6.5
 
 
 class PlanChangeTest(unittest.TestCase):

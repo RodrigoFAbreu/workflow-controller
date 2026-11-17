@@ -10,8 +10,10 @@ procedure as a tool, run by the scheduled ``timings-refresh.yml`` (CI2d, D6):
     List the newest successful ``ci.yml`` runs of event ``pull_request`` (never ``main``:
     a reused ``main`` run duplicates the pull-request run's records), download the
     ``timings-ci-attempt-<a>`` artifact of at most ``--runs`` of them, and drop a shard
-    record whose ``(plan_digest, shard)`` was already taken. Writes ``dirs.txt`` (one
-    directory per line, each holding ``plan.json`` and its records) beside the downloads.
+    record whose ``(plan_digest, shard)`` was already taken (newest run first, so the
+    newest record is the one kept). Writes ``dirs.txt`` (one directory per line, each
+    holding ``plan.json`` and its records) beside the downloads, **oldest run first**:
+    the merger's EWMA weighs a later observation more, so the order is chronological.
 ``plan-change``
     Run ``run_tests.py timings merge`` into a copy of the committed file, print the
     untimed share of the CI-placed tests before and after, and write the merged file to
@@ -132,7 +134,9 @@ def _identity(path: Path) -> tuple[str, int] | None:
 def collect(runner: Runner, repo: str, output_dir: Path, runs: int = DEFAULT_RUNS) -> list[Path]:
     """Download the timings artifacts of the newest eligible runs, at most ``runs`` of
     them, and return the directories that still hold a record after the duplicates (a
-    ``(plan_digest, shard)`` already taken) are dropped."""
+    ``(plan_digest, shard)`` already taken) are dropped, newest run first. ``dirs.txt``
+    lists the same directories oldest first, the order ``run_tests.py timings merge``
+    requires (``update_timings`` folds its records oldest first)."""
     if runs < 1:
         raise RefreshError("--runs must be at least 1")
     output_dir = Path(output_dir)
@@ -163,7 +167,7 @@ def collect(runner: Runner, repo: str, output_dir: Path, runs: int = DEFAULT_RUN
         else:
             shutil.rmtree(directory, ignore_errors=True)
     output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / DIRS_FILE).write_text("".join(f"{d}\n" for d in kept), encoding="utf-8")
+    (output_dir / DIRS_FILE).write_text("".join(f"{d}\n" for d in reversed(kept)), encoding="utf-8")
     return kept
 
 

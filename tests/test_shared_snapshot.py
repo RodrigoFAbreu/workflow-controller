@@ -40,7 +40,7 @@ class CopyTest(SnapshotCase):
         name = self.key()
         first = self.built(name)
         first.tasks.append("review-plan")
-        self.assertTrue(fixtures.has_snapshot((name, first.snapshot_inputs())))
+        self.assertTrue(fixtures.has_snapshot(first.snapshot_key(name)))
         # The state was saved when the drive ended, so what the first test does afterwards is not in the copy.
         driven: list[bool] = []
         self.release(first)
@@ -116,7 +116,7 @@ class FallbackTest(SnapshotCase):
         life = lifecycle.GateLifecycle(self)
         with mock.patch.object(fixtures.shutil, "copytree", side_effect=OSError("disk full")):
             life.reach(name, lambda: None)
-        self.assertFalse(fixtures.has_snapshot((name, life.snapshot_inputs())))
+        self.assertFalse(fixtures.has_snapshot(life.snapshot_key(name)))
         later = lifecycle.GateLifecycle(self)
         driven: list[bool] = []
         later.reach(name, lambda: driven.append(True))
@@ -141,7 +141,84 @@ class InputsTest(SnapshotCase):
         pending.checks.write_text("pending")  # the default is "green"
         reported = lifecycle.GateLifecycle(self)
         reported.report = "another"
-        self.assertEqual(len({plain.snapshot_inputs(), pending.snapshot_inputs(), reported.snapshot_inputs()}), 3)
+        self.assertEqual(len({life.snapshot_key("row") for life in (plain, pending, reported)}), 3)
+
+    def test_a_keys_parts_are_named(self) -> None:
+        life = lifecycle.GateLifecycle(self)
+        self.assertEqual(set(life.snapshot_inputs()), {"release", "report", "checks", "refused"})
+        loop = lifecycle.LoopLifecycle(self)
+        self.assertEqual(set(loop.snapshot_inputs()) - set(life.snapshot_inputs()),
+                         {"acceptance", "world", "bound", "wait_seconds"})
+
+    def test_a_part_not_declared_late_still_separates_keys(self) -> None:
+        plain = lifecycle.GateLifecycle(self)
+        pending = lifecycle.GateLifecycle(self)
+        pending.checks.write_text("pending")
+        self.assertNotEqual(plain.snapshot_key("row", late=("refused",)), pending.snapshot_key("row", late=("refused",)))
+        self.assertEqual(plain.snapshot_key("row", late=("checks",)), pending.snapshot_key("row", late=("checks",)))
+
+    def test_an_unknown_late_part_is_refused(self) -> None:
+        with self.assertRaisesRegex(AssertionError, "unknown late part"):
+            lifecycle.GateLifecycle(self).snapshot_key("row", late=("nope",))
+
+    def test_the_world_of_a_loop_life_stays_in_the_key(self) -> None:
+        pending = lifecycle.LoopLifecycle(self, checks="pending")
+        green = lifecycle.LoopLifecycle(self, checks="green")
+        self.assertNotEqual(pending.snapshot_key("row"), green.snapshot_key("row"))
+
+
+class LatePartTest(SnapshotCase):
+    """D4: a part the drive never reads is left out of the key, each life still sees its own value, and a drive that
+    does read it fails loudly."""
+
+    LATE = ("checks", "refused")
+
+    def late_life(self, *, checks: str = "green", refused: tuple = ()) -> lifecycle.GateLifecycle:
+        life = lifecycle.GateLifecycle(self)
+        life.checks.write_text(checks)
+        life.refused = set(refused)
+        return life
+
+    def test_two_lives_that_differ_only_in_a_late_part_share_one_snapshot_and_each_sees_its_own_value(self) -> None:
+        name = self.key()
+        first = self.late_life(checks="green")
+        first.reach(name, lambda: (first.root / "marker.txt").write_text("built\n"), late=self.LATE)
+        self.assertEqual(first.checks.read_text(), "green")
+        self.release(first)
+        second = self.late_life(checks="pending", refused=("plan",))
+        second.reach(name, lambda: self.fail("the late parts are not in the key, so this restores"), late=self.LATE)
+        self.assertEqual((second.root / "marker.txt").read_text(), "built\n")
+        self.assertEqual(second.checks.read_text(), "pending")
+        self.assertEqual(second.refused, {"plan"})
+        self.assertEqual(second.checks, second.td / "checks")
+
+    def test_the_drive_runs_with_the_canonical_value_and_the_life_gets_its_own_back(self) -> None:
+        name = self.key()
+        life = self.late_life(checks="pending", refused=("plan",))
+        seen: list[tuple] = []
+        life.reach(name, lambda: seen.append((life.checks.read_text(), set(life.refused))), late=self.LATE)
+        self.assertEqual(seen, [("green", set())])
+        self.assertEqual((life.checks.read_text(), life.refused), ("pending", {"plan"}))
+
+    def test_a_drive_that_reads_a_late_part_fails_with_the_guards_message(self) -> None:
+        name = self.key()
+        life = self.late_life()
+        with self.assertRaisesRegex(AssertionError, "declared 'refused' late but read it"):
+            life.reach(name, lambda: life.late("refused"), late=self.LATE)
+        self.assertEqual(life.late("refused"), ())  # the guard is off again
+        self.assertFalse(fixtures.has_snapshot(life.snapshot_key(name, self.LATE)))
+
+    def test_a_drive_may_read_a_part_it_did_not_declare_late(self) -> None:
+        life = self.late_life()
+        seen: list[str] = []
+        life.reach(self.key(), lambda: seen.append(life.late("checks")), late=("refused",))
+        self.assertEqual(seen, ["green"])
+
+    def test_an_effect_that_reads_refused_trips_the_guard_in_a_declaring_drive(self) -> None:
+        life = self.late_life()
+        life._late_running, life._late_row = frozenset({"refused"}), "row"
+        with self.assertRaisesRegex(AssertionError, "read it"):
+            life.effect("/satisfy-gate plan workflow-demo")
 
 
 class FreshBuildTest(SnapshotCase):

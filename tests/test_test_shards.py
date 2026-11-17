@@ -2528,6 +2528,98 @@ def untimed_share_over_the_limit(atoms, profile_atoms, limit: float = MAX_UNTIME
     return total > 0 and untimed / total > limit
 
 
+#: The class CP1 of CI2 split in two, and its sibling (the original keeps its name for one half).
+SPLIT_ORIGINAL = "tests.test_codex_apply_regeneration.PlanRegenerationTest"
+SPLIT_SIBLING = "tests.test_codex_apply_regeneration.PlanRegenerationRecordTest"
+
+
+def split_historical_atoms(atom_tests: dict) -> dict:
+    """The one mapping of the split class (CI2 D3 and D5): a historical shard's
+    ``{atom key: test ids}`` with the original ten-test ``SPLIT_ORIGINAL`` atom
+    replaced by both halves (five tests each), on the same shard, each once. The ten
+    tests are preserved: the first five stay under the original key, the rest move to
+    the sibling key. A shard without the original, or one already split, is unchanged."""
+    ids = atom_tests.get(SPLIT_ORIGINAL)
+    if ids is None or SPLIT_SIBLING in atom_tests or len(ids) != 10:
+        return dict(atom_tests)
+    mapped = {key: list(value) for key, value in atom_tests.items() if key != SPLIT_ORIGINAL}
+    mapped[SPLIT_ORIGINAL] = list(ids[:5])
+    mapped[SPLIT_SIBLING] = [SPLIT_SIBLING + test_id[len(SPLIT_ORIGINAL):] for test_id in ids[5:]]
+    return mapped
+
+
+def historical_shard_atoms(shard: dict) -> list:
+    """``shards.Atom`` objects for a plan record's shard, test ids assigned to the
+    longest atom key that prefixes them, after ``split_historical_atoms``."""
+    keys = sorted(shard["atoms"], key=len, reverse=True)
+    tests: dict = {key: [] for key in shard["atoms"]}
+    for test_id in shard["test_ids"]:
+        owner = next((k for k in keys if test_id == k or test_id.startswith(k + ".")), None)
+        if owner is not None:
+            tests[owner].append(test_id)
+    atoms = []
+    for key, ids in split_historical_atoms(tests).items():
+        if key.startswith("conformance:"):
+            atoms.append(shards.Atom(key=key, family="conformance", kind="suite",
+                                     module="conformance", test_ids=tuple(ids) or (key,)))
+        else:
+            atoms.append(shards.Atom(key=key, family="controller", kind="class",
+                                     module=key.rsplit(".", 1)[0], test_ids=tuple(ids)))
+    return atoms
+
+
+class SplitHistoricalAtomsTest(unittest.TestCase):
+    """CI2 D3 and D5: a historical plan naming the original ten-test atom is mapped
+    to both replacement atoms on the same shard before any estimate is taken."""
+
+    TESTS = [f"{SPLIT_ORIGINAL}.test_{n:02d}" for n in range(10)]
+
+    def _shard(self, with_original: bool = True) -> dict:
+        atoms = ["tests.test_other.OtherTest", "conformance:workflow_state_test.py"]
+        test_ids = ["tests.test_other.OtherTest.test_x"]
+        if with_original:
+            atoms.insert(1, SPLIT_ORIGINAL)
+            test_ids += self.TESTS
+        return {"atoms": atoms, "test_ids": test_ids}
+
+    def test_both_halves_appear_once_on_the_original_shard_with_all_ten_tests(self):
+        atoms = {a.key: a for a in historical_shard_atoms(self._shard())}
+        self.assertEqual(sorted(atoms), sorted([
+            "tests.test_other.OtherTest", SPLIT_ORIGINAL, SPLIT_SIBLING,
+            "conformance:workflow_state_test.py"]))
+        halves = atoms[SPLIT_ORIGINAL].test_ids + atoms[SPLIT_SIBLING].test_ids
+        self.assertEqual((len(atoms[SPLIT_ORIGINAL].test_ids),
+                          len(atoms[SPLIT_SIBLING].test_ids)), (5, 5))
+        self.assertEqual(len(set(halves)), 10)
+        self.assertEqual({t.rsplit(".", 1)[1] for t in halves},
+                         {t.rsplit(".", 1)[1] for t in self.TESTS})
+
+    def test_the_cost_is_both_halves_not_the_ten_test_key_alone(self):
+        profile = _profile({
+            SPLIT_ORIGINAL: {"seconds": 50.0, "tests": 5, "samples": 3},
+            SPLIT_SIBLING: {"seconds": 80.0, "tests": 5, "samples": 3},
+            "tests.test_other.OtherTest": {"seconds": 1.0, "tests": 1, "samples": 3},
+        })
+        atoms = historical_shard_atoms(self._shard())
+        estimate = shards.estimate_atoms(atoms, [profile])
+        self.assertEqual(estimate[SPLIT_ORIGINAL] + estimate[SPLIT_SIBLING], 130.0)
+        unmapped = shards.Atom(key=SPLIT_ORIGINAL, family="controller", kind="class",
+                               module="tests.test_codex_apply_regeneration",
+                               test_ids=tuple(self.TESTS))
+        self.assertEqual(shards.estimate_atoms([unmapped], [profile])[SPLIT_ORIGINAL], 100.0)
+
+    def test_a_plan_without_the_original_is_returned_unchanged(self):
+        before = {"tests.test_other.OtherTest": ["tests.test_other.OtherTest.test_x"]}
+        self.assertEqual(split_historical_atoms(before), before)
+        keys = [a.key for a in historical_shard_atoms(self._shard(with_original=False))]
+        self.assertNotIn(SPLIT_SIBLING, keys)
+        self.assertNotIn(SPLIT_ORIGINAL, keys)
+
+    def test_an_already_split_shard_is_not_split_again(self):
+        done = {SPLIT_ORIGINAL: ["a"] * 5, SPLIT_SIBLING: ["b"] * 5}
+        self.assertEqual(split_historical_atoms(done), done)
+
+
 class CommittedTimingsTest(unittest.TestCase):
     """The committed profile is advisory (I3): it must parse and name only
     existing atoms; its test counts may drift until the next reviewed

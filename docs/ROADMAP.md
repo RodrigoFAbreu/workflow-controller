@@ -98,7 +98,7 @@
 | 92 | [Review follow-ups of the Codex worker item H4f (#344)](items/workflow-controller-cx2.md) `workflow-controller-cx2` | Done | - | - |
 | 93 | [Opt this repository in to the Controller's auto-merge](items/workflow-controller-ao1.md) `workflow-controller-ao1` | Done | - | - |
 | 94 | [Align CI with the agreed standard: CI, Tests and Build and publish](items/workflow-controller-ci3.md) `workflow-controller-ci3` | Done | - | - |
-| 95 | [CI: fresh shard timings, a measured contention estimate and the CI1b review follow-ups (#317, #324)](items/workflow-controller-ci2.md) `workflow-controller-ci2` | Next | - | - |
+| 95 | [CI: fresh shard timings, a measured contention estimate and the CI1b review follow-ups (#317, #324)](items/workflow-controller-ci2.md) `workflow-controller-ci2` | Done | - | - |
 | 96 | [CI: run each test once, the duplicate-run removal (#317)](items/workflow-controller-ci2b.md) `workflow-controller-ci2b` | Next | - | workflow-controller-ci2 |
 | 97 | [CI: fixture snapshots and process starts (#317)](items/workflow-controller-ci2c.md) `workflow-controller-ci2c` | Next | - | workflow-controller-ci2 |
 | 98 | [CI: after-merge and trigger policy, and the automated timings refresh (#317)](items/workflow-controller-ci2d.md) `workflow-controller-ci2d` | Next | - | workflow-controller-ci2 |

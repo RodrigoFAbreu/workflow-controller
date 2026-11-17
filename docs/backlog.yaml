@@ -554,7 +554,7 @@ items:
     detail: docs/items/workflow-controller-ci3.md
   - id: workflow-controller-ci2
     title: "CI: fresh shard timings, a measured contention estimate and the CI1b review follow-ups (#317, #324)"
-    status: next
+    status: done
     order: 95
     depends_on: []
     detail: docs/items/workflow-controller-ci2.md

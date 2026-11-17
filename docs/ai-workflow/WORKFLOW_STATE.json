@@ -81390,7 +81390,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci2c-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci2c-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 2,
       "implementation_revision": 3,
       "functional_review_round": null,
@@ -81508,16 +81508,16 @@
         }
       },
       "technical_approval": {
-        "status": "STALE",
+        "status": "CURRENT",
         "basis": "POLICY_SATISFIED",
-        "reviewed_bundle_id": "e69fc8da6f3ef048c781ccfbd47fb6968a79d4d39f8ac9ea3b0ae6c8996942a9",
-        "approved_review_content_id": "8d57b9a38c8a43ac5f6ba3d3d9396358766ffd7bc5488c137b1500a586162377",
+        "reviewed_bundle_id": "7b9bfffa640ee253352787f92c89d97c273df7ce7380895c963659bc594e852e",
+        "approved_review_content_id": "a3bcdc69aaf04cf8c0218f09c561d2682c76935af56b7a4b1257c2c37ef89976",
         "review_content_manifest": [
           {
             "path": "docs/ai-workflow/registry/workflow-controller-ci2c-artifacts.json",
             "exists": true,
             "mode": "100644",
-            "blob": "a2a09838a25de76f3fc63a580aded56ac0b45b59"
+            "blob": "9fe74b86ae918c59a65a30b9806727de51e3aab6"
           },
           {
             "path": "docs/guide/development.md",
@@ -81556,17 +81556,23 @@
             "blob": "db083b6b4ef6318321dbc401d2be6620e9c6c74a"
           },
           {
+            "path": "tests/test_review_same_provider.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6536b94355de6b5cbc129c17cdf859fe1640571b"
+          },
+          {
             "path": "tests/test_shared_snapshot.py",
             "exists": true,
             "mode": "100644",
             "blob": "2c017128b16fe1bcc6fd0c1f7f920c51273aa7dd"
           }
         ],
-        "reviewed_content_commit": "8d84f6d4a8b99d5e6d894567043fc29285a6056c",
+        "reviewed_content_commit": "f953ccf4b473dff7fb2419a243de1a9f474b102f",
         "legacy_evidence": null,
         "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
         "waived_guarantees": [],
-        "recorded_at": "2026-11-17T17:46:02Z",
+        "recorded_at": "2026-11-17T19:13:31Z",
         "policy_evidence": {
           "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
           "policy_source": "default",
@@ -81596,24 +81602,24 @@
             }
           ],
           "inputs": {
-            "review_content_id": "8d57b9a38c8a43ac5f6ba3d3d9396358766ffd7bc5488c137b1500a586162377",
+            "review_content_id": "a3bcdc69aaf04cf8c0218f09c561d2682c76935af56b7a4b1257c2c37ef89976",
             "ledger": {
               "local": {
-                "bundle_id": "e69fc8da6f3ef048c781ccfbd47fb6968a79d4d39f8ac9ea3b0ae6c8996942a9",
+                "bundle_id": "7b9bfffa640ee253352787f92c89d97c273df7ce7380895c963659bc594e852e",
                 "verdict": "APPROVE",
-                "round": 1,
-                "verdict_sha256": "90a053bacfd0c03bb5af0688d87c72f7e1591e040a5a0536824934698d8458fb",
-                "ledger_entry_sha256": "56f5626418fa053f40a3809a057dc3b3ae6d39eabcbfdf745198cfae9d3392b6",
+                "round": 3,
+                "verdict_sha256": "c0333ebbcde270bf868454dfa1542e2770eb04ff9c19055c93e1a876d865622a",
+                "ledger_entry_sha256": "5d07ca9b78f5ecb92820e1dc63e72e102358c8638634485e91da1dc578837d43",
                 "run_ref": "session:local .ai-review/workflow-controller-ci2c/feedback/REVIEW_FEEDBACK.md",
                 "reviewer_model": "anthropic/claude-opus-5-5"
               },
               "manual": {
-                "bundle_id": "e69fc8da6f3ef048c781ccfbd47fb6968a79d4d39f8ac9ea3b0ae6c8996942a9",
+                "bundle_id": "7b9bfffa640ee253352787f92c89d97c273df7ce7380895c963659bc594e852e",
                 "verdict": "APPROVE",
-                "round": 1,
-                "verdict_sha256": "0b6eaae897965cbd33b2d3098d86522d800b976c866ff76f95f20cd73d65f637",
-                "ledger_entry_sha256": "1ebf310d42231808b062414327ff5f9de84413fcd386769320dd8e86fb955f14",
-                "run_ref": "codex:20261117T173934Z-639bd261",
+                "round": 3,
+                "verdict_sha256": "9a589bdd65f618c61c92cfe2755b1f16d89666eb49c29f4bc309d2f9681defe1",
+                "ledger_entry_sha256": "854e90a2ec9190d0a6e4cbb9f8cbe1b6ef0cac7801056e465508e45604e4b0d2",
+                "run_ref": "codex:20261117T190844Z-a50d5eaf",
                 "reviewer_model": "openai/gpt-6.1-sol"
               }
             },
@@ -81623,7 +81629,7 @@
           "trust": {
             "review_verdicts": "orchestrator"
           },
-          "evaluated_at": "2026-11-17T17:46:02Z",
+          "evaluated_at": "2026-11-17T19:13:31Z",
           "workflow_release": "2.29.3"
         }
       },
@@ -81657,12 +81663,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 2,
-          "external": 1
+          "local": 3,
+          "external": 2
         }
       },
-      "state_revision": 27,
-      "last_transition": "2026-11-17T19:01:46Z",
+      "state_revision": 30,
+      "last_transition": "2026-11-17T19:13:31Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -81839,26 +81845,82 @@
               "at": "2026-11-17T18:57:44Z"
             }
           ]
+        },
+        "F-140a5c49570b": {
+          "digest": "140a5c49570bbb6b46393941de92ace78f50d382284589e4b34e8ec7b5eef7bf",
+          "text": "**O1. `docs/ACTIVE_MILESTONE.md` still says no class needed the flag.** Its CP3 \"verified state\" entry (line 9) says twice that the optional `SHARE_SNAPSHOT = False` flag \"exists but no class needed it\" and \"so no class was given `SHARE_SNAPSHOT = False`\". This is the same claim round 2 had corrected on the item page. The narrative is outside the protected content and was accurate when CP3 was recorded. Still, it is the active narrative a resumed session reads. Add a short revision-2/3 note naming `AdoptedPolicyLoopTest` and the CI-found defect.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "a3bcdc69aaf04cf8c0218f09c561d2682c76935af56b7a4b1257c2c37ef89976",
+              "verdict": "APPROVE",
+              "at": "2026-11-17T19:08:30Z"
+            }
+          ]
+        },
+        "F-210bb4863bb1": {
+          "digest": "210bb4863bb125640bc43585f1e2bcdef9fd1736caac798a0eb61a0ff0a25ea1",
+          "text": "**O2. The guide does not say what makes a class unable to share.** `docs/guide/development.md:652-653` says only that \"a class that cannot share sets `SHARE_SNAPSHOT = False` and says why\". The trap that turned the pull request red was a subclass changing something the drive reads (here `fixtures.run_workflow_seed`) before `super().setUp()`, which the `release`/`report` key cannot see. One sentence naming that rule would let the next author avoid the trap without reading the item page. Round 2's deferred guard (`F-71e6ac95a186`) would enforce the same rule in code.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "a3bcdc69aaf04cf8c0218f09c561d2682c76935af56b7a4b1257c2c37ef89976",
+              "verdict": "APPROVE",
+              "at": "2026-11-17T19:08:30Z"
+            }
+          ]
+        },
+        "F-fdc09bfcb71d": {
+          "digest": "fdc09bfcb71dd2fd0dee16abf46a3e8154b4d43e46fe6a67fe9557a8eac78396",
+          "text": "**O3. Round 2's Optional findings have no disposition yet.** `docs/ai-workflow/registry/workflow-controller-ci2c-dispositions.json` (untracked) records the plan-stage and round-1 findings, but not `F-71e6ac95a186` (the seed guard; the summary defers it \"a follow-up if the owner wants it\"), `F-e073a7e328f5` (fixed in `f953ccf`) or `F-e102427cc40b` (fixed by the clean regeneration). Record them, with a follow-up issue link for `F-71e6ac95a186`, before acceptance.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "a3bcdc69aaf04cf8c0218f09c561d2682c76935af56b7a4b1257c2c37ef89976",
+              "verdict": "APPROVE",
+              "at": "2026-11-17T19:08:30Z"
+            }
+          ]
+        },
+        "F-d72080d67a53": {
+          "digest": "d72080d67a53411e0c2fe619a9e4547642c1bdb7517dc0a215056b2182194a84",
+          "text": "The previous clock-rationale finding remains: `tests/test_review_job.py:119` and `docs/guide/development.md:652` describe preserving usage-record timestamps, but the setup drive supplies no usage gate and creates no shared usage entries. `ReviewRowTest` compares empty usage records, so it establishes no record-age guarantee. This does not invalidate snapshot reuse.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 3,
+              "review_content_id": "a3bcdc69aaf04cf8c0218f09c561d2682c76935af56b7a4b1257c2c37ef89976",
+              "verdict": "APPROVE",
+              "at": "2026-11-17T19:11:58Z"
+            }
+          ]
         }
       },
       "implementation_review_stages": {
-        "review_content_id": "8d57b9a38c8a43ac5f6ba3d3d9396358766ffd7bc5488c137b1500a586162377",
+        "review_content_id": "a3bcdc69aaf04cf8c0218f09c561d2682c76935af56b7a4b1257c2c37ef89976",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "e69fc8da6f3ef048c781ccfbd47fb6968a79d4d39f8ac9ea3b0ae6c8996942a9",
+          "bundle_id": "7b9bfffa640ee253352787f92c89d97c273df7ce7380895c963659bc594e852e",
           "verdict": "APPROVE",
-          "round": 1,
-          "completed_at": "2026-11-17T17:39:11Z",
-          "verdict_sha256": "90a053bacfd0c03bb5af0688d87c72f7e1591e040a5a0536824934698d8458fb",
+          "round": 3,
+          "completed_at": "2026-11-17T19:08:30Z",
+          "verdict_sha256": "c0333ebbcde270bf868454dfa1542e2770eb04ff9c19055c93e1a876d865622a",
           "run_ref": "session:local .ai-review/workflow-controller-ci2c/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
         "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "e69fc8da6f3ef048c781ccfbd47fb6968a79d4d39f8ac9ea3b0ae6c8996942a9",
+          "bundle_id": "7b9bfffa640ee253352787f92c89d97c273df7ce7380895c963659bc594e852e",
           "verdict": "APPROVE",
-          "round": 1,
-          "completed_at": "2026-11-17T17:44:30Z",
-          "verdict_sha256": "0b6eaae897965cbd33b2d3098d86522d800b976c866ff76f95f20cd73d65f637",
-          "run_ref": "codex:20261117T173934Z-639bd261",
+          "round": 3,
+          "completed_at": "2026-11-17T19:11:58Z",
+          "verdict_sha256": "9a589bdd65f618c61c92cfe2755b1f16d89666eb49c29f4bc309d2f9681defe1",
+          "run_ref": "codex:20261117T190844Z-a50d5eaf",
           "reviewer_model": "openai/gpt-6.1-sol"
         }
       },

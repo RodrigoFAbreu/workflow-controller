@@ -1,6 +1,15 @@
 # Active Milestone
 
-## Latest milestone (CI3)
+## Latest milestone (CI2)
+
+**Complete: accepted by policy (`MILESTONE_COMPLETE`).** Accepted after the functional review passed (PR #373, checks green at the approved head). Plan `docs/ai-workflow/CONTROLLER_CI2_PLAN.md` (revision 12), three checkpoints; it refreshes the committed shard timings, adds a staleness ratchet, and measures the acceptance-matrix contention at the shard.
+
+- **CP1 complete (verified state).** `tools/test_timings.json` was merged from three real CI runs of `ci.yml` (43855824846, 43864443959, 43879797542, oldest first; nine distinct shard records) into the base commit's file, with the plan's two replacement atoms for the split class. It went from 1,179 to 1,291 atoms. Checked against the base file by the plan's rule: 1,094 atoms folded with `samples` + 3, 130 folded as new or with a changed test count at 3 samples (18 of them with a changed count), 67 not folded and unchanged, none pruned; no atom reached a double-fold count. Untimed share of the CI-placed tests: 657 of 6,654 (9.9 percent) against the base file, 5 of 6,654 after the refresh. `MAX_UNTIMED_TEST_SHARE` is 20 percent: the untimed share grew about 1.2 points a day after `065ca1e` (2026-11-08), 17.2 points over the 14 accepted days, rounded up to a multiple of 5. `tests.test_codex_apply_regeneration.PlanRegenerationTest` (210.6 s over 10 tests in the runs) is split test-only into `PlanRegenerationTest` and `PlanRegenerationRecordTest` (five tests each, through the mixins `RegenerationGate` and `RegenerationRecord`); `ImplRegenerationTest` keeps its twelve. The split atoms' seconds are the sums of their tests' seconds from the runs (about 1 percent below the old atom, which also held set-up time). The base plan for D5 is saved at `/tmp/claude-c1/ci2-timings/plans/base-plan.json` (plan digest `ef75968f`, the same as the runs').
+- **CP2 complete (verified state).** The shard-level observed-over-uncontended ratios were measured on runs 43855824846, 43864443959 and 43879797542 with the refreshed profile (in-sample, after the one shared mapping `split_historical_atoms` of the split class): the acceptance-matrix shard is 0.69, 1.08 and 1.07; the other shards are 0.85, 0.93, 0.97, 1.14, 1.15 and 1.18 (shards 1 and 2 of run 43855824846 are 1.15 and 1.18, of run 43864443959 0.97 and 1.14, of run 43879797542 0.93 and 0.85). No suite is stably above 1.15 in two runs, so no `CONFORMANCE_CONTENTION` constant is added and `tools/test_shards.py` is unchanged. `tests.test_test_shards.SplitHistoricalAtomsTest` checks the mapping in memory (both halves once on the original shard, ten tests kept, combined cost, an unnamed original returned unchanged). The ratios go to the item page in CP3.
+- **CP3 complete (verified state).** `docs/guide/development.md` (the staleness ratchet, the two missing D4 rule parts, "blends", "a base without test methods") and `docs/guide/ci-and-releases.md` (the refresh of 2026-11-17, the ratchet, the corrected floor sentences: the Controller lane is always the longer one at three shards, and the measured result with the 1.15 rule unchanged) are current; the six #324 findings are done on `docs/items/workflow-controller-ci1b.md`. `docs/items/workflow-controller-ci2.md` is retitled to this slice and records the measured ratios, the base plan rescored with the refreshed timings (longest 4,092.6 s over a 3,488.5 s mean, against the new plan's level 3,493.9 s: a predicted gain of 598.7 s on the longest shard) and each shard's observed wall time against its estimate before and after; the elapsed CI comparison is recorded at the self-review (below). `docs/items/workflow-controller-ci2b.md` to `ci2e.md` are new, and `docs/backlog.yaml` has the four items after `workflow-controller-ci2` with the later `order` values moved up by four; `docs/ROADMAP.md` is regenerated. Verified with `tests.test_docs`, `tests.test_plan_document_consistency` (108 tests, exact coverage, passing), `tools/check_docs.py`, `workflow_backlog.py check` and `preflight-accept workflow-controller-ci2`.
+- **Self-review.** Two defects fixed in `52a1a93`: `split_historical_atoms` put the first five sorted ids under the original key, so three of the sibling's tests sat under `PlanRegenerationTest` (the costs and the ratios are unchanged, each half being a five-test atom; the ids now follow `SPLIT_SIBLING_METHODS`, which a new test ties to the inventory, and ids that do not divide five and five are left unchanged); on the item page the paragraph after the ratios table had no blank line and rendered as a table row. The elapsed CI time is recorded on the item page: PR #373's `CI` run 44062553881 at `429f97f` took 55 min 41 s (shards 47.1, 50.6 and 54.5 minutes) against 57 min 12 s, 65 min 16 s and 64 min 40 s for the three three-shard baseline runs, measured the same way; the 35 to 41 minutes the plan names was a six-shard figure, before CI3. The single full run (`python3 tools/run_tests.py` in a clean clone at `52a1a93`, 6751 tests, exact coverage) failed 5 tests, none in a module this item touches: three in `tests.test_fake_codex_contract` are the known `~/.codex/config.toml` leak (the module passes in a clone under `/tmp`, 20 tests), and `tests.test_codex_worker` (a timeout recorded as `terminated_by_signal`) and `tests.test_job_codex_apply` (a Codex process from another shard, the shards running without a PID namespace) pass when rerun alone (132 tests, exact coverage). `tools/check_docs.py`, `workflow_backlog.py check` and `preflight-accept` pass in that clone.
+
+## Previous milestone (CI3)
 
 **Complete: accepted by policy (`MILESTONE_COMPLETE`).** Plan `docs/ai-workflow/CONTROLLER_CI3_PLAN.md` (revision 3), four checkpoints; it aligns CI with the agreed standard (CI, Tests and Build and publish). CP1 is complete: the reusable test workflow is `tests.yml`, workflow name `Tests` (`tools/ci_workflows.py`: `TESTS_WORKFLOW`, `tests_workflow()`, `validate.yml` in `RETIRED_WORKFLOWS`); `ci.yml`'s calling job keeps the id `validate`, so the five required check names are unchanged; the docstrings of `tools/ci_changes.py` and `tools/ci_reuse.py` and the references in `tests.test_ci_workflows`, `tests.test_ci_changes` and `tests.test_plan_document_consistency` follow. Verified with `tests.test_ci_workflows`, `tests.test_ci_changes`, `tests.test_ci_reuse`, `tests.test_plan_document_consistency` (266 tests, exact coverage, all passing) and `python3 tools/ci_workflows.py --check`. CP2 is complete: `build-publish.yml` only builds and publishes (D2, D3). `build_publish_workflow` in `tools/ci_workflows.py` no longer holds the `validate`, `after-merge-determinism` and `after-merge-mutations` jobs, the `SELF_VALIDATING` branches or the `main-release` slot (its concurrency group is `build-publish-<run id>`); `build`, `publish` and `release-target-*` all carry `inputs.validate-result == 'success'` as a conjunct, the coverage condition is `&&`-ed onto it and reads only the caller's `after-merge-*` inputs and `release-target-*`; `release-plan` runs on `main` whatever it was handed and, for a run handed no success, writes a notice naming the CI dispatch that publishes. `ci.yml`'s `build-publish` call grants `contents: write` alone (no `actions: read`: nothing in the called workflow downloads another run). Tests in `tests.test_ci_workflows` replace the manual-dispatch ones: no `validate` or `after-merge-*` job there, the validate conjunct parsed by parenthesis depth, every input a direct dispatch can produce (null, empty, other strings) with every `release-plan` state and `release-target-*` result leaving `release-target-*`, `build` and `publish` not run, and a CI dispatch from `main` reaching `build-publish` with the results while one from another branch does not. Verified with `tests.test_ci_workflows`, `tests.test_release_tools`, `tests.test_ci_changes`, `tests.test_ci_reuse`, `tests.test_plan_document_consistency` and `python3 tools/ci_workflows.py --check`. CP3 is complete: the owner chose option B for O1 (recorded in `docs/items/workflow-controller-ci3.md`, SignalHub 2026-11-16): `RUNNER_LIMIT = 6`, `TEST_MAX_PARALLEL = 3` in `tools/ci_workflows.py`, `max-parallel` always emitted on the shard matrix, and `CI_MAX_SHARDS = 3` in `tools/test_shards.py` (its pins in `tests.test_test_shards` follow). `package` now needs `docs` and runs on `!cancelled()` (one docs-tests, docs, package lane beside the shards, never skipped by an upstream result), and `ci.yml`'s two `after-merge-*` jobs wait for `validate` (not cancelled, not a pull request, `validate` succeeded). `tests.test_ci_workflows.RunnerLimitTest` proves the limit from the generated models with no timing assumption: the called workflows are flattened into one job graph, the heaviest set of jobs with no `needs` path between them is found, and the outside runners (conformance, `PR title`, the main reuse report where its `if` holds) are added for every event and every `CI_MAIN_REUSE` mode; it also pins the shared `docs-tests` call, the one-job conformance file, the five required check names and the tie `TEST_MAX_PARALLEL <= CI_MAX_SHARDS`. Verified with `tests.test_ci_workflows`, `tests.test_ci_changes`, `tests.test_ci_reuse`, `tests.test_package_structure`, `tests.test_test_shards`, `tests.test_scenarios` (all passing, exact coverage) and `python3 tools/ci_workflows.py --check`. CP4 is complete: `docs/guide/ci-and-releases.md` (the tree and the Tests workflow, the new "The six-runner limit" section with its per-run limit and the mutable-ref assumption about `docs-tests`, the manual publish route as a CI dispatch from `main`, the release latency now plus about 15 to 17 minutes), `docs/guide/development.md` (the shard ceiling of three, `tests.yml`), `README.md` and `docs/items/workflow-controller-ci3.md` (status, plan link, O1 with the owner's choice and the table, what was done, the corrected "8-shard" sentence) are current; the pull request's measured run is recorded in the item page at self-review. Verified with `tests.test_docs`, `tests.test_plan_document_consistency`, `python3 tools/check_docs.py`, `python3 scripts/workflow_backlog.py check` and `preflight-accept workflow-controller-ci3`. **Self-review:** wording defects fixed in `73f2451`: `ci.yml`'s header and the model's docstring still said the after-merge checks run beside `validate` and that a dispatched `build-publish.yml` runs `tests.yml` itself; `tests.yml`'s header was wrapped mid-sentence; the CI guide had an ambiguous "It has seven jobs", said only a called `build-publish.yml` run has its own concurrency group, and its push-to-`main` paragraph and tree did not say the after-merge checks wait for `validate`. The measured run is recorded in the item page: PR #370's `CI` run at `b5dc86b` (run 43844429224) passed in 63.6 minutes, shards 41.2, 55.6 and 62.1 minutes. The single full run (`python3 tools/run_tests.py`, 6741 tests, exact coverage) failed 6 tests, none in a module this item touches: three in `tests.test_fake_codex_contract` are the known `~/.codex/config.toml` leak (the module passes in a clone under `/tmp`, 20 tests), and `tests.test_job_codex_review`, `tests.test_codex_worker` and `tests.test_job_codex_worker` (timing under load) pass when rerun alone (128 tests, exact coverage). `tools/ci_workflows.py --check`, `tools/check_docs.py`, `workflow_backlog.py check` and `preflight-accept` pass.
 
@@ -681,58 +690,52 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-ci3` (CI3), implementation revision 1, plan `docs/ai-workflow/CONTROLLER_CI3_PLAN.md` (revision 3), base commit
-`3166305`. Four checkpoints, all complete: CP1 (the reusable test workflow is `tests.yml`, workflow name `Tests`), CP2 (`build-publish.yml` only builds
-and publishes), CP3 (the six-runner limit, shard cap three, and its proof) and CP4 (the pages and the item record).
+Item `workflow-controller-ci2` (CI2), implementation revision 1, plan `docs/ai-workflow/CONTROLLER_CI2_PLAN.md` (revision 12), base commit
+`a785d4f`. Three checkpoints, all complete: CP1 (refreshed `tools/test_timings.json`, the staleness ratchet and the `PlanRegenerationTest` split), CP2 (the
+acceptance-matrix contention measured at the shard; no `CONFORMANCE_CONTENTION` constant) and CP3 (the guides, the item pages and the backlog split into
+`ci2b` to `ci2e`), plus the self-review fixes.
 Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the
 system directories, and no write inside the read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write only
 to the scratch `TMPDIR`. No flow needs a pull request or a forge call, and none runs the full suite.
 
 Setup: `export TMPDIR=$(mktemp -d)`. No data to seed.
 
-**Flow 1: the workflow files and the generated models.**
-Run `ls .github/workflows` and `python3 -B tools/ci_workflows.py --check; echo rc=$?`.
-Expected: `tests.yml` exists and `validate.yml` does not; the other files are `build-publish.yml`, `ci.yml`, `main-reuse-report.yml`, `pr-title.yml` and
-`workflow-conformance.yml`; `--check` reports the committed files match the models, `rc=0`.
+**Flow 1: the refreshed timings and the ratchet.**
+Run `python3 -B tools/run_tests.py tests.test_test_shards; echo rc=$?`.
+Expected: `# Test run: PASS`, exact coverage, `rc=0`; a `namespace: none` line is expected in this sandbox. `CommittedTimingsTest` and
+`SplitHistoricalAtomsTest` are among the classes run. `MAX_UNTIMED_TEST_SHARE` is 0.20 (`grep -n "MAX_UNTIMED_TEST_SHARE =" tests/test_test_shards.py`).
 
-**Flow 2: the names.**
-Run `grep -n "^name:" .github/workflows/tests.yml .github/workflows/ci.yml .github/workflows/build-publish.yml` and `grep -n "validate:\|uses:" .github/workflows/ci.yml`.
-Expected: `tests.yml` is named `Tests`; `ci.yml`'s calling job keeps the id `validate` (so the five required check names are unchanged) and calls
-`./.github/workflows/tests.yml`.
+**Flow 2: the split class.**
+Run `python3 -B tools/run_tests.py tests.test_codex_apply_regeneration; echo rc=$?` and `grep -n "^class .*Regeneration\|^class RegenerationGate\|^class RegenerationRecord" tests/test_codex_apply_regeneration.py`.
+Expected: `PASS`, `rc=0`; `PlanRegenerationTest` and `PlanRegenerationRecordTest` (five tests each, through the mixins `RegenerationGate` and
+`RegenerationRecord`) and `ImplRegenerationTest` (its twelve) exist; the ten original plan tests are all still run.
 
-**Flow 3: build and publish only builds and publishes.**
-Run `grep -n "^  [a-z-]*:$" .github/workflows/build-publish.yml` and `grep -n "validate-result\|concurrency\|group:" .github/workflows/build-publish.yml`.
-Expected: no `validate`, `after-merge-determinism` or `after-merge-mutations` job in `build-publish.yml`; `build`, `publish` and the `release-target-*`
-jobs carry `inputs.validate-result == 'success'`; the concurrency group is `build-publish-<run id>`; `ci.yml`'s `build-publish` call grants `contents: write` alone.
+**Flow 3: the planner is unchanged.**
+Run `git diff --stat a785d4f HEAD -- tools/test_shards.py tools/run_tests.py; echo rc=$?` and `grep -n "LANE_CONTENTION\|CONFORMANCE_CONTENTION" tools/test_shards.py`.
+Expected: no diff for the two tools; `LANE_CONTENTION = 1.15` present, no `CONFORMANCE_CONTENTION`.
 
-**Flow 4: the six-runner limit and the shard cap.**
-Run `grep -n "RUNNER_LIMIT\|TEST_MAX_PARALLEL" tools/ci_workflows.py | head`, `grep -n "CI_MAX_SHARDS" tools/test_shards.py | head -3` and
-`grep -n "max-parallel" .github/workflows/tests.yml`.
-Expected: `RUNNER_LIMIT = 6`, `TEST_MAX_PARALLEL = 3`, `CI_MAX_SHARDS = 3`; `max-parallel` is set on the shard matrix in `tests.yml`; `ci.yml`'s two `after-merge-*`
-jobs wait for `validate`.
+**Flow 4: the item pages.**
+Read `docs/items/workflow-controller-ci2.md` and the head of `docs/items/workflow-controller-ci2b.md` to `ci2e.md`.
+Expected: the ci2 page is retitled to this slice; it records the measured ratios (matrix shard 0.69, 1.08, 1.07; the others between 0.85 and 1.18), the
+base plan rescored (4,092.6 s longest over a 3,488.5 s mean against 3,493.9 s, a predicted gain of 598.7 s), the elapsed CI time (PR #373 run 44062553881,
+55 min 41 s against 57 min 12 s, 65 min 16 s and 64 min 40 s) and the statement that no matrix-specific factor is justified; each of ci2b to ci2e is one
+page naming its scope items and sources.
 
-**Flow 5: the proofs.**
-Run `python3 -B tools/run_tests.py tests.test_ci_workflows tests.test_ci_changes tests.test_ci_reuse tests.test_test_shards tests.test_package_structure; echo rc=$?`.
-Expected: `# Test run: PASS`, exact coverage, `rc=0`. A `namespace: none` line is expected in this sandbox. Look for `RunnerLimitTest` in `tests.test_ci_workflows`
-(the flattened job graph never exceeds six concurrent runners for any event or `CI_MAIN_REUSE` mode).
+**Flow 5: the guides.**
+Read the staleness-ratchet part of `docs/guide/development.md` and the refresh of 2026-11-17 in `docs/guide/ci-and-releases.md`.
+Expected: the ratchet, the D4 rule parts, "blends" and "a base without test methods" are described; the Controller lane is stated as the longer one at three
+shards and the 1.15 rule as unchanged.
 
-**Flow 6: the pages and the item record.**
-Read `docs/guide/ci-and-releases.md` ("The six-runner limit", the manual publish route as a CI dispatch from `main`, the release latency) and
-`docs/items/workflow-controller-ci3.md`.
-Expected: the guide describes `tests.yml`, the six-runner limit with its mutable-ref assumption about `docs-tests`, and the push-to-`main` after-merge checks
-waiting for `validate`; `docs/guide/development.md` states the shard ceiling of three; the item page records the status, the owner's choice of option B for
-O1, what was done and the measured run (PR #370's `CI` run 43844429224, 63.6 minutes).
-
-**Flow 7: the docs checks.**
+**Flow 6: backlog and docs checks.**
 Run `python3 -B tools/run_tests.py tests.test_docs tests.test_plan_document_consistency; echo rc=$?`, `python3 -B tools/check_docs.py; echo rc=$?`,
-`python3 -B scripts/workflow_backlog.py check; echo rc=$?` and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-ci3; echo rc=$?`.
-Expected: `# Test run: PASS`, exact coverage, every `rc=0`, `preflight-accept` `"ok": true`.
+`python3 -B scripts/workflow_backlog.py check; echo rc=$?`, and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-ci2; echo rc=$?`.
+Expected: `# Test run: PASS`, exact coverage, every `rc=0`, `preflight-accept` `"ok": true`; `docs/backlog.yaml` lists `ci2b` to `ci2e` right after `ci2`.
 
-**Known limitations / out of scope.** The workflows run only on GitHub; the sandbox has no forge, so a real `CI` run, a real release and the six-runner limit
-under load are not flows (the model-level proof in Flow 5 and the recorded run in the item page stand in). The full suite is CI's on the pull request; the
-self-review run's six failures (three `tests.test_fake_codex_contract` cases from the operator's `~/.codex/config.toml`, and `tests.test_job_codex_review`,
-`tests.test_codex_worker`, `tests.test_job_codex_worker` timing under load, which pass alone) are in code this item does not touch and are not flows.
+**Known limitations / out of scope.** The workflows run only on GitHub; the sandbox has no forge, so the real CI timing comparison is read from the item
+page, not re-run. The full suite is CI's on the pull request; the self-review run's five failures (three `tests.test_fake_codex_contract` cases from the
+operator's `~/.codex/config.toml`, and `tests.test_codex_worker` and `tests.test_job_codex_apply` under load, which pass alone) are in code this item does
+not touch and are not flows. No `CONFORMANCE_CONTENTION` factor is added; `ci2b` to `ci2e` are later slices.
 
 ## Next action
 
-`/milestone-plan` for `workflow-controller-bl1` (Owner-requested backlog and docs changes run through the Controller), the item `python3 scripts/workflow_backlog.py next` returns.
+`/milestone-plan` for `workflow-controller-ci2b` (CI: run each test once, the duplicate-run removal (#317)), the item `python3 scripts/workflow_backlog.py next` returns, ready for `PLANNING`.

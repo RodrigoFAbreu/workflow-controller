@@ -132,8 +132,9 @@ untouched. It still runs the nine conformance suites in one job, on every
 pull request (10 to 15 minutes in recent runs).
 `validate` runs the same suites through the planner as well; the
 acceptance-matrix suite (8 to 12 minutes on CI) is its own largest atom.
-Both are now close to the floor on when all of a pull request's checks
-finish, so the wall time of a shard counts.
+The managed job is a floor on when all of a pull request's checks finish (10 to
+15 minutes); the three shards run much longer than that, so the wall time of a
+shard counts.
 `release.yml` is gone: pushing a `v*` tag by hand triggers nothing.
 
 The CI plan uses the `ci` profile: a target of 180 s of work per shard,
@@ -147,8 +148,12 @@ on 2026-11-08 the planner's longest-shard estimate was about 24 minutes (1439 s)
 six shards, 1288 s at seven and 1233 s at eight (the offline plans of CI1b), and
 the same work over three shards takes about 54 minutes by the planner's estimate. Refresh `tools/test_timings.json` (see the development
 guide) when the longest shard drifts well past that estimate; it was refreshed on
-2026-11-08 from the real six-shard runs of CI, and drifts within days as the acceptance matrix and the
-scenario tests grow. A stale or missing entry costs wall time
+2026-11-17 (CI2) from three real three-shard runs of CI (43855824846, 43864443959
+and 43879797542), and drifts within days as the Codex and scenario tests grow. A
+ratchet (`MAX_UNTIMED_TEST_SHARE`, 20 percent) fails the suite when the atoms
+without an entry hold too much of the CI-placed tests, so an overdue refresh is
+noticed. On the refreshed file the planner estimates 3494 s for each of the three
+shards. A stale or missing entry costs wall time
 (the shard count and the balance), never coverage. The plan is
 deterministic: each `tests` job recomputes it and refuses to run on a
 digest mismatch, so the matrix carries only shard indexes. Every
@@ -159,11 +164,13 @@ the artifacts to download (`results-<i>-attempt-<a>` holds the log,
 reproduction commands.
 
 What bounds the longest shard. The conformance `acceptance_matrix` suite is one
-atom (1119.7 s in the committed timings) and so a floor below which the longest
-pull-request shard cannot go; on a shard it shares with Controller tests the lane
-contention of 1.15 makes it about 1288 s. It is not what sets the estimate at six
-shards (1439 s); at seven it does (every shard about 1288 s), and at eight it runs
-alone while the longest shard is 1233 s, only 55 s below seven. Cutting it
+atom (1153.6 s in the committed timings); on a shard it shares with Controller
+tests the lane contention of 1.15 makes it about 1327 s. At three shards it is not
+the floor: the Controller lane is always the longer one (about 3038 s against the
+matrix's 1154 s on the shard that holds it, in the plan of CI2), so the shards
+balance on the Controller atoms. At the six to eight shards of CI1b the matrix
+did set the estimate (at seven every shard was about 1288 s, and at eight it ran
+alone while the longest shard was 1233 s, only 55 s below seven). Cutting it
 needs the suite's `shards` option, which belongs to the frozen Workflow content, so
 that is a separate upstream step and is not done here. The other atoms that stay whole
 are the single-test ones: the conformance `protocol`, `state` and `gate_policy` suites,
@@ -316,7 +323,13 @@ lane, and the planner balances that: the conformance suites are placed
 first, longest first, and each Controller atom then goes where the shard's
 estimate (the longer lane, times 1.15 when both lanes have work) ends up
 smallest. The plan records `conformance_lane: true`, so its digest tells
-the modes apart.
+the modes apart. A suite's own slowdown beside the Controller lane was measured at
+the shard in CI2: observed `wall_seconds` over the uncontended estimate (the longer
+lane) on three runs, with the refreshed timings, was 0.69, 1.08 and 1.07 for the
+shard that holds the acceptance matrix and 0.85 to 1.18 for the others (in-sample,
+the runs are part of the timings). No suite was above 1.15 in two runs, so the
+single factor stays and no matrix-specific one exists; this says only that these
+three runs do not justify one.
 
 Nothing else changes: the same per-atom results, the exact-coverage proof,
 the leak scan (after both lanes end) and the exit status. A suite's output
@@ -333,9 +346,10 @@ run 39806086354) the `CI` workflow took 19.3 minutes (shards 11.0, 19.0, 11.7, 1
 18.2 and 13.9 minutes), the managed `Workflow conformance` check 17.5 and `PR title`
 0.2, all started together, so a pull request's complete check took 19.3 minutes,
 within the 15 to 20 minute target. Earlier measurements: about 85 minutes before C2b;
-24.3 at 09a69f1, before the timings refresh; 20.9 at 3a0865f, after it. The vendored
-acceptance atom, which is placed and not shortened, is the floor of the longest
-shard. [#119](https://github.com/RodrigoFAbreu/workflow-controller/issues/119) is closed.
+24.3 at 09a69f1, before the timings refresh; 20.9 at 3a0865f, after it. At that six-shard
+layout the vendored acceptance atom, which is placed and not shortened, was the
+floor of the longest shard; at three shards it is not (see "What bounds the longest
+shard"). [#119](https://github.com/RodrigoFAbreu/workflow-controller/issues/119) is closed.
 A local run (`tools/run_tests.py`
 without `exec-shard`) uses the same executor and so the same two lanes,
 except `--serial`, which plans `conformance_lane: false`: the suites then

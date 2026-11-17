@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ci2",
+  "dispositions": {
+    "F-0f5413a60ac9": {
+      "disposition": "fixed"
+    },
+    "F-18978102dd0b": {
+      "disposition": "dropped",
+      "reason": "Wording only ('commit' for a tree id in D1); the approved plan is a historical record and the run directories and run ids are recorded on the item page."
+    },
+    "F-244deef30be0": {
+      "disposition": "fixed"
+    },
+    "F-31724bace976": {
+      "disposition": "fixed"
+    },
+    "F-42c20dc6d5d2": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/374"
+    },
+    "F-4ae1d0d843fb": {
+      "disposition": "fixed"
+    },
+    "F-4c01fe429cda": {
+      "disposition": "fixed"
+    },
+    "F-4f223b93c17d": {
+      "disposition": "fixed"
+    },
+    "F-4f78e639b9e9": {
+      "disposition": "fixed"
+    },
+    "F-50183d1486a4": {
+      "disposition": "fixed"
+    },
+    "F-525a633225bd": {
+      "disposition": "fixed"
+    },
+    "F-60dca9e48ea1": {
+      "disposition": "dropped",
+      "reason": "Moot: amendment 2 added no CONFORMANCE_CONTENTION, so the planner is unchanged and D4 no longer needs a with/without-constant test."
+    },
+    "F-85a57e27fac4": {
+      "disposition": "fixed"
+    },
+    "F-8e74d4253df1": {
+      "disposition": "fixed"
+    },
+    "F-931493045926": {
+      "disposition": "fixed"
+    },
+    "F-9d88f611170c": {
+      "disposition": "fixed"
+    },
+    "F-a3fa525677a4": {
+      "disposition": "fixed"
+    },
+    "F-bc93172e914b": {
+      "disposition": "dropped",
+      "reason": "Wording only; the reviewer notes the meaning is clear from context and the implementation folds all three shard records per run."
+    },
+    "F-c4e46f18c0a7": {
+      "disposition": "dropped",
+      "reason": "Does not arise: the reviewer measured 1223 atoms folded by all three runs and none by one or two, and a partial fold would stop the check rather than pass silently."
+    },
+    "F-c953254f76c2": {
+      "disposition": "dropped",
+      "reason": "Grammar slip in D6 only; the scope is unambiguous and the approved plan is a historical record."
+    },
+    "F-d4939644b410": {
+      "disposition": "fixed"
+    },
+    "F-db7eece81e1c": {
+      "disposition": "dropped",
+      "reason": "The limit is 20 percent with margin over a derived 17.2 points for 14 days; whether #357 (9117db9) added timed atoms would not move the rounded constant, and the ratchet passes at head."
+    },
+    "F-f4fbce6e5090": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/374"
+    },
+    "F-ff87edb6fb4c": {
+      "disposition": "dropped",
+      "reason": "Moot: amendment 2 left the planner unchanged, so no estimate factor moved and the ceiling check was not loosened."
+    }
+  }
+}

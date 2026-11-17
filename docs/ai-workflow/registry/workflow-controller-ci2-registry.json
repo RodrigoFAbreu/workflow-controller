@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ci2",
+  "plan_revision": 12,
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "name": "Refresh the committed timings and add the staleness ratchet",
+      "depends_on": [],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP2",
+      "name": "Measure the acceptance-matrix contention and record that no factor qualifies",
+      "depends_on": [
+        "CP1"
+      ],
+      "complexity": 2,
+      "session_target": 1
+    },
+    {
+      "id": "CP3",
+      "name": "The guides, the item pages and the backlog split",
+      "depends_on": [
+        "CP2"
+      ],
+      "complexity": 1,
+      "session_target": 1
+    }
+  ]
+}

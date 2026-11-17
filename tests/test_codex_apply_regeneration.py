@@ -50,15 +50,15 @@ SO_NAME = "_speedups.cpython-313-x86_64-linux-gnu.so"
 #: Every cause of the guarded run, with the test that proves it through the job (a test fails when one has no case).
 GENERATOR_CAUSE_CASES = {
     "surface_landing_touched": ("ImplRegenerationTest", "test_a_landed_path_on_the_surface_ends_at_the_gate"),
-    "surface_script_modified": ("PlanRegenerationTest", "test_a_plant_in_the_tree_ends_at_the_gate_or_runs_nothing"),
-    "surface_foreign_entry": ("PlanRegenerationTest", "test_a_plant_in_the_tree_ends_at_the_gate_or_runs_nothing"),
-    "surface_unreadable": ("PlanRegenerationTest", "test_an_unreadable_record_and_an_unmanaged_generator_end_at_the_gate"),
-    "generator_not_managed": ("PlanRegenerationTest", "test_an_unreadable_record_and_an_unmanaged_generator_end_at_the_gate"),
-    "git_not_isolated": ("PlanRegenerationTest", "test_a_failed_or_slow_generator_and_a_git_that_is_not_isolated_end_at_the_gate"),
-    "generator_failed": ("PlanRegenerationTest", "test_a_failed_or_slow_generator_and_a_git_that_is_not_isolated_end_at_the_gate"),
-    "generator_timed_out": ("PlanRegenerationTest", "test_a_failed_or_slow_generator_and_a_git_that_is_not_isolated_end_at_the_gate"),
+    "surface_script_modified": ("PlanRegenerationRecordTest", "test_a_plant_in_the_tree_ends_at_the_gate_or_runs_nothing"),
+    "surface_foreign_entry": ("PlanRegenerationRecordTest", "test_a_plant_in_the_tree_ends_at_the_gate_or_runs_nothing"),
+    "surface_unreadable": ("PlanRegenerationRecordTest", "test_an_unreadable_record_and_an_unmanaged_generator_end_at_the_gate"),
+    "generator_not_managed": ("PlanRegenerationRecordTest", "test_an_unreadable_record_and_an_unmanaged_generator_end_at_the_gate"),
+    "git_not_isolated": ("PlanRegenerationRecordTest", "test_a_failed_or_slow_generator_and_a_git_that_is_not_isolated_end_at_the_gate"),
+    "generator_failed": ("PlanRegenerationRecordTest", "test_a_failed_or_slow_generator_and_a_git_that_is_not_isolated_end_at_the_gate"),
+    "generator_timed_out": ("PlanRegenerationRecordTest", "test_a_failed_or_slow_generator_and_a_git_that_is_not_isolated_end_at_the_gate"),
     "copy_source_unsafe": ("PlanRegenerationTest", "test_a_context_list_naming_a_file_outside_the_repository_is_refused"),
-    "surface_changed_during_run": ("PlanRegenerationTest", "test_a_context_list_rewritten_during_the_run_is_not_trusted"),
+    "surface_changed_during_run": ("PlanRegenerationRecordTest", "test_a_context_list_rewritten_during_the_run_is_not_trusted"),
 }
 
 Plant = Callable[[Path, Path, Path], None]  # (directory to write into, marker file, the managed tree)
@@ -361,7 +361,9 @@ else:
         self.assert_canary_nowhere()
         self.no_armour(record)
 
-    # -- both roles -----------------------------------------------------------------------------------------------
+
+class RegenerationGate(Regeneration):
+    """Four of the seven tests both roles share, split out so each class stays under the multi-test class limit."""
 
     def test_a_clean_landing_is_regenerated_and_hands_the_next_stage_its_preconditions(self) -> None:
         self.worked()
@@ -439,6 +441,10 @@ else:
                 self.again()
                 self.canary_ends_at_the_gate(reason, line)
 
+
+class RegenerationRecord(Regeneration):
+    """The other three shared tests (the same split)."""
+
     def test_a_context_list_rewritten_during_the_run_is_not_trusted(self) -> None:
         canary = self.canary_file()
         self.worked()
@@ -506,8 +512,17 @@ else:
             self.assert_refused(record, "generator_timed_out", None)
 
 
-class PlanRegenerationTest(Regeneration, base.PlanCase):
+class PlanRegenerationTest(RegenerationGate, base.PlanCase):
     """The plan role makes no commit: a plant sits in the managed tree, and the tree check is the whole guard."""
+
+    ARGUMENT = "plan"
+
+    def test_a_context_list_naming_a_file_outside_the_repository_is_refused(self) -> None:
+        self.test_an_absolute_traversal_and_link_line_each_end_at_the_gate_before_the_generator()
+
+
+class PlanRegenerationRecordTest(RegenerationRecord, base.PlanCase):
+    """The plan role's other half: the same plan tests, split so each class stays under the class limit."""
 
     ARGUMENT = "plan"
 
@@ -524,11 +539,8 @@ class PlanRegenerationTest(Regeneration, base.PlanCase):
             record = self.step()
         self.assert_regenerated(record, spy)
 
-    def test_a_context_list_naming_a_file_outside_the_repository_is_refused(self) -> None:
-        self.test_an_absolute_traversal_and_link_line_each_end_at_the_gate_before_the_generator()
 
-
-class ImplRegenerationTest(Regeneration, base.ImplCase):
+class ImplRegenerationTest(RegenerationGate, RegenerationRecord, base.ImplCase):
     """The implementation role commits: a plant is landed, and the landing's diff and the tree are both checked."""
 
     ARGUMENT = "post-fix"
@@ -625,6 +637,27 @@ class CauseCoverageTest(unittest.TestCase):
         with mock.patch.object(generator_run, "CAUSES", (*generator_run.CAUSES, "surface_new_cause")):
             with self.assertRaises(AssertionError):
                 self.assertEqual(set(GENERATOR_CAUSE_CASES), set(generator_run.CAUSES))
+
+
+class RegenerationSplitShapeTest(unittest.TestCase):
+    """The ten plan tests live in two classes of five and the implementation role keeps its twelve (CI2, D2)."""
+
+    def names(self, klass) -> list[str]:
+        return unittest.TestLoader().getTestCaseNames(klass)
+
+    def test_the_plan_tests_are_split_in_two_disjoint_halves_and_the_implementation_keeps_its_twelve(self) -> None:
+        gate, record = self.names(PlanRegenerationTest), self.names(PlanRegenerationRecordTest)
+        self.assertEqual((len(gate), len(record), len(self.names(ImplRegenerationTest))), (5, 5, 12))
+        self.assertFalse(set(gate) & set(record))
+        shared = set(self.names(RegenerationGate)) | set(self.names(RegenerationRecord))
+        plan_only = {
+            "test_a_context_list_naming_a_file_outside_the_repository_is_refused",
+            "test_a_plant_in_the_tree_ends_at_the_gate_or_runs_nothing",
+            "test_a_clean_context_list_of_repository_files_is_regenerated",
+        }
+        self.assertEqual(set(gate) | set(record), shared | plan_only)
+        self.assertEqual(len(shared), 7)
+        self.assertTrue(shared <= set(self.names(ImplRegenerationTest)))
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-ci2c",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -81379,6 +81379,247 @@
         },
         "evaluated_at": "2026-11-17T15:19:32Z",
         "workflow_release": "2.29.3"
+      }
+    },
+    "workflow-controller-ci2c": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-ci2c",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CI2C_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-ci2c-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci2c-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 2,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "04ad54507224072eb375d30d31fd5adb2358b056",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "395d62f662798a44b351bbee5d5e2bc5997475d2fddfedec81c6fd2db0332002",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "395d62f662798a44b351bbee5d5e2bc5997475d2fddfedec81c6fd2db0332002",
+        "approved_review_content_id": "e6546a6af4660a9f6f244bc0eabf161482929e8463b3df4787f4bd4672a4247b",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CI2C_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "53694017662800db6edbadb1fb39fcf0c2698ff0"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-ci2c-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b918ee25b67e821b59ac048262746ad00c0dc729"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-ci2c-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6ca5077dd12e9e783b98813df2ab5437ccbeac86"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-17T17:00:07Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "e6546a6af4660a9f6f244bc0eabf161482929e8463b3df4787f4bd4672a4247b",
+            "ledger": {
+              "local": {
+                "bundle_id": "395d62f662798a44b351bbee5d5e2bc5997475d2fddfedec81c6fd2db0332002",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "d1b476c2a54a7a1dc267b48995028f56252e4c50cdec4d59f82a76e5b9b9a086",
+                "ledger_entry_sha256": "c45246e0b9f20f01b9ef44a193435b6faa1e5799c897a1c4cccf88902d428d9e",
+                "run_ref": "session:local .ai-review/workflow-controller-ci2c/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "395d62f662798a44b351bbee5d5e2bc5997475d2fddfedec81c6fd2db0332002",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "488143426652836f6090d0de95581253492aa09714cb8c097195dd9e05390353",
+                "ledger_entry_sha256": "ace3fcffbdd0c9367df1a09037925e3204d22d20a12338ecfa19bbc812f3f09a",
+                "run_ref": "codex:20261117T165642Z-8acbfc29",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-17T17:00:07Z",
+          "workflow_release": "2.29.3"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "e6546a6af4660a9f6f244bc0eabf161482929e8463b3df4787f4bd4672a4247b",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "395d62f662798a44b351bbee5d5e2bc5997475d2fddfedec81c6fd2db0332002",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-17T16:56:22Z",
+          "verdict_sha256": "d1b476c2a54a7a1dc267b48995028f56252e4c50cdec4d59f82a76e5b9b9a086",
+          "run_ref": "session:local .ai-review/workflow-controller-ci2c/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "395d62f662798a44b351bbee5d5e2bc5997475d2fddfedec81c6fd2db0332002",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-17T16:58:45Z",
+          "verdict_sha256": "488143426652836f6090d0de95581253492aa09714cb8c097195dd9e05390353",
+          "run_ref": "codex:20261117T165642Z-8acbfc29",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 2,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 9,
+      "last_transition": "2026-11-17T17:00:07Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-17T16:54:10Z",
+        "consumed": {
+          "review_content_id": "c27cac4eee79b616fe982daf47b979e6cb78e474615c2bab4833aec8b31f186e",
+          "plan_revision": 1,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "e6546a6af4660a9f6f244bc0eabf161482929e8463b3df4787f4bd4672a4247b",
+          "plan_revision": 2
+        },
+        "bound": {
+          "review_content_id": "e6546a6af4660a9f6f244bc0eabf161482929e8463b3df4787f4bd4672a4247b",
+          "bundle_id": "395d62f662798a44b351bbee5d5e2bc5997475d2fddfedec81c6fd2db0332002",
+          "plan_revision": 2
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "c27cac4eee79b616fe982daf47b979e6cb78e474615c2bab4833aec8b31f186e"
+      ],
+      "optional_findings": {
+        "F-cfe85858d9a0": {
+          "digest": "cfe85858d9a0026965438f6ec6cb949b4a2e437f8829850e178afca82c2cdfc0",
+          "text": "**O1. Test count.** \"about 126 tests\" for `_ReviewCase` (What exists, and the item page) is out of date: at the base commit `tests.test_review_job` loads 84 tests, 80 of them `_ReviewCase` subclasses. Correct the figure, since CP3 and CP4 record the expected saving from it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "c27cac4eee79b616fe982daf47b979e6cb78e474615c2bab4833aec8b31f186e",
+              "verdict": "REVISE",
+              "at": "2026-11-17T16:53:07Z"
+            }
+          ]
+        },
+        "F-8a01df9d6ed0": {
+          "digest": "8a01df9d6ed05091867798c3bfc82898dfe5f3850f862180ebc38632318d610e",
+          "text": "**O2. Counter outcomes for calls that do nothing.** D1 counts every `restore_snapshot` and `take_snapshot` call as one of `built`, `restored`, `in_use`, `copy_failed`, `unkept`, but two common calls fall in none of them: `restore_snapshot` for a key with no snapshot yet (the first life of a row), and `take_snapshot` for a key already kept (the drive after an `in_use` refusal returns `False` at `tests/fixtures.py:931`). Name them (for example `missing` and `already_kept`), or say they are not counted, so that `built` is not over-counted after an in-use refusal and CP1's \"each outcome is counted once per call\" test has a defined expectation.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "c27cac4eee79b616fe982daf47b979e6cb78e474615c2bab4833aec8b31f186e",
+              "verdict": "REVISE",
+              "at": "2026-11-17T16:53:07Z"
+            }
+          ]
+        },
+        "F-014d0c8bde0c": {
+          "digest": "014d0c8bde0c974dd80807cad2e80cc078815dbbb33eb8cda2f8b5095f074383",
+          "text": "**O3. Dependencies of the new items.** `workflow-controller-ci2f` (process starts, scope items 8 and 9) does not use the snapshot mechanism, yet CP4 gives it `depends_on: [workflow-controller-ci2c]`. `depends_on: [workflow-controller-ci2]` would let it be scheduled independently. `ci2g`'s dependence on ci2c is correct.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "c27cac4eee79b616fe982daf47b979e6cb78e474615c2bab4833aec8b31f186e",
+              "verdict": "REVISE",
+              "at": "2026-11-17T16:53:07Z"
+            }
+          ]
+        },
+        "F-df01d1ae5f3f": {
+          "digest": "df01d1ae5f3fae603b7e1588a9e6a1c3e2106635f91ca161ee38b362b05401f6",
+          "text": "**O1. Name the classes that read the wall clock in advance.** After D5, a restored `self.now` falls behind the wall clock by 600 s plus the time since the snapshot was built in the process. That only matters to code that compares `self.now`-based values with `time.time()`, and those places can be found by reading the code, not only by a failing run: `FakeCodexEndToEndTest.baseline` (`real = time.time()` next to `self.now`, `tests/test_review_job.py:934-937`, whose docstring assumes \"the test's usage clock runs ten minutes behind\") and `RetainedReadingsTest`'s `sweep_retained(..., now=time.time())` (line 912), as well as any gate that `cli._usage_gate` builds on the real clock. The extra delay is bounded by the module's own run time, because every `_ReviewCase` test runs in one process, one after another, so a failure is unlikely. Still, CP3 could list these classes and record, for each, why the larger offset cannot cross a threshold, or give it `SHARE_SNAPSHOT = False`. That makes the decision a reasoned one rather than a matter of which run happened to pass.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "e6546a6af4660a9f6f244bc0eabf161482929e8463b3df4787f4bd4672a4247b",
+              "verdict": "APPROVE",
+              "at": "2026-11-17T16:56:22Z"
+            }
+          ]
+        },
+        "F-07d2c07280a3": {
+          "digest": "07d2c07280a3327933dcd27c6fd176874be77e1721ea37039cbd45528c94aee5",
+          "text": "**O1. Exclude deliberate kit proofs from the expected zero.** D3 expects `kit_drove = 0` in a full run, but `tests/test_shared_snapshot.py:125–134` deliberately exercises that branch, and CP1 adds another counter proof. State that the expected zero applies to lifecycle/scenario workloads excluding these proof rows, so expected test activity does not generate a spurious follow-up finding.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "e6546a6af4660a9f6f244bc0eabf161482929e8463b3df4787f4bd4672a4247b",
+              "verdict": "APPROVE",
+              "at": "2026-11-17T16:58:45Z"
+            }
+          ]
+        }
       }
     }
   }

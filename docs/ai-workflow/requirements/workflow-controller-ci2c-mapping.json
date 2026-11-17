@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ci2c",
+  "requirements": {
+    "R1": {
+      "description": "Every snapshot outcome is counted and reportable, and the baseline, the inherent path-in-use refusal and the kit's zero are recorded",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "A snapshot key holds only what its drive reads, a drive that reads a late part fails loudly, and every life still sees its own late values",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "The review case reaches its plan-gate row once per process and a restored copy matches a fresh build",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R4": {
+      "description": "The pages and item records state the mechanism and the measured figures, and the remaining scope items are their own backlog items",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    }
+  }
+}

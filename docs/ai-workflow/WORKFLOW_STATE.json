@@ -81390,7 +81390,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci2c-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci2c-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 2,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -81657,12 +81657,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 1,
+          "local": 2,
           "external": 1
         }
       },
-      "state_revision": 25,
-      "last_transition": "2026-11-17T18:54:16Z",
+      "state_revision": 26,
+      "last_transition": "2026-11-17T18:57:44Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -81795,6 +81795,48 @@
               "review_content_id": "8d57b9a38c8a43ac5f6ba3d3d9396358766ffd7bc5488c137b1500a586162377",
               "verdict": "APPROVE",
               "at": "2026-11-17T17:44:30Z"
+            }
+          ]
+        },
+        "F-71e6ac95a186": {
+          "digest": "71e6ac95a1865955bab313e0435c998672f1a6d68cbc8b878f81772675717ed8",
+          "text": "**O1. The key still cannot see a patched seed.** `SHARE_SNAPSHOT = False` relies on each class author remembering to set it. A cheap guard would fail loudly the next time this happens: in `_ReviewCase.setUp`, refuse to `reach` while `fixtures.run_workflow_seed` is not the module's original function. Another option is to put the seed function's identity in the snapshot inputs. Either matches D4's \"fails loudly\" approach for late parts.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "907d5ba2bf28853083fe8ecbc2d21c2368773eaab9d53059649a97b36131c9c5",
+              "verdict": "REVISE",
+              "at": "2026-11-17T18:57:44Z"
+            }
+          ]
+        },
+        "F-e073a7e328f5": {
+          "digest": "e073a7e328f5edf06e20f58e95633153dda66ead7fd044f2d79463c740d89335",
+          "text": "**O2. The artifacts entry is mis-indented.** The line added to `docs/ai-workflow/registry/workflow-controller-ci2c-artifacts.json` by `91db51c` uses 2-space indentation, while the lines around it use 6. The JSON is valid. This is cosmetic only.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "907d5ba2bf28853083fe8ecbc2d21c2368773eaab9d53059649a97b36131c9c5",
+              "verdict": "REVISE",
+              "at": "2026-11-17T18:57:44Z"
+            }
+          ]
+        },
+        "F-e102427cc40b": {
+          "digest": "e102427cc40bdf9fa2fb7111f490338b01c6a8f0406ba37572f7ce0b14f79c56",
+          "text": "**O3. The bundle's diff includes a stray file.** The bundle's `DIFF.patch`/`CHANGED_FILES.txt` include a 77,707-line untracked file named `inspect` that was in the working tree at generation. It no longer exists and is outside the protected content, so the ids are unaffected. Regenerate the bundle from a clean tree so reviewers do not have to read past it.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "907d5ba2bf28853083fe8ecbc2d21c2368773eaab9d53059649a97b36131c9c5",
+              "verdict": "REVISE",
+              "at": "2026-11-17T18:57:44Z"
             }
           ]
         }

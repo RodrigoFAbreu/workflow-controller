@@ -699,52 +699,54 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-ci2` (CI2), implementation revision 1, plan `docs/ai-workflow/CONTROLLER_CI2_PLAN.md` (revision 12), base commit
-`a785d4f`. Three checkpoints, all complete: CP1 (refreshed `tools/test_timings.json`, the staleness ratchet and the `PlanRegenerationTest` split), CP2 (the
-acceptance-matrix contention measured at the shard; no `CONFORMANCE_CONTENTION` constant) and CP3 (the guides, the item pages and the backlog split into
-`ci2b` to `ci2e`), plus the self-review fixes.
+Item `workflow-controller-ci2b` (CI2b: run each test once), implementation revision 2 (technical approval by policy `7c3cddc`), plan
+`docs/ai-workflow/CONTROLLER_CI2B_PLAN.md` (revision 2), base commit `e30d790`. Three checkpoints, all complete: CP1 (the nine frozen conformance suites
+placed `EXCLUDED` from the CI shards), CP2 (`tests.test_functional_lifecycle` placed `EXCLUDED`; the leftover check moved into the isolation scenario; the
+"each `flow_*` body is called by exactly one scenario" pin) and CP3 (the guides and the item page with the measured effect), plus the self-review and
+review-round fixes (the 456 s explained as the contention factor, the after-CP1 digest, the attribute-access test message).
 Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the
 system directories, and no write inside the read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write only
 to the scratch `TMPDIR`. No flow needs a pull request or a forge call, and none runs the full suite.
 
 Setup: `export TMPDIR=$(mktemp -d)`. No data to seed.
 
-**Flow 1: the refreshed timings and the ratchet.**
-Run `python3 -B tools/run_tests.py tests.test_test_shards; echo rc=$?`.
-Expected: `# Test run: PASS`, exact coverage, `rc=0`; a `namespace: none` line is expected in this sandbox. `CommittedTimingsTest` and
-`SplitHistoricalAtomsTest` are among the classes run. `MAX_UNTIMED_TEST_SHARE` is 0.20 (`grep -n "MAX_UNTIMED_TEST_SHARE =" tests/test_test_shards.py`).
+**Flow 1: the placement and the kept proof.**
+Run `python3 -B tools/run_tests.py tests.test_test_shards tests.test_ci_workflows; echo rc=$?` and `python3 -B tools/ci_workflows.py --check; echo rc=$?`.
+Expected: `# Test run: PASS`, exact coverage, both `rc=0` (a `namespace: none` line is expected in this sandbox). `grep -n "EXCLUDED" tools/test_shards.py`
+shows the `conformance` and `tests.test_functional_lifecycle` placements, each with a reason.
 
-**Flow 2: the split class.**
-Run `python3 -B tools/run_tests.py tests.test_codex_apply_regeneration; echo rc=$?` and `grep -n "^class .*Regeneration\|^class RegenerationGate\|^class RegenerationRecord" tests/test_codex_apply_regeneration.py`.
-Expected: `PASS`, `rc=0`; `PlanRegenerationTest` and `PlanRegenerationRecordTest` (five tests each, through the mixins `RegenerationGate` and
-`RegenerationRecord`) and `ImplRegenerationTest` (its twelve) exist; the ten original plan tests are all still run.
+**Flow 2: the CI plan against the local plan.**
+Run `python3 -B tools/run_tests.py plan --profile ci --ci-placement` and the same without `--ci-placement`.
+Expected: the first prints `plan_digest` beginning `edeab4d7` with three shards; the second prints a different digest (a local plan keeps the nine `conformance:`
+suites and the four `tests.test_functional_lifecycle` classes). A CI plan holds no `conformance:` id.
 
-**Flow 3: the planner is unchanged.**
-Run `git diff --stat a785d4f HEAD -- tools/test_shards.py tools/run_tests.py; echo rc=$?` and `grep -n "LANE_CONTENTION\|CONFORMANCE_CONTENTION" tools/test_shards.py`.
-Expected: no diff for the two tools; `LANE_CONTENTION = 1.15` present, no `CONFORMANCE_CONTENTION`.
+**Flow 3: the functional flows run once.**
+Run `python3 -B tools/run_tests.py tests.test_scenarios tests.test_run_scenarios; echo rc=$?` and
+`grep -n "tfl.short_folders_made\|flow_isolation_holds" tests/scenarios/lifecycle.py`.
+Expected: `PASS`, `rc=0`; the isolation scenario wraps `flow_isolation_holds` in `short_folders_made()` and asserts that a sandbox was built and no short
+`TMPDIR` folder remains. `tests.test_test_shards` (Flow 1) pins that every `flow_*` body is called by exactly one scenario.
 
-**Flow 4: the item pages.**
-Read `docs/items/workflow-controller-ci2.md` and the head of `docs/items/workflow-controller-ci2b.md` to `ci2e.md`.
-Expected: the ci2 page is retitled to this slice; it records the measured ratios (matrix shard 0.69, 1.08, 1.07; the others between 0.85 and 1.18), the
-base plan rescored (4,092.6 s longest over a 3,488.5 s mean against 3,493.9 s, a predicted gain of 598.7 s), the elapsed CI time (PR #373 run 44062553881,
-55 min 41 s against 57 min 12 s, 65 min 16 s and 64 min 40 s) and the statement that no matrix-specific factor is justified; each of ci2b to ci2e is one
-page naming its scope items and sources.
+**Flow 4: the item page and the measured effect.**
+Read `docs/items/workflow-controller-ci2b.md`.
+Expected: base digest `3198ddc7` (3,494.0 s per shard), after CP1 `d01bdb71` (3,038.2 s), after CP2 `edeab4d7` (2,808.0 s); a predicted gain of 686 s; the excluded
+atoms (2,271.4 s of conformance, 690.9 s of lifecycle); the 456 s explained as the 0.15 contention factor on 3,038.2 s; the elapsed time of this pull request's
+own run stated as not yet measured; O1 (scope item 7) and O2 (the moved-base residual) recorded as later backlog items.
 
 **Flow 5: the guides.**
-Read the staleness-ratchet part of `docs/guide/development.md` and the refresh of 2026-11-17 in `docs/guide/ci-and-releases.md`.
-Expected: the ratchet, the D4 rule parts, "blends" and "a base without test methods" are described; the Controller lane is stated as the longer one at three
-shards and the 1.15 rule as unchanged.
+Read the conformance and placement parts of `docs/guide/ci-and-releases.md` and `docs/guide/development.md`.
+Expected: the shards hold no conformance suites; the managed `workflow-conformance` job is the gate; the conformance lane is local-only under `--ci-placement`;
+the moved-base residual (a squash commit can be released although the conformance suites never ran on its tree, because `build-publish` does not wait for the
+managed job) is stated; `workflow-conformance` being a required check is a ruleset setting, documented and not tested.
 
-**Flow 6: backlog and docs checks.**
+**Flow 6: docs checks.**
 Run `python3 -B tools/run_tests.py tests.test_docs tests.test_plan_document_consistency; echo rc=$?`, `python3 -B tools/check_docs.py; echo rc=$?`,
-`python3 -B scripts/workflow_backlog.py check; echo rc=$?`, and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-ci2; echo rc=$?`.
-Expected: `# Test run: PASS`, exact coverage, every `rc=0`, `preflight-accept` `"ok": true`; `docs/backlog.yaml` lists `ci2b` to `ci2e` right after `ci2`.
+`python3 -B scripts/workflow_backlog.py check; echo rc=$?` and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-ci2b; echo rc=$?`.
+Expected: `# Test run: PASS`, every `rc=0`, `preflight-accept` `"ok": true`.
 
-**Known limitations / out of scope.** The workflows run only on GitHub; the sandbox has no forge, so the real CI timing comparison is read from the item
-page, not re-run. The full suite is CI's on the pull request; the self-review run's five failures (three `tests.test_fake_codex_contract` cases from the
-operator's `~/.codex/config.toml`, and `tests.test_codex_worker` and `tests.test_job_codex_apply` under load, which pass alone) are in code this item does
-not touch and are not flows. No `CONFORMANCE_CONTENTION` factor is added; `ci2b` to `ci2e` are later slices.
+**Known limitations / out of scope.** The workflows run only on GitHub; the sandbox has no forge, so this pull request's own elapsed CI time, and whether
+`workflow-conformance` is a required check, cannot be checked here. The full suite is CI's. Scope item 7 (the Codex loops, about 1 minute) and the moved-base
+release residual are not in this item (O1, O2). `#317` (the 20-minute target) stays open.
 
 ## Next action
 
-`/milestone-plan` for `workflow-controller-ci2b` (CI: run each test once, the duplicate-run removal (#317)), the item `python3 scripts/workflow_backlog.py next` returns, ready for `PLANNING`.
+`/accept-milestone` for `workflow-controller-ci2b` once manual testing is clean; findings go to the feedback file and `/apply-functional-review`.

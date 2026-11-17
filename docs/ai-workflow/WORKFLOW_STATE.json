@@ -82197,7 +82197,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci2d-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci2d-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 4,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -82349,12 +82349,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 0,
+          "local": 1,
           "external": 0
         }
       },
-      "state_revision": 27,
-      "last_transition": "2026-11-17T22:30:07Z",
+      "state_revision": 28,
+      "last_transition": "2026-11-17T22:35:00Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -82475,6 +82475,34 @@
               "review_content_id": "bef03d0de1eb3439d58f22039161120d4ab3fb9e790b6dc9e00240d6eb3a96a0",
               "verdict": "APPROVE",
               "at": "2026-11-17T21:54:12Z"
+            }
+          ]
+        },
+        "F-4fa298332e9c": {
+          "digest": "4fa298332e9c8e82c42acaa28a8fc05db76972cef7e974ac60fcd8485d97185a",
+          "text": "**O1.** `docs/guide/ci-and-releases.md` and D2 say a payload with no `draft` key \"runs everything\". In fact `detect` treats it as not a draft and applies the ordinary documentation-path rule, so a documentation-only diff is still `code=false`. That is harmless, because GitHub's `pull_request` payload always carries `draft`. Make the page say \"is treated as not a draft\" rather than \"runs everything\".",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "4eb8527829638b4b2dbc187cef393f50d94417c9e5733f595e96c6bf48f1994e",
+              "verdict": "REVISE",
+              "at": "2026-11-17T22:35:00Z"
+            }
+          ]
+        },
+        "F-4ce00321c277": {
+          "digest": "4ce00321c277312c71bd80c195f7faa144ff1abed1a61b9648f6e822d82cad33",
+          "text": "**O2.** `tools/timings_refresh.py` `propose` always makes a new commit and force-pushes `ci/timings-refresh`, even when the open refresh pull request already holds byte-identical `tools/test_timings.json`. So every weekly run whose merge differs from `main` (but not from the open pull request) restarts that pull request's full CI. Comparing the merged file with `origin/ci/timings-refresh:tools/test_timings.json` after the fetch, and skipping the push when they are equal, would save those runs.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "4eb8527829638b4b2dbc187cef393f50d94417c9e5733f595e96c6bf48f1994e",
+              "verdict": "REVISE",
+              "at": "2026-11-17T22:35:00Z"
             }
           ]
         }

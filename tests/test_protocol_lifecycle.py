@@ -273,10 +273,39 @@ class Lifecycle:
     #: The instance attributes a snapshot carries with the tree: what the drive launched, answered or recorded.
     SNAPSHOT_ATTRS: tuple[str, ...] = ("tasks",)
 
-    def snapshot_inputs(self) -> tuple:
-        """Everything set before a drive that the tree it builds depends on (a key part, so that two drives that
-        differ in any of it never share a snapshot)."""
-        return (self.release, self.report)
+    #: What a drive for a row that declares a part ``late`` runs with: the part's value in every tree a snapshot holds.
+    LATE_CANONICAL: dict = {}
+
+    #: The late parts of the ``reach`` drive running now (empty outside one).
+    _late_running: frozenset = frozenset()
+    _late_row = ""
+
+    def snapshot_inputs(self) -> dict:
+        """Everything set before a drive that the tree it builds depends on, by part name (a key part, so that two
+        drives that differ in any of it never share a snapshot, unless the row declares the part ``late``)."""
+        return {"release": self.release, "report": self.report}
+
+    def snapshot_key(self, name: str, late: tuple[str, ...] = ()) -> tuple:
+        """The key of row ``name``: its name and every part of ``snapshot_inputs()`` not named in ``late``."""
+        parts = self.snapshot_inputs()
+        unknown = set(late) - set(parts)
+        if unknown:
+            raise AssertionError(f"row {name!r} declares the unknown late part(s) {sorted(unknown)}; "
+                                 f"the parts are {sorted(parts)}")
+        return (name, tuple(sorted((part, value) for part, value in parts.items() if part not in late)))
+
+    def late(self, name: str):
+        """The life's own value of the part ``name``, for an effect that reads it. It raises while a ``reach`` drive
+        that declared the part late is running: that drive reads what its key left out, so two lives that differ in
+        it would share a tree they must not (D4)."""
+        if name in self._late_running:
+            raise AssertionError(f"the drive for row {self._late_row!r} declared {name!r} late but read it; "
+                                 f"remove {name!r} from that row's late parts so it stays in the key")
+        return self.snapshot_inputs()[name]
+
+    def apply_late(self, name: str, value) -> None:
+        """Make this life hold ``value`` for the late part ``name`` (the tree, or the attribute, that carries it)."""
+        raise NotImplementedError(name)
 
     def snapshot_state(self) -> dict:
         return {attr: getattr(self, attr) for attr in self.SNAPSHOT_ATTRS}
@@ -292,14 +321,26 @@ class Lifecycle:
         self.stub = td / "workflow-manager"
         self.runtime = td / "runtime"
 
-    def reach(self, name: str, drive) -> None:
+    def reach(self, name: str, drive, *, late: tuple[str, ...] = ()) -> None:
         """Bring this life to the row ``name`` by ``drive()`` -- once per test process. The first life to ask for
         ``(name, snapshot_inputs)`` drives for real and its tree is kept; every later one takes a copy of that tree,
         at the path it was built at (a bundle records its worktree path, so the tree cannot move), instead of
         driving again (D3). Falls back to driving when no copy can be made, and always drives under the scenario
-        kit, whose isolation boundary this does not change."""
-        key = (name, self.snapshot_inputs())
+        kit, whose isolation boundary this does not change. A part named in ``late`` is one the drive never reads: it
+        is left out of the key, the drive and the snapshot hold its canonical value, and this life's own value is put
+        back after the drive or the restore (D4)."""
+        key = self.snapshot_key(name, late)
+        own = {part: self.snapshot_inputs()[part] for part in late}
+        try:
+            self._reach(key, name, drive, late, own)
+        finally:
+            for part, value in own.items():
+                self.apply_late(part, value)
+
+    def _reach(self, key: tuple, name: str, drive, late: tuple[str, ...], own: dict) -> None:
         kit = getattr(self.test, "stub_dir", None) is not None
+        if kit:
+            fixtures.count_snapshot_outcome(key, "kit_drove")
         restored = None if kit else fixtures.restore_snapshot(key)
         if restored is not None:
             td, state = restored
@@ -307,7 +348,13 @@ class Lifecycle:
             self.rebase(td)  # the cleanup registered at construction removes whatever ``self.td`` is then
             self.restore_state(state)
             return
-        drive()
+        for part in late:
+            self.apply_late(part, self.LATE_CANONICAL[part])
+        self._late_running, self._late_row = frozenset(late), name
+        try:
+            drive()
+        finally:
+            self._late_running = frozenset()
         if not kit:
             fixtures.take_snapshot(key, self.td, self.snapshot_state())
 
@@ -599,9 +646,18 @@ class GateLifecycle(Lifecycle):
         return super().step()
 
     SNAPSHOT_ATTRS = ("tasks", "rows", "satisfied")
+    LATE_CANONICAL = {"checks": "green", "refused": ()}
 
-    def snapshot_inputs(self) -> tuple:
-        return (*super().snapshot_inputs(), self.checks.read_text(), tuple(sorted(self.refused)))
+    def snapshot_inputs(self) -> dict:
+        return {**super().snapshot_inputs(), "checks": self.checks.read_text(), "refused": tuple(sorted(self.refused))}
+
+    def apply_late(self, name: str, value) -> None:
+        if name == "checks":
+            self.checks.write_text(value)
+        elif name == "refused":
+            self.refused = set(value)
+        else:
+            super().apply_late(name, value)
 
     def rebase(self, td: Path) -> None:
         super().rebase(td)
@@ -628,7 +684,7 @@ class GateLifecycle(Lifecycle):
         words = task.lstrip("/").split()
         if words[0] == "satisfy-gate":
             self.tasks.append("satisfy-gate " + words[1])
-            if words[1] in self.refused:
+            if words[1] in self.late("refused"):
                 return
             self.satisfied.append(words[1])
             if words[1] == "plan":
@@ -636,6 +692,7 @@ class GateLifecycle(Lifecycle):
             elif words[1] == "implementation":
                 self.workflow(_POLICY_TECHNICAL_APPROVAL, WID)
             else:
+                self.late("checks")  # the script below reads the file
                 self.workflow(_SATISFY_ACCEPTANCE, WID, str(self.checks))
             return
         if words[0] == "apply-pr-review":
@@ -659,11 +716,12 @@ class GateLifecycle(Lifecycle):
 
     def to_plan_gate(self) -> None:
         """The first manual gate passed: the plan reviewed, the next step is the validator's."""
-        self.reach("to_plan_gate", lambda: self.manual_gate("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "plan"))
+        self.reach("to_plan_gate", lambda: self.manual_gate("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "plan"),
+                   late=("checks", "refused"))
 
     def to_acceptance(self) -> None:
         """Plan to the functional checklist, every gate passed by the validator."""
-        self.reach("to_acceptance", self._to_acceptance)
+        self.reach("to_acceptance", self._to_acceptance, late=("checks",))
 
     def _to_acceptance(self) -> None:
         self.manual_gate("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW", "plan")
@@ -982,10 +1040,12 @@ class LoopLifecycle(GateLifecycle):
 
     SNAPSHOT_ATTRS = (*GateLifecycle.SNAPSHOT_ATTRS, "applied", "sleeps")
 
-    def snapshot_inputs(self) -> tuple:
+    def snapshot_inputs(self) -> dict:
         # The binding is in the runtime tree and the world file is beside it: both are what a drive starts from.
-        return (*super().snapshot_inputs(), json.dumps(self.acceptance, sort_keys=True), self.world.path.read_text(),
-                self.bound, self.wait_seconds)
+        # None of these is late (D4): the world is read through the forge seam and the paths the effects pass, which
+        # ``late`` cannot wrap.
+        return {**super().snapshot_inputs(), "acceptance": json.dumps(self.acceptance, sort_keys=True),
+                "world": self.world.path.read_text(), "bound": self.bound, "wait_seconds": self.wait_seconds}
 
     def snapshot_state(self) -> dict:
         return {**super().snapshot_state(), "queries": self.world.queries}
@@ -1011,7 +1071,7 @@ class LoopLifecycle(GateLifecycle):
 
     def effect(self, task: str) -> None:
         words = task.lstrip("/").split()
-        if words[:2] == ["satisfy-gate", "acceptance"] and "acceptance" not in self.refused:
+        if words[:2] == ["satisfy-gate", "acceptance"] and "acceptance" not in self.late("refused"):
             self.tasks.append("satisfy-gate acceptance")
             done = self.workflow_output(_SATISFY_ACCEPTANCE_WORLD, WID, str(self.world.path)).strip()
             if done == "satisfied":

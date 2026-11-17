@@ -115,8 +115,18 @@ class LaunchDouble:
         return result
 
 
+class _ReviewLife(Lifecycle):
+    """The base lifecycle, with the clock the drive wrote its usage records at carried by the snapshot (D5)."""
+
+    SNAPSHOT_ATTRS = Lifecycle.SNAPSHOT_ATTRS + ("review_now",)
+    review_now = 0.0
+
+
 class _ReviewCase(unittest.TestCase):
     RELEASE = "2.9.0"
+    #: ``False`` makes a class drive its own plan-gate row instead of sharing the snapshot of it (D5); set only on
+    #: a class that fails shared, with the reason beside it.
+    SHARE_SNAPSHOT = True
 
     def setUp(self) -> None:
         patch = mock.patch.dict(review.HARNESSES, {"codex": review.CODEX})
@@ -124,9 +134,15 @@ class _ReviewCase(unittest.TestCase):
         self.addCleanup(patch.stop)
         self.now = time.time() - 600
         self.enterContext(mock.patch.object(job, "usage_now", lambda: self.now))
-        self.life = Lifecycle(self, self.RELEASE)
-        self.reviewer = reviewer(self.life.td)
-        self.life.run_until("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW")
+        self.life = _ReviewLife(self, self.RELEASE)
+        self.life.review_now = self.now  # the drive's usage records carry this clock, so a copy must too
+        drive = lambda: self.life.run_until("AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW")  # noqa: E731
+        if self.SHARE_SNAPSHOT:
+            self.life.reach("to_manual_plan_review", drive)
+        else:
+            drive()
+        self.now = self.life.review_now  # the saved clock on a restore, the same value on a drive
+        self.reviewer = reviewer(self.life.td)  # after the reach: the tree may sit at the snapshot's path
         self.addCleanup(process_fixtures.reap_recorded_workers, self.life.runtime)
 
     @property

@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ci2c",
+  "dispositions": {
+    "F-014d0c8bde0c": {
+      "disposition": "fixed"
+    },
+    "F-07d2c07280a3": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/377"
+    },
+    "F-140a5c49570b": {
+      "disposition": "dropped",
+      "reason": "Wording in the CP3 verified-state entry of the in-progress narrative, which is a historical record rewritten at acceptance; revision 3 and flow 7 state that AdoptedPolicyLoopTest sets SHARE_SNAPSHOT = False."
+    },
+    "F-210bb4863bb1": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/377"
+    },
+    "F-70c187f69410": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/377"
+    },
+    "F-71e6ac95a186": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/377"
+    },
+    "F-8a01df9d6ed0": {
+      "disposition": "fixed"
+    },
+    "F-ce3e7b2a887c": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/377"
+    },
+    "F-cfe85858d9a0": {
+      "disposition": "fixed"
+    },
+    "F-d72080d67a53": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/377"
+    },
+    "F-df01d1ae5f3f": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/377"
+    },
+    "F-e073a7e328f5": {
+      "disposition": "fixed",
+      "note": "The artifacts entry is indented like its neighbours at HEAD (fixed in f953ccf)."
+    },
+    "F-e102427cc40b": {
+      "disposition": "fixed",
+      "note": "The stray untracked `inspect` file is gone from the tree and the regenerated bundle; no tracked `inspect` exists."
+    },
+    "F-e7e2cbcdfbd7": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/377"
+    },
+    "F-fdc09bfcb71d": {
+      "disposition": "dropped",
+      "reason": "A bookkeeping finding about missing dispositions; moot once the round-2 findings are recorded in this file."
+    }
+  }
+}

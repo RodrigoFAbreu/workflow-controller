@@ -639,6 +639,29 @@ lifecycle class that rebuilds the same row; the scenario kit (`stub_dir`) always
 drives. `tests/test_shared_snapshot.py` proves the isolation, the rebased paths
 and the fallbacks.
 
+A key holds what the drive reads and nothing else. `snapshot_inputs()` returns
+a mapping from a part name to its value, and `reach(name, drive, late=(...))`
+builds the key from the parts not named late. A late part is one the drive for
+that row never reads: it is read only through `life.late(name)`, which raises
+`AssertionError` while a drive that declared it late runs, so a drive that does
+read it fails in the test that declared it. After the drive or the restore
+`reach` puts the life's own value back (`apply_late`). A part the guard trips on
+stays in the key, and so does one the guard cannot see (`LoopLifecycle`'s
+`world`, read through the forge seam). `_ReviewCase.setUp`
+(`tests/test_review_job.py`) reaches the plan gate through `reach` too; the
+clock its drive wrote records at is saved with the tree (`review_now`), and a
+class that cannot share sets `SHARE_SNAPSHOT = False` and says why.
+
+Every outcome is counted by row name (`fixtures.snapshot_counts()`: `built`,
+`restored`, `in_use`, `copy_failed`, `unkept`, and the no-op `missing` and
+`already_kept`; `kit_drove` from `reach`). Set `WFC_SNAPSHOT_REPORT` to a file
+and each test process appends one JSON line with its counts when it exits; it
+is off by default and changes no decision. A refusal for a path in use is
+correct, not a miss: a tree records its own path, so a second live copy of one
+row in one test must drive. The counts are per process, so a row is built once
+on every shard that reaches it; the scenario kit always drives and counts
+`kit_drove`, which is 0 in a full run.
+
 ## Throwaway Git repositories
 
 Every Git repository a test creates goes through `fixtures.git_init` or

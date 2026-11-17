@@ -14,10 +14,11 @@ import uuid
 from pathlib import Path
 from unittest import mock
 
-from controller import job, protocol
+from controller import job, protocol, usage
 
 from tests import fixtures
 from tests import test_protocol_lifecycle as lifecycle
+from tests.test_review_job import _ReviewLife
 
 
 class SnapshotCase(unittest.TestCase):
@@ -40,7 +41,7 @@ class CopyTest(SnapshotCase):
         name = self.key()
         first = self.built(name)
         first.tasks.append("review-plan")
-        self.assertTrue(fixtures.has_snapshot((name, first.snapshot_inputs())))
+        self.assertTrue(fixtures.has_snapshot(first.snapshot_key(name)))
         # The state was saved when the drive ended, so what the first test does afterwards is not in the copy.
         driven: list[bool] = []
         self.release(first)
@@ -116,7 +117,7 @@ class FallbackTest(SnapshotCase):
         life = lifecycle.GateLifecycle(self)
         with mock.patch.object(fixtures.shutil, "copytree", side_effect=OSError("disk full")):
             life.reach(name, lambda: None)
-        self.assertFalse(fixtures.has_snapshot((name, life.snapshot_inputs())))
+        self.assertFalse(fixtures.has_snapshot(life.snapshot_key(name)))
         later = lifecycle.GateLifecycle(self)
         driven: list[bool] = []
         later.reach(name, lambda: driven.append(True))
@@ -141,7 +142,84 @@ class InputsTest(SnapshotCase):
         pending.checks.write_text("pending")  # the default is "green"
         reported = lifecycle.GateLifecycle(self)
         reported.report = "another"
-        self.assertEqual(len({plain.snapshot_inputs(), pending.snapshot_inputs(), reported.snapshot_inputs()}), 3)
+        self.assertEqual(len({life.snapshot_key("row") for life in (plain, pending, reported)}), 3)
+
+    def test_a_keys_parts_are_named(self) -> None:
+        life = lifecycle.GateLifecycle(self)
+        self.assertEqual(set(life.snapshot_inputs()), {"release", "report", "checks", "refused"})
+        loop = lifecycle.LoopLifecycle(self)
+        self.assertEqual(set(loop.snapshot_inputs()) - set(life.snapshot_inputs()),
+                         {"acceptance", "world", "bound", "wait_seconds"})
+
+    def test_a_part_not_declared_late_still_separates_keys(self) -> None:
+        plain = lifecycle.GateLifecycle(self)
+        pending = lifecycle.GateLifecycle(self)
+        pending.checks.write_text("pending")
+        self.assertNotEqual(plain.snapshot_key("row", late=("refused",)), pending.snapshot_key("row", late=("refused",)))
+        self.assertEqual(plain.snapshot_key("row", late=("checks",)), pending.snapshot_key("row", late=("checks",)))
+
+    def test_an_unknown_late_part_is_refused(self) -> None:
+        with self.assertRaisesRegex(AssertionError, "unknown late part"):
+            lifecycle.GateLifecycle(self).snapshot_key("row", late=("nope",))
+
+    def test_the_world_of_a_loop_life_stays_in_the_key(self) -> None:
+        pending = lifecycle.LoopLifecycle(self, checks="pending")
+        green = lifecycle.LoopLifecycle(self, checks="green")
+        self.assertNotEqual(pending.snapshot_key("row"), green.snapshot_key("row"))
+
+
+class LatePartTest(SnapshotCase):
+    """D4: a part the drive never reads is left out of the key, each life still sees its own value, and a drive that
+    does read it fails loudly."""
+
+    LATE = ("checks", "refused")
+
+    def late_life(self, *, checks: str = "green", refused: tuple = ()) -> lifecycle.GateLifecycle:
+        life = lifecycle.GateLifecycle(self)
+        life.checks.write_text(checks)
+        life.refused = set(refused)
+        return life
+
+    def test_two_lives_that_differ_only_in_a_late_part_share_one_snapshot_and_each_sees_its_own_value(self) -> None:
+        name = self.key()
+        first = self.late_life(checks="green")
+        first.reach(name, lambda: (first.root / "marker.txt").write_text("built\n"), late=self.LATE)
+        self.assertEqual(first.checks.read_text(), "green")
+        self.release(first)
+        second = self.late_life(checks="pending", refused=("plan",))
+        second.reach(name, lambda: self.fail("the late parts are not in the key, so this restores"), late=self.LATE)
+        self.assertEqual((second.root / "marker.txt").read_text(), "built\n")
+        self.assertEqual(second.checks.read_text(), "pending")
+        self.assertEqual(second.refused, {"plan"})
+        self.assertEqual(second.checks, second.td / "checks")
+
+    def test_the_drive_runs_with_the_canonical_value_and_the_life_gets_its_own_back(self) -> None:
+        name = self.key()
+        life = self.late_life(checks="pending", refused=("plan",))
+        seen: list[tuple] = []
+        life.reach(name, lambda: seen.append((life.checks.read_text(), set(life.refused))), late=self.LATE)
+        self.assertEqual(seen, [("green", set())])
+        self.assertEqual((life.checks.read_text(), life.refused), ("pending", {"plan"}))
+
+    def test_a_drive_that_reads_a_late_part_fails_with_the_guards_message(self) -> None:
+        name = self.key()
+        life = self.late_life()
+        with self.assertRaisesRegex(AssertionError, "declared 'refused' late but read it"):
+            life.reach(name, lambda: life.late("refused"), late=self.LATE)
+        self.assertEqual(life.late("refused"), ())  # the guard is off again
+        self.assertFalse(fixtures.has_snapshot(life.snapshot_key(name, self.LATE)))
+
+    def test_a_drive_may_read_a_part_it_did_not_declare_late(self) -> None:
+        life = self.late_life()
+        seen: list[str] = []
+        life.reach(self.key(), lambda: seen.append(life.late("checks")), late=("refused",))
+        self.assertEqual(seen, ["green"])
+
+    def test_an_effect_that_reads_refused_trips_the_guard_in_a_declaring_drive(self) -> None:
+        life = self.late_life()
+        life._late_running, life._late_row = frozenset({"refused"}), "row"
+        with self.assertRaisesRegex(AssertionError, "read it"):
+            life.effect("/satisfy-gate plan workflow-demo")
 
 
 class FreshBuildTest(SnapshotCase):
@@ -171,6 +249,119 @@ class FreshBuildTest(SnapshotCase):
         # The bundle verifies at the copy's own path (it records the worktree it was generated in).
         manifest = (copy.root / ".ai-review" / lifecycle.WID / "current" / "MANIFEST.md").read_text()
         self.assertIn(f"worktree_root: {copy.root}", manifest)
+
+
+class ReviewRowTest(SnapshotCase):
+    """D6: the review case's row (the manual plan gate, the clock it was driven at) is the same fresh and restored."""
+
+    ROW = "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW"
+
+    def drive(self, now: float, *, share: str | None) -> dict:
+        """One review-case setUp at the clock ``now``: what a review test reads at its start, relative to its clock."""
+        life = _ReviewLife(self, "2.9.0")
+        life.review_now = now
+        with mock.patch.object(job, "usage_now", lambda: life.review_now):
+            if share is None:
+                life.run_until(self.ROW)
+            else:
+                life.reach(share, lambda: life.run_until(self.ROW))
+            clock = life.review_now
+        files = sorted(str(p.relative_to(life.root)) for p in life.root.rglob("*") if ".git" not in p.parts)
+        record = usage.load_record(life.runtime)
+
+        def relative(value):
+            if isinstance(value, dict):
+                return {k: relative(v) for k, v in value.items()}
+            if isinstance(value, list):
+                return [relative(v) for v in value]
+            return round(value - clock, 3) if isinstance(value, float) else value
+
+        shape = {"phase": life.phase(), "tasks": list(life.tasks), "files": files,
+                 "row": protocol.next_action(life.root, lifecycle.WID).raw["row"], "clock": clock,
+                 "usage": relative(record)}
+        self.release(life)
+        return shape
+
+    def test_a_restored_review_row_reads_as_a_fresh_one_at_the_clock_it_was_driven_at(self) -> None:
+        fresh = self.drive(1000.0, share=None)
+        name = self.key()
+        source = self.drive(1000.0, share=name)
+        copy = self.drive(5000.0, share=name)  # a later test, whose own clock differs: the copy keeps the saved one
+        self.assertEqual(source, fresh)
+        self.assertEqual(copy["clock"], 1000.0)
+        self.assertEqual(copy, fresh)
+        self.assertEqual(copy["phase"], self.ROW)
+
+
+class CountersTest(SnapshotCase):
+    """``CI2c`` D1: every outcome of a snapshot call is counted once, by row name; the report is opt-in."""
+
+    def counts(self, name: str) -> dict[str, int]:
+        return fixtures.snapshot_counts().get(name, {})
+
+    def test_a_built_a_missing_and_a_restored_row_are_each_counted_once(self) -> None:
+        name = self.key()
+        first = self.built(name)
+        self.assertEqual(self.counts(name), {"missing": 1, "built": 1})
+        self.release(first)
+        lifecycle.GateLifecycle(self).reach(name, lambda: self.fail("must restore"))
+        self.assertEqual(self.counts(name), {"missing": 1, "built": 1, "restored": 1})
+
+    def test_a_path_in_use_and_the_drive_after_it_are_counted(self) -> None:
+        name = self.key()
+        self.release(self.built(name))
+        lifecycle.GateLifecycle(self).reach(name, lambda: self.fail("must restore"))
+        third = lifecycle.GateLifecycle(self)
+        third.reach(name, lambda: None)
+        self.assertEqual(self.counts(name), {"missing": 1, "built": 1, "restored": 1, "in_use": 1, "already_kept": 1})
+
+    def test_a_failed_copy_is_counted_on_restore_and_on_take(self) -> None:
+        name = self.key()
+        self.release(self.built(name))
+        second = lifecycle.GateLifecycle(self)
+        with mock.patch.object(fixtures.shutil, "copytree", side_effect=OSError("disk full")):
+            second.reach(name, lambda: None)
+        self.assertEqual(self.counts(name), {"missing": 1, "built": 1, "copy_failed": 1, "already_kept": 1})
+        other = self.key()
+        with mock.patch.object(fixtures.shutil, "copytree", side_effect=OSError("disk full")):
+            lifecycle.GateLifecycle(self).reach(other, lambda: None)
+        self.assertEqual(self.counts(other), {"missing": 1, "unkept": 1})
+
+    def test_a_kit_drive_is_counted_and_nothing_else(self) -> None:
+        name = self.key()
+        self.stub_dir = "/nonexistent"
+        self.addCleanup(delattr, self, "stub_dir")
+        lifecycle.GateLifecycle(self).reach(name, lambda: None)
+        self.assertEqual(self.counts(name), {"kit_drove": 1})
+
+    def test_the_counts_are_keyed_by_the_row_name_and_are_a_copy(self) -> None:
+        one, two = self.key(), self.key()
+        self.built(one)
+        self.built(two)
+        self.assertEqual(self.counts(one), self.counts(two))
+        fixtures.snapshot_counts()[one]["built"] = 99
+        self.assertEqual(self.counts(one)["built"], 1)
+
+    def test_the_report_gets_one_json_line_and_nothing_is_written_with_the_variable_unset(self) -> None:
+        import json
+        import os
+        import tempfile
+        name = self.key()
+        self.built(name)
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "report.jsonl"
+            with mock.patch.dict(os.environ, {fixtures._REPORT_VARIABLE: str(target)}):
+                fixtures._write_snapshot_report()
+            lines = target.read_text().splitlines()
+            self.assertEqual(len(lines), 1)
+            record = json.loads(lines[0])
+            self.assertEqual(record["pid"], os.getpid())
+            self.assertEqual(record["counts"][name], {"missing": 1, "built": 1})
+            env = {k: v for k, v in os.environ.items() if k != fixtures._REPORT_VARIABLE}
+            with mock.patch.dict(os.environ, env, clear=True):
+                fixtures._write_snapshot_report()
+            self.assertEqual(len(target.read_text().splitlines()), 1)
+            self.assertEqual(sorted(p.name for p in Path(td).iterdir()), ["report.jsonl"])
 
 
 if __name__ == "__main__":

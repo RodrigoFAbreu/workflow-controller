@@ -732,9 +732,9 @@ class TesterLifecycle(lifecycle.GateLifecycle):
 
     SNAPSHOT_ATTRS = (*lifecycle.GateLifecycle.SNAPSHOT_ATTRS, "task_texts")
 
-    def snapshot_inputs(self) -> tuple:
+    def snapshot_inputs(self) -> dict:
         # The checklist the fake worker writes at ``functional.prepare`` is part of the repository the drive builds.
-        return (*super().snapshot_inputs(), self.numbered)
+        return {**super().snapshot_inputs(), "numbered": self.numbered}
 
     def rebase(self, td: Path) -> None:
         super().rebase(td)

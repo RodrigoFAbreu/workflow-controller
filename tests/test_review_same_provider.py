@@ -378,6 +378,9 @@ class AdoptedPolicyLoopTest(SameProviderCase):
     """Same-family approval under a **real** lowered policy: the Workflow's own adoption (no injected signal), a
     recorded Anthropic local reviewer, and the whole REVISE / apply / APPROVE loop at both stages."""
 
+    #: its seed adopts the lowered policy (_ADOPT_LOWERING), which the snapshot key does not carry (D5)
+    SHARE_SNAPSHOT = False
+
     def setUp(self) -> None:
         real_seed = fixtures.run_workflow_seed
 

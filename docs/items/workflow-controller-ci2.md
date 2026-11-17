@@ -1,21 +1,72 @@
-# CI2: CI follow-ups, the 20-minute PR CI target, the test suites and the review follow-ups of CI1a to CI1c
+# CI2: fresh shard timings, a measured contention estimate and the CI1b review follow-ups
 
 Item id: `workflow-controller-ci2`.
 
-Not yet planned. Decide how to bring PR CI toward the 20-minute target and close the open CI follow-ups. Sources: [#317](https://github.com/RodrigoFAbreu/workflow-controller/issues/317), [#322](https://github.com/RodrigoFAbreu/workflow-controller/issues/322), [#324](https://github.com/RodrigoFAbreu/workflow-controller/issues/324). Complexity: large; widened on 2026-11-16 to cover the test suites themselves (see [Test-suite performance](#test-suite-performance-owner-decision-2026-11-16)); split at planning.
+Status: implemented on the milestone branch (three checkpoints); plan: [CONTROLLER_CI2_PLAN.md](../ai-workflow/CONTROLLER_CI2_PLAN.md) (revision 12). Complexity: medium. Sources: [#317](https://github.com/RodrigoFAbreu/workflow-controller/issues/317) (the 20-minute target, stays open until the last slice merges) and [#324](https://github.com/RodrigoFAbreu/workflow-controller/issues/324) (done here). A `ci:` change that edits the committed timings, tests and pages only; it publishes no release.
 
-## Where CI stands
+CI2 was large and said "split at planning". By the sizing rule (at most one new mechanism per releasable item) the owner's fourteen scope items (below) are split into five slices:
 
-CI1b and CI1c measured no gain: PR CI took 27 min 23 s against a baseline of 27 to 30 minutes. The floor is the `acceptance_matrix` conformance atom, about 21.5 minutes with contention, so splitting or rebalancing the other shards cannot reach 20 minutes.
+| slice | scope items | mechanism |
+| --- | --- | --- |
+| this item, `workflow-controller-ci2` | 1 (refresh and estimates), 2 (contention) | the planner estimates from measured data |
+| [`workflow-controller-ci2b`](workflow-controller-ci2b.md) | 3, 4, 7 | run each test once |
+| [`workflow-controller-ci2c`](workflow-controller-ci2c.md) | 5, 6, 8, 9, 10 | fixture snapshots and process starts |
+| [`workflow-controller-ci2d`](workflow-controller-ci2d.md) | 11, 12, 13 and the automation of the timings refresh | after-merge and trigger policy |
+| [`workflow-controller-ci2e`](workflow-controller-ci2e.md) | [#322](https://github.com/RodrigoFAbreu/workflow-controller/issues/322) | a runtime check replacing the static repo-reach heuristic |
 
-## Options (one mechanism each)
+Scope item 1 is split on purpose: this slice refreshes the timings once by hand (a one-off measurement) and ci2d automates the refresh. Item 14 ("not worth doing") needs no work. Each later slice depends on this one and is planned after it.
 
-- A larger runner: needs an owner billing decision.
-- Work on the `acceptance_matrix` atom itself (the floor).
-- Replace the CI1a static repo-reach heuristic in `tests/test_ci_changes.py` with a runtime check ([#322](https://github.com/RodrigoFAbreu/workflow-controller/issues/322)): a suite run with the tree unreadable, or a hash before and after.
-- The CI1b review follow-ups ([#324](https://github.com/RodrigoFAbreu/workflow-controller/issues/324)), a small documentation change: reword the item page's pre-plan summary, say "blends" for the next merge, add the two missing D4 rule parts and the "base without test methods" wording to the development guide, and record the fixture keys and the derivation inputs.
+## What was done
 
-## Test-suite performance (owner decision 2026-11-16)
+- **Timings refreshed from real CI.** `tools/test_timings.json` was merged from three code pull request runs of `ci.yml` (43855824846, 43864443959 and 43879797542, oldest first, nine distinct shard records; the operator downloaded the artifacts) and went from 1,179 to 1,291 atoms, with the 113 Codex atoms measured at 2,097 s now in it. The untimed share of the CI-placed tests went from 9.9 percent (657 of 6,654) to 5 of 6,654.
+- **A staleness ratchet.** `MAX_UNTIMED_TEST_SHARE` is 20 percent in `CommittedTimingsTest` (derivation in the [development guide](../guide/development.md#the-test-runner), "Staleness ratchet"); negative cases show it can fail and that `main`, `package` and excluded atoms are not counted.
+- **One class split.** The refresh pushed `tests.test_codex_apply_regeneration.PlanRegenerationTest` (210.6 s over 10 tests) over the 200 s class ratchet, so it is split test-only into `PlanRegenerationTest` and `PlanRegenerationRecordTest`, five tests each (amendment 1, owner decision of 2026-11-16).
+- **The contention was measured and no factor is justified** (amendment 2, owner decision of 2026-11-17); see the next section. `tools/test_shards.py` is unchanged.
+- **The #324 follow-ups** are made on the [CI1b page](workflow-controller-ci1b.md) and in the development guide.
+- **Pages and backlog.** The guides state the refresh date, the ratchet and the measured result; the four follow-up slices above are in `docs/backlog.yaml` and `docs/ROADMAP.md`.
+
+## The measured contention
+
+The planner multiplies a shard's estimate by `LANE_CONTENTION = 1.15` when both lanes have work, and the earlier figure was that the shard holding the acceptance matrix runs about 1.50 times slower than estimated. That figure is a shard-level one, so it was measured at the shard: each shard's observed `wall_seconds` over its uncontended estimate (the longer of its two lanes), from the shard records and plans of the three runs, with the refreshed timings. The historical plans name the original ten-test `PlanRegenerationTest` atom, so each was first mapped to both replacement atoms on the same shard (`split_historical_atoms` in `tests/test_test_shards.py`, one mapping for the ratios and for the rescoring below).
+
+| run | matrix shard | other two shards |
+| --- | --- | --- |
+| 43855824846 | 0.69 | 1.15 and 1.18 |
+| 43864443959 | 1.08 | 0.97 and 1.14 |
+| 43879797542 | 1.07 | 0.93 and 0.85 |
+ The matrix shard was never above 1.15 and no suite was above 1.15 in two runs, so **no matrix-specific factor is justified on these three runs** and `LANE_CONTENTION = 1.15` stays for every suite. The earlier 1.50 came from the six-shard layout and is not visible at the shard level in the three-shard layout. The result is in-sample (the runs are folded into the timings that feed the estimate) and on three runs only: it does not claim the matrix is never slower, only that these runs do not qualify a constant. A later item may revisit it with more runs.
+
+## The predicted effect
+
+The planner balances exactly the numbers it reports, so two self-balanced plans always show a longest shard of about 1.00 times the mean, and comparing them shows only the estimator's level. The predicted gain is therefore the **base plan rescored with the after estimator**: the plan CI built at the base commit (`run_tests.py plan --profile ci --ci-placement`, plan digest `ef75968f`, three shards each estimated at 3,260.1 s), with the same atoms on each shard (the split class as both halves), scored with the refreshed timings through the unchanged estimator.
+
+| plan | shard 0 (matrix) | shard 1 | shard 2 | longest | mean | longest over mean |
+| --- | --- | --- | --- | --- | --- | --- |
+| base plan, base estimator | 3,260.1 s | 3,260.1 s | 3,260.1 s | 3,260.1 s | 3,260.1 s | 1.00 |
+| base plan, rescored with the refreshed timings | 4,092.6 s | 3,119.4 s | 3,253.5 s | 4,092.6 s | 3,488.5 s | 1.17 |
+| new plan (`--ci-placement`, refreshed timings) | 3,493.9 s | 3,493.9 s | 3,493.9 s | 3,493.9 s | 3,493.9 s | 1.00 |
+
+The predicted gain is **598.7 s (about 10 minutes) off the longest shard**: the old placement would have run at 1.17 times the mean under the refreshed estimates, and the new one is level at 3,494 s. The mean rises from 3,260 s to 3,494 s because the refreshed timings are higher (the 113 Codex atoms were underestimated).
+
+Each shard's observed `wall_seconds` next to its estimate, before (the base timings, base plan unchanged) and after (the refreshed timings, split class mapped), for the runs the refresh used (every run used the base plan, so the estimate before is 3,260 s on each shard):
+
+| run | shard | observed | before | observed over before | after | observed over after |
+| --- | --- | --- | --- | --- | --- | --- |
+| 43855824846 | 0 (matrix) | 2,467.0 s | 3,260.0 s | 0.76 | 4,092.6 s | 0.60 |
+| 43855824846 | 1 | 3,132.8 s | 3,260.0 s | 0.96 | 3,119.4 s | 1.00 |
+| 43855824846 | 2 | 3,344.8 s | 3,260.0 s | 1.03 | 3,253.5 s | 1.03 |
+| 43864443959 | 0 (matrix) | 3,851.2 s | 3,260.0 s | 1.18 | 4,092.6 s | 0.94 |
+| 43864443959 | 1 | 2,644.1 s | 3,260.0 s | 0.81 | 3,119.4 s | 0.85 |
+| 43864443959 | 2 | 3,215.9 s | 3,260.0 s | 0.99 | 3,253.5 s | 0.99 |
+| 43879797542 | 0 (matrix) | 3,820.5 s | 3,260.0 s | 1.17 | 4,092.6 s | 0.93 |
+| 43879797542 | 1 | 2,519.7 s | 3,260.0 s | 0.77 | 3,119.4 s | 0.81 |
+| 43879797542 | 2 | 2,391.0 s | 3,260.0 s | 0.73 | 3,253.5 s | 0.73 |
+
+Across the three runs the shard that held the matrix ran from 2,467 s to 3,851 s and the others from 2,391 s to 3,345 s, so the imbalance the goal names (1.08 to 1.50 times the average) is large and varies from run to run; the observed spread of a single shard between runs (2,467 to 3,851 s) is larger than the estimator's change, which is why the gain above is a prediction and not a promise.
+
+**Elapsed CI time.** To be recorded once this pull request's CI has run, as one interval for both sides (`run_started_at` to the `completed_at` of `tests-result`) against the 35 to 41 minute baseline. The page will state the result either way; a gain smaller than the planner predicts is reported, not argued away.
+
+## The owner's decision of 2026-11-16 (test-suite performance)
 
 The owner widened this item so that the work covers the test suites themselves, not only sharding and Actions. The item keeps its order (after CI3).
 
@@ -57,18 +108,14 @@ After items 1 to 10 the PR wall time is about 30-39 min at three shards, which s
 
 ### Small notes
 
-- `docs/guide/ci-and-releases.md` wrongly says the acceptance matrix is the floor of the longest shard; the measurements show the Controller lane is always the longer one.
+- `docs/guide/ci-and-releases.md` said the acceptance matrix is the floor of the longest shard; CI2 corrected it (the Controller lane is always the longer one at three shards).
 - The managed conformance job also runs on documentation-only PRs, so their checks finish after 12-19 min.
 - `test_buildinfo.EditableModeEarlyReturnTest` is skipped on CI because setuptools is missing.
 
-### Planning
-
-The work is sized for splitting at planning. By the sizing rule (at most one new mechanism per releasable item) a suggested split is: timings and balance (items 1, 2, 10), duplicate-run removal (3, 4, 7), fixture snapshots (5, 6, 8, 9), and after-merge and trigger policy (11, 12, 13). Plan it after CI3, because the six-runner cap and the three shards come from CI3. The Controller carries it out.
-
 ## Out of scope
 
-The timing flakes (FX1) and raising `CI_MAX_SHARDS` without an owner answer.
+The duplicate runs, the fixture snapshots, the after-merge and trigger policy and the runtime reach check (the four slices above), `CI_MAX_SHARDS` (the owner's CI3 choice: raising it needs an owner answer) and the timing flakes (FX1).
 
-## Not yet planned
+## Planning rules
 
-Not yet planned. The rules that apply (the sizing rule: at most one new mechanism, releasable alone) are on [Planning rules](../planning-rules.md#next-in-order-and-the-sizing-rules).
+The rules that apply (the sizing rule: at most one new mechanism, releasable alone) are on [Planning rules](../planning-rules.md#next-in-order-and-the-sizing-rules).

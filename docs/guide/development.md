@@ -343,16 +343,31 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   different: its old entry names an atom that no longer exists, which
   `CommittedTimingsTest` rejects until a `timings merge` prunes it (the
   merge drops every entry the inventory no longer contains).
+  **Staleness ratchet.** Nothing else rejects an atom with no entry, so
+  `CommittedTimingsTest` also fails when the atoms absent from the committed file
+  hold more than `MAX_UNTIMED_TEST_SHARE` (20 percent) of the tests of the atoms the
+  CI plan places on a shard (`--ci-placement`; `main`, `package` and excluded atoms
+  are never refreshed by a pull request's records and are not counted). The limit is
+  derived: the untimed share grew about 1.2 points a day after the refresh of
+  2026-11-08, 17.2 points over the 14 days the owner accepts between manual
+  refreshes, rounded up to a multiple of 5. Crossing it means the refresh is overdue by
+  a clear margin, not that a pull request added a few tests: refresh from three
+  recent CI runs (oldest first, dropping duplicate shard records of a run that
+  `CI_MAIN_REUSE` re-uploaded). The refresh of 2026-11-17 used runs
+  43855824846, 43864443959 and 43879797542 (1,179 to 1,291 atoms).
   **Ratchet.** `CommittedTimingsTest` fails when a class atom of more than one
   test has more than 200 s (`MAX_SPLITTABLE_ATOM_SECONDS`) in the committed
-  file: split the class along its test methods, keeping helpers in a non-`TestCase`
-  base, as CI1b did. A single-test atom is exempt because it cannot be split by class.
+  file: split the class along its test methods, keeping helpers in a base without
+  test methods (it may itself subclass `TestCase`), as CI1b did. A single-test atom is exempt because it cannot be split by class.
   **Apportioning a split.** A merge drops the old class, so its new classes get
   seconds from a base: the old class's committed value folded with the CI
   artifacts' observations (`EWMA_WEIGHT`, oldest first, only runs where every test
   of the old class passed once), times each new class's local share of the sum
   over the classes that replaced it, written as `{seconds, samples: 1, tests}`.
-  The next merge from CI replaces those entries with observed seconds.
+  When the old class's test count changed, the first observation is taken
+  outright (the `update_timings` count rule); each new class is measured alone
+  in its own process, so the apportioned sum is a lower bound. The next merge
+  from CI blends those entries with observed seconds (EWMA).
 - **Serialization.** A test runs alone only if `EXCLUSIVE_ATOMS` in
   `tools/test_shards.py` lists its class, with a reason. It is empty;
   an entry needs evidence that the race cannot be fixed in the test.

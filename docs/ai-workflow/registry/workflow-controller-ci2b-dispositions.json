@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ci2b",
+  "dispositions": {
+    "F-0191b0548ddf": {
+      "disposition": "fixed",
+      "reason": "Plan D2 now says the required-check half of (a) is documented in the CI and releases guide, not tested, and the item page says the same."
+    },
+    "F-03dfbfbea9e9": {
+      "disposition": "fixed",
+      "reason": "CP1's record and the item page name the source of each figure: 738 s and 737 s are the CI2 sizing, 691 s and 640 s the committed timings."
+    },
+    "F-13e8d7d1d3f9": {
+      "disposition": "dropped",
+      "reason": "Wording of requirement R3 only. CP3 carries both owner answers (scope item 7 and the O2 moved-base residual) on the item page, and the plan is a historical record that is not edited after approval."
+    },
+    "F-2f48c2415ecc": {
+      "disposition": "dropped",
+      "reason": "The reviewer states the file is not repository content. The repository records (item page, ACTIVE_MILESTONE) carry the reproducible digest d01bdb71. A generated bundle file is not edited by hand."
+    },
+    "F-c4d4fd8ace57": {
+      "disposition": "fixed",
+      "reason": "3d3ca2f documents in tests/test_test_shards.py that the pin counts only attribute-access calls and that a bare-name call reads as uncalled."
+    },
+    "F-d3742a395abe": {
+      "disposition": "fixed",
+      "reason": "tests/scenarios/lifecycle.py runs holder.doCleanups() inside short_folders_made() before the leftover assertion, as IsolationTest does."
+    },
+    "F-e9b73d1cb668": {
+      "disposition": "dropped",
+      "reason": "Same as F-2f48c2415ecc: the bundle summaries are generated historical records outside the repository content; the item page and ACTIVE_MILESTONE record d01bdb71."
+    },
+    "F-fa6a7c1e7d7a": {
+      "disposition": "fixed",
+      "reason": "functional_tester_isolation calls holder.doCleanups() inside tfl.short_folders_made() before asserting that no recorded folder remains (tests/scenarios/lifecycle.py)."
+    }
+  }
+}

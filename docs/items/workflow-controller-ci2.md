@@ -34,7 +34,8 @@ The planner multiplies a shard's estimate by `LANE_CONTENTION = 1.15` when both 
 | 43855824846 | 0.69 | 1.15 and 1.18 |
 | 43864443959 | 1.08 | 0.97 and 1.14 |
 | 43879797542 | 1.07 | 0.93 and 0.85 |
- The matrix shard was never above 1.15 and no suite was above 1.15 in two runs, so **no matrix-specific factor is justified on these three runs** and `LANE_CONTENTION = 1.15` stays for every suite. The earlier 1.50 came from the six-shard layout and is not visible at the shard level in the three-shard layout. The result is in-sample (the runs are folded into the timings that feed the estimate) and on three runs only: it does not claim the matrix is never slower, only that these runs do not qualify a constant. A later item may revisit it with more runs.
+
+The matrix shard was never above 1.15 and no suite was above 1.15 in two runs, so **no matrix-specific factor is justified on these three runs** and `LANE_CONTENTION = 1.15` stays for every suite. The earlier 1.50 came from the six-shard layout and is not visible at the shard level in the three-shard layout. The result is in-sample (the runs are folded into the timings that feed the estimate) and on three runs only: it does not claim the matrix is never slower, only that these runs do not qualify a constant. A later item may revisit it with more runs.
 
 ## The predicted effect
 

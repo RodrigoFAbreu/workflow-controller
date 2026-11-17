@@ -2531,20 +2531,33 @@ def untimed_share_over_the_limit(atoms, profile_atoms, limit: float = MAX_UNTIME
 #: The class CP1 of CI2 split in two, and its sibling (the original keeps its name for one half).
 SPLIT_ORIGINAL = "tests.test_codex_apply_regeneration.PlanRegenerationTest"
 SPLIT_SIBLING = "tests.test_codex_apply_regeneration.PlanRegenerationRecordTest"
+#: The five test methods CP1 moved from the original class to the sibling.
+SPLIT_SIBLING_METHODS = frozenset({
+    "test_a_clean_context_list_of_repository_files_is_regenerated",
+    "test_a_context_list_rewritten_during_the_run_is_not_trusted",
+    "test_a_failed_or_slow_generator_and_a_git_that_is_not_isolated_end_at_the_gate",
+    "test_a_plant_in_the_tree_ends_at_the_gate_or_runs_nothing",
+    "test_an_unreadable_record_and_an_unmanaged_generator_end_at_the_gate",
+})
 
 
 def split_historical_atoms(atom_tests: dict) -> dict:
     """The one mapping of the split class (CI2 D3 and D5): a historical shard's
     ``{atom key: test ids}`` with the original ten-test ``SPLIT_ORIGINAL`` atom
     replaced by both halves (five tests each), on the same shard, each once. The ten
-    tests are preserved: the first five stay under the original key, the rest move to
-    the sibling key. A shard without the original, or one already split, is unchanged."""
+    tests are preserved, each under the class CP1 moved it to: the five
+    ``SPLIT_SIBLING_METHODS`` go to the sibling key, the rest stay under the original.
+    A shard without the original, one already split, or one whose ids do not divide
+    five and five is unchanged."""
     ids = atom_tests.get(SPLIT_ORIGINAL)
     if ids is None or SPLIT_SIBLING in atom_tests or len(ids) != 10:
         return dict(atom_tests)
+    moved = [test_id for test_id in ids if test_id.rsplit(".", 1)[1] in SPLIT_SIBLING_METHODS]
+    if len(moved) != len(SPLIT_SIBLING_METHODS):
+        return dict(atom_tests)
     mapped = {key: list(value) for key, value in atom_tests.items() if key != SPLIT_ORIGINAL}
-    mapped[SPLIT_ORIGINAL] = list(ids[:5])
-    mapped[SPLIT_SIBLING] = [SPLIT_SIBLING + test_id[len(SPLIT_ORIGINAL):] for test_id in ids[5:]]
+    mapped[SPLIT_ORIGINAL] = [test_id for test_id in ids if test_id not in moved]
+    mapped[SPLIT_SIBLING] = [SPLIT_SIBLING + test_id[len(SPLIT_ORIGINAL):] for test_id in moved]
     return mapped
 
 
@@ -2572,7 +2585,15 @@ class SplitHistoricalAtomsTest(unittest.TestCase):
     """CI2 D3 and D5: a historical plan naming the original ten-test atom is mapped
     to both replacement atoms on the same shard before any estimate is taken."""
 
-    TESTS = [f"{SPLIT_ORIGINAL}.test_{n:02d}" for n in range(10)]
+    KEPT_METHODS = (
+        "test_a_clean_landing_is_regenerated_and_hands_the_next_stage_its_preconditions",
+        "test_a_context_list_naming_a_file_outside_the_repository_is_refused",
+        "test_a_poisoned_environment_runs_nothing",
+        "test_a_run_past_the_regeneration_gate_without_regenerating_launches_no_review",
+        "test_an_absolute_traversal_and_link_line_each_end_at_the_gate_before_the_generator",
+    )
+    #: The ten ids as a historical plan lists them (sorted, all on the original class).
+    TESTS = sorted(f"{SPLIT_ORIGINAL}.{name}" for name in KEPT_METHODS + tuple(SPLIT_SIBLING_METHODS))
 
     def _shard(self, with_original: bool = True) -> dict:
         atoms = ["tests.test_other.OtherTest", "conformance:workflow_state_test.py"]
@@ -2593,6 +2614,19 @@ class SplitHistoricalAtomsTest(unittest.TestCase):
         self.assertEqual(len(set(halves)), 10)
         self.assertEqual({t.rsplit(".", 1)[1] for t in halves},
                          {t.rsplit(".", 1)[1] for t in self.TESTS})
+        # Each test sits under the class CP1 moved it to.
+        self.assertEqual({t.rsplit(".", 1)[1] for t in atoms[SPLIT_SIBLING].test_ids}, SPLIT_SIBLING_METHODS)
+        self.assertEqual({t.rsplit(".", 1)[1] for t in atoms[SPLIT_ORIGINAL].test_ids}, set(self.KEPT_METHODS))
+
+    def test_the_mapping_names_the_classes_as_the_inventory_has_them(self):
+        inventory = {atom.key: atom for atom in shards.build_inventory(fixtures.REPO_ROOT).atoms}
+        methods = lambda key: {t.rsplit(".", 1)[1] for t in inventory[key].test_ids}
+        self.assertEqual(methods(SPLIT_SIBLING), SPLIT_SIBLING_METHODS)
+        self.assertEqual(methods(SPLIT_ORIGINAL), set(self.KEPT_METHODS))
+
+    def test_ids_that_do_not_divide_five_and_five_are_left_unchanged(self):
+        odd = {SPLIT_ORIGINAL: [f"{SPLIT_ORIGINAL}.test_{n:02d}" for n in range(10)]}
+        self.assertEqual(split_historical_atoms(odd), odd)
 
     def test_the_cost_is_both_halves_not_the_ten_test_key_alone(self):
         profile = _profile({

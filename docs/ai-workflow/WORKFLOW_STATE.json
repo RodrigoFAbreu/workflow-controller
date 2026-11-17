@@ -82197,12 +82197,12 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci2d-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci2d-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "APPLYING_REVIEW_FEEDBACK",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 4,
-      "implementation_revision": 2,
+      "implementation_revision": 3,
       "functional_review_round": null,
       "base_commit": "a9a25a502df03f0e23a2147b506bb4b9fb189aee",
-      "reviewed_implementation_head": "027df7c528a974d42120c6b9397ab3133410b793",
+      "reviewed_implementation_head": "f97bff12e29144fec13b0d3adf84c5cd870f8472",
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": "CP5",
       "checkpoints": {
@@ -82353,8 +82353,8 @@
           "external": 1
         }
       },
-      "state_revision": 31,
-      "last_transition": "2026-11-17T22:47:22Z",
+      "state_revision": 32,
+      "last_transition": "2026-11-17T22:49:54Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

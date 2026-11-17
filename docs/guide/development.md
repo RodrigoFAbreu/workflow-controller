@@ -235,7 +235,10 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   [Checks that run after the merge](ci-and-releases.md#checks-that-run-after-the-merge));
   a local full run still runs them, and
   `python3 tools/run_tests.py main-check MODULE` runs one the way `CI` does
-  on `main` (it fails on an empty selection, a skip or a failure). `--shards N` pins it, `--jobs J` runs at most `J` at
+  on `main` (it fails on an empty selection, a skip or a failure);
+  `main-check MODULE --shard I --of N` runs leg `I` of `N` of the module's plan
+  (CI runs the mutation check as three legs, each failing closed on its own
+  tests). `--shards N` pins it, `--jobs J` runs at most `J` at
   once, and `--target-seconds`, `--min-shards` and `--max-shards`
   override the planning parameters. A local shard runs its conformance suites
   (CI's do not, see above) in a helper process beside its Controller tests (the same executor in
@@ -342,6 +345,11 @@ python3 tools/run_tests.py --replay RESULTS/plan.json [--shard i]   # re-run a r
   highest attempt, which holds the plan and only the records
   `tests-result` counted:
   `python3 tools/run_tests.py timings merge --into tools/test_timings.json DIR...`.
+  The scheduled `timings-refresh.yml` does this weekly through
+  `python3 tools/timings_refresh.py collect|plan-change|propose` and opens a
+  pull request (see
+  [The automated timings refresh](ci-and-releases.md#the-automated-timings-refresh));
+  the manual merge stays for a one-off measurement.
   Ordinary drift needs no refresh and costs wall time (the shard count
   and the balance), never coverage: a class
   whose test count changed is scaled per test, and a new class is

@@ -81508,7 +81508,7 @@
         }
       },
       "technical_approval": {
-        "status": "CURRENT",
+        "status": "STALE",
         "basis": "POLICY_SATISFIED",
         "reviewed_bundle_id": "e69fc8da6f3ef048c781ccfbd47fb6968a79d4d39f8ac9ea3b0ae6c8996942a9",
         "approved_review_content_id": "8d57b9a38c8a43ac5f6ba3d3d9396358766ffd7bc5488c137b1500a586162377",
@@ -81661,8 +81661,8 @@
           "external": 1
         }
       },
-      "state_revision": 21,
-      "last_transition": "2026-11-17T17:46:02Z",
+      "state_revision": 23,
+      "last_transition": "2026-11-17T18:49:41Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -81819,7 +81819,158 @@
           "run_ref": "codex:20261117T173934Z-639bd261",
           "reviewer_model": "openai/gpt-6.1-sol"
         }
-      }
+      },
+      "gate_evidence": {
+        "functional": {
+          "flow-1": {
+            "flow_id": "flow-1",
+            "status": "passed",
+            "head": "9a38bd84705cfb7bb06ac8aa65ba2b3c0e9786e6",
+            "ran_at": "2026-11-17T17:51:42Z",
+            "summary": {
+              "checklist_blob": "0efe85430a7db00715a98a959c1c3b466445f7e8",
+              "text": "Test run PASS, coverage exact (109 tests), rc=0, namespace: none."
+            },
+            "log_digest": "c91ed2c62308db5e95e7a36dfc8bdb8a78cd9c99d0b4d33423a6d6f654a3f21d",
+            "run_ref": "controller:20261117T174732Z-8f52edd1",
+            "reporter": "workflow-controller 1.31.1",
+            "identity": "8d57b9a38c8a43ac5f6ba3d3d9396358766ffd7bc5488c137b1500a586162377",
+            "recorded_at": "2026-11-17T17:51:42Z"
+          },
+          "flow-2": {
+            "flow_id": "flow-2",
+            "status": "passed",
+            "head": "84a24097a50b43e52e0911c476a3b2daf959b8aa",
+            "ran_at": "2026-11-17T18:35:16Z",
+            "summary": {
+              "checklist_blob": "0efe85430a7db00715a98a959c1c3b466445f7e8",
+              "text": "Host run of the flow-2 command (scratch TMPDIR): Test run PASS (exit 0), 118 tests in 8 shards, coverage exact, rc=0; no life.late guard failure; tests.test_protocol_lifecycle ran unwrapped (namespace: isolated for 0 of 8). Also ran tests/golden/generate_no_policy_lifecycle.py --check under a minimal env: rc=0. The Controller's failure was not reproduced (sandbox cause)."
+            },
+            "log_digest": "258803d59e2fd4020bea170ce51a212a2d85c12e1f7193a7dbd187fe9af035b4",
+            "run_ref": "operator-host: /tmp/claude-c1/ci2c-flow2-operator.log",
+            "reporter": "operator",
+            "identity": "8d57b9a38c8a43ac5f6ba3d3d9396358766ffd7bc5488c137b1500a586162377",
+            "recorded_at": "2026-11-17T18:35:16Z"
+          },
+          "flow-3": {
+            "flow_id": "flow-3",
+            "status": "passed",
+            "head": "9a38bd84705cfb7bb06ac8aa65ba2b3c0e9786e6",
+            "ran_at": "2026-11-17T17:51:42Z",
+            "summary": {
+              "checklist_blob": "0efe85430a7db00715a98a959c1c3b466445f7e8",
+              "text": "rc=0, coverage exact over 84 tests, 3 JSON lines (one per reporting process). to_manual_plan_review built 1+2+1=4, restored 21+28+27=76. The doc says about 6 built and 74 restored, so this run is close but not identical. It is built once or twice per process and restored by the rest. The no-report case was not run."
+            },
+            "log_digest": "5f6b6edfc74340cb89371f72e6ffcec5982651b4cc6b01ec6967bffc2e87eede",
+            "run_ref": "controller:20261117T174732Z-8f52edd1",
+            "reporter": "workflow-controller 1.31.1",
+            "identity": "8d57b9a38c8a43ac5f6ba3d3d9396358766ffd7bc5488c137b1500a586162377",
+            "recorded_at": "2026-11-17T17:51:42Z"
+          },
+          "flow-4": {
+            "flow_id": "flow-4",
+            "status": "passed",
+            "head": "9a38bd84705cfb7bb06ac8aa65ba2b3c0e9786e6",
+            "ran_at": "2026-11-17T17:51:42Z",
+            "summary": {
+              "checklist_blob": "0efe85430a7db00715a98a959c1c3b466445f7e8",
+              "text": "reach(name, drive, *, late=()) and snapshot_key exclude the late parts. to_plan_gate uses late=(checks, refused), to_acceptance uses late=(checks,). life.late raises the guard AssertionError. The LoopLifecycle comment says its world is not late. New cases are in tests/test_shared_snapshot.py."
+            },
+            "log_digest": "26e7ac36868c8d3cda103f28e74a50c65c35081cf9d97dbcbf587fc467a81a74",
+            "run_ref": "controller:20261117T174732Z-8f52edd1",
+            "reporter": "workflow-controller 1.31.1",
+            "identity": "8d57b9a38c8a43ac5f6ba3d3d9396358766ffd7bc5488c137b1500a586162377",
+            "recorded_at": "2026-11-17T17:51:42Z"
+          },
+          "flow-5": {
+            "flow_id": "flow-5",
+            "status": "passed",
+            "head": "9a38bd84705cfb7bb06ac8aa65ba2b3c0e9786e6",
+            "ran_at": "2026-11-17T17:51:43Z",
+            "summary": {
+              "checklist_blob": "0efe85430a7db00715a98a959c1c3b466445f7e8",
+              "text": "CI2c page has the table (to_acceptance 11/1 then 10/2, to_38e 14/24/4), review case 54.6 s then 37.0 s, the path in use stated as inherent, the local single-run caveat, and #317 stays open. Scope items 8 and 9 are on CI2f and item 10 on CI2g; only the pages' opening lines were inspected, not each item number."
+            },
+            "log_digest": "6058930e8631fd9d4c0f18832c9d4a20cdc13e87a29d52ef9d17d139272ef2dc",
+            "run_ref": "controller:20261117T174732Z-8f52edd1",
+            "reporter": "workflow-controller 1.31.1",
+            "identity": "8d57b9a38c8a43ac5f6ba3d3d9396358766ffd7bc5488c137b1500a586162377",
+            "recorded_at": "2026-11-17T17:51:43Z"
+          },
+          "flow-6": {
+            "flow_id": "flow-6",
+            "status": "passed",
+            "head": "9a38bd84705cfb7bb06ac8aa65ba2b3c0e9786e6",
+            "ran_at": "2026-11-17T17:51:43Z",
+            "summary": {
+              "checklist_blob": "0efe85430a7db00715a98a959c1c3b466445f7e8",
+              "text": "check_docs rc=0; test_docs and test_plan_document_consistency PASS with exact coverage, rc=0; backlog check rc=0; preflight-accept ok:true, rc=0. The guide covers keyed rows, the late keying with life.late and apply_late, and WFC_SNAPSHOT_REPORT. Its review-case paragraph was not read in full."
+            },
+            "log_digest": "f051ac1c3d3f27d26fa2cef74c623090fa8383970d8129a88731a1306e34a765",
+            "run_ref": "controller:20261117T174732Z-8f52edd1",
+            "reporter": "workflow-controller 1.31.1",
+            "identity": "8d57b9a38c8a43ac5f6ba3d3d9396358766ffd7bc5488c137b1500a586162377",
+            "recorded_at": "2026-11-17T17:51:43Z"
+          }
+        },
+        "pr": {
+          "pr": {
+            "number": 376,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/376"
+          },
+          "state": "open",
+          "head": "84a24097a50b43e52e0911c476a3b2daf959b8aa",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "failure",
+            "failing": [
+              "validate / tests (0)",
+              "validate / tests-result"
+            ]
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "8d57b9a38c8a43ac5f6ba3d3d9396358766ffd7bc5488c137b1500a586162377",
+          "observed_at": "2026-11-17T18:49:13Z",
+          "ingest_seq": 1,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "8d84f6d4a8b99d5e6d894567043fc29285a6056c",
+          "provenance": {
+            "source": "workflow_gh",
+            "fetched_by": {
+              "name": "workflow-gh",
+              "version": "pr-list-v1"
+            },
+            "fetched_at": "2026-11-17T18:49:13Z",
+            "raw_sha256": "36b5124629cae32da9031d687ba53f3cdb74ba73c3ed94b21749b9d9dd04924f",
+            "run_ref": null,
+            "gh_path": "/usr/bin/gh",
+            "gh_sha256": "ce3200ab0615ae60ee68dd4833719cd3a3856e8b22ae1a3641998b39be8d3dbf"
+          },
+          "fact_id": "e2c72ec16aba383ce2b46a928e3d130cfc42efecaae7a6a2d5f6c74a2601c2c2"
+        },
+        "pr_reported": null,
+        "pr_keys": {
+          "reopened_for": [
+            "[376,\"checks_failed\",\"84a24097a50b43e52e0911c476a3b2daf959b8aa\",[\"validate / tests (0)\",\"validate / tests-result\"]]"
+          ],
+          "applied": [],
+          "ingest_seq": 1
+        }
+      },
+      "reopenings": [
+        {
+          "n": 1,
+          "at": "2026-11-17T18:49:13Z",
+          "from_phase": "AWAITING_FUNCTIONAL_REVIEW",
+          "cause": "checks_failed",
+          "pr_number": 376,
+          "pr_head": "84a24097a50b43e52e0911c476a3b2daf959b8aa",
+          "fact_id": "e2c72ec16aba383ce2b46a928e3d130cfc42efecaae7a6a2d5f6c74a2601c2c2",
+          "key": "[376,\"checks_failed\",\"84a24097a50b43e52e0911c476a3b2daf959b8aa\",[\"validate / tests (0)\",\"validate / tests-result\"]]"
+        }
+      ]
     }
   }
 }

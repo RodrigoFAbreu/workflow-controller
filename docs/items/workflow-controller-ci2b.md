@@ -27,7 +27,7 @@ The effect is read off the planner (`python3 tools/run_tests.py plan --profile c
 | plan | digest | shard 0 | shard 1 | shard 2 |
 | --- | --- | --- | --- | --- |
 | base (CI2) | `3198ddc7` | 3,494.0 s | 3,494.0 s | 3,494.0 s |
-| after CP1 (conformance excluded) | `de9a5aa5` | 3,038.2 s | 3,038.2 s | 3,038.2 s |
+| after CP1 (conformance excluded) | `d01bdb71` | 3,038.2 s | 3,038.2 s | 3,038.2 s |
 | after CP2 (and the lifecycle module excluded) | `edeab4d7` | 2,808.0 s | 2,808.0 s | 2,808.0 s |
 
 The predicted gain is 686 s (about 11.4 minutes) off the longest shard. The excluded atoms and their committed seconds:
@@ -37,7 +37,7 @@ The predicted gain is 686 s (about 11.4 minutes) off the longest shard. The excl
 | the nine `conformance:` suites (`acceptance_matrix` 1,153.6, `protocol` 382.0, `state` 302.3, `gate_policy` 273.0, `fingerprint_generalization` 107.5, `completion_obligations` 36.0, `integration` 8.5, `fingerprint` 6.1, `test_harness` 2.4) | 2,271.4 |
 | the four `tests.test_functional_lifecycle` classes (`NoRunTest` 204.4, `IsolationTest` 190.8, `CycleClosesTest` 160.3, `PersonStopsTest` 135.4) | 690.9 |
 
-The second step is the lifecycle classes spread over three shards (690.9 / 3 = 230 s). The first step (456 s) is less than the conformance total over three (757 s) because the conformance lane ran beside the Controller lane and only the excess over the longer lane, times the 1.15 contention factor, counted in a shard's estimate. **The elapsed time of this pull request's own run against the CI2 baseline (55 min 41 s) is not yet measured**: the pull request is opened after the implementation review, and the figure is added here when its run finishes.
+The second step is the lifecycle classes spread over three shards (690.9 / 3 = 230 s). The first step (456 s) is not the conformance total over three (757 s): the Controller lane was the longer lane on every shard (3,038.2 s), so the conformance lane added no seconds of its own and only switched on the 1.15 contention factor. Removing it removes that factor and nothing else: 3,038.2 s x 0.15 = 456 s. **The elapsed time of this pull request's own run against the CI2 baseline (55 min 41 s) is not yet measured**: the pull request is opened after the implementation review, and the figure is added here when its run finishes.
 
 What remains: the lifecycle and Codex families are the bulk of the three shards, and [#317](https://github.com/RodrigoFAbreu/workflow-controller/issues/317) (the 20-minute target) stays open; this item does not close it.
 

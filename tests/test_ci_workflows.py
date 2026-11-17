@@ -166,7 +166,7 @@ class CommittedFilesTest(unittest.TestCase):
 
     def test_the_generated_files(self) -> None:
         self.assertEqual(sorted(ci.WORKFLOWS), ["build-publish.yml", "ci.yml", "main-reuse-report.yml",
-                                                "pr-title.yml", "tests.yml"])
+                                                "pr-title.yml", "tests.yml", "timings-refresh.yml"])
         self.assertEqual(sorted(ci.render()), sorted(ci.WORKFLOWS))
         self.assertTrue((WORKFLOWS / "pr-title.yml").is_file())
 
@@ -701,13 +701,19 @@ class AllJobsTest(unittest.TestCase):
                     self.assertNotIn("write", job["permissions"].values())
         for name, workflow in _models().items():
             with self.subTest(workflow=name):
-                self.assertEqual(workflow.get("permissions", {"contents": "read"}), {"contents": "read"})
+                # The refresh alone also reads other runs' artifacts (actions: read, CI2d D6).
+                expected = {"contents": "read", "actions": "read"} if name == "timings-refresh.yml" \
+                    else {"contents": "read"}
+                self.assertEqual(workflow.get("permissions", {"contents": "read"}), expected)
 
     def test_no_cache_no_secret_no_live_worker(self) -> None:
         for name, text in ci.render().items():
             with self.subTest(workflow=name):
                 self.assertNotIn("actions/cache", text)
-                self.assertNotIn("secrets", text)
+                # The refresh's one secret (CI2d D6) is the only one any workflow names.
+                self.assertEqual(re.findall(r"secrets\.\w+", text),
+                                 ["secrets.TIMINGS_REFRESH_TOKEN"] if name == "timings-refresh.yml" else [])
+                self.assertNotIn("secrets:", text)
                 self.assertNotIn("CONTROLLER_LIVE_WORKER", text)
                 self.assertNotRegex(text, r"(?m)^\s*(run: .*)?\bclaude\b")
 
@@ -797,8 +803,8 @@ class AllJobsTest(unittest.TestCase):
                     self.assertIs(persist, False)
         # tests.yml's six step jobs; ci.yml's reuse and two after-merge jobs;
         # build-publish.yml's release-plan, two release-target, build and
-        # publish; reuse-report; title.
-        self.assertEqual(checkouts, 6 + 3 + 5 + 1 + 1)
+        # publish; reuse-report; title; the timings refresh.
+        self.assertEqual(checkouts, 6 + 3 + 5 + 1 + 1 + 1)
 
     def test_the_two_reusable_workflows_are_also_dispatchable_without_inputs(self) -> None:
         # A manual run hands nothing in: tests.yml never reuses, and
@@ -1208,7 +1214,7 @@ class BuildPublishWorkflowTest(unittest.TestCase):
 
     def test_every_action_outside_validate_is_pinned_to_a_commit(self) -> None:
         for name, count in (("build-publish.yml", 12), ("ci.yml", 7), ("main-reuse-report.yml", 3),
-                            ("pr-title.yml", 2)):
+                            ("pr-title.yml", 2), ("timings-refresh.yml", 2)):
             uses = re.findall(r"(?m)^\s*(?:- )?uses: (\S+)(.*)$", ci.render()[name])
             actions = [(ref, comment) for ref, comment in uses if not ref.startswith('"./')]
             with self.subTest(workflow=name):
@@ -1902,6 +1908,73 @@ class RunnerLimitTest(unittest.TestCase):
             self.assertNotIn("name", _jobs(self.models["tests.yml"])[job])
         self.assertIn("validate", _jobs(self.models["ci.yml"]))
         self.assertEqual(_jobs(self.models["pr-title.yml"])["title"]["name"], "PR title")
+
+
+class TimingsRefreshWorkflowTest(unittest.TestCase):
+    """CI2d D6: the scheduled refresh is a workflow of its own whose collection runs on the
+    read-only default token and whose push and pull request alone see the secret."""
+
+    def setUp(self) -> None:
+        self.workflow = ci.timings_refresh_workflow()
+        self.steps = _steps(_jobs(self.workflow)["refresh"])
+        self.text = ci.render()["timings-refresh.yml"]
+
+    def _step(self, fragment: str) -> dict:
+        return self.steps[_index(self.steps, lambda s: fragment in _run(s))]
+
+    def test_schedule_and_dispatch_only_with_no_pull_request_trigger(self) -> None:
+        self.assertEqual(set(self.workflow["on"]), {"schedule", "workflow_dispatch"})
+        self.assertEqual(self.workflow["on"]["schedule"], [{"cron": ci.TIMINGS_REFRESH_CRON}])
+        self.assertEqual(list(_jobs(self.workflow)), ["refresh"])
+
+    def test_permissions_are_exactly_contents_and_actions_read(self) -> None:
+        self.assertEqual(self.workflow["permissions"], {"contents": "read", "actions": "read"})
+        self.assertNotIn("permissions", _jobs(self.workflow)["refresh"])
+
+    def test_collect_runs_on_the_default_token_so_listing_and_download_hold_actions_read(self) -> None:
+        collect = self._step("timings_refresh.py collect")
+        self.assertEqual(collect["env"], {"GH_TOKEN": "${{ github.token }}"})
+        self.assertNotIn(ci.TIMINGS_REFRESH_SECRET, json.dumps(collect, default=str))
+
+    def test_the_secret_reaches_only_the_push_and_pull_request_step(self) -> None:
+        holders = [step for step in self.steps if ci.TIMINGS_REFRESH_SECRET in json.dumps(step, default=str)]
+        self.assertEqual(holders, [self._step("timings_refresh.py propose")])
+        self.assertEqual(holders[0]["env"],
+                         {"TIMINGS_REFRESH_TOKEN": "${{ secrets.TIMINGS_REFRESH_TOKEN }}"})
+        self.assertEqual(re.findall(r"secrets\.\w+", self.text), ["secrets.TIMINGS_REFRESH_TOKEN"])
+
+    def test_no_step_dispatches_a_workflow(self) -> None:
+        for step in self.steps:
+            with self.subTest(step=step.get("name")):
+                self.assertNotIn("workflow run", _run(step))
+                self.assertNotIn("dispatches", _run(step))
+        self.assertNotIn("workflow run", self.text)
+
+    def test_merge_then_the_ratchet_then_the_commit_and_only_a_change_proceeds(self) -> None:
+        order = [_index(self.steps, lambda s, f=f: f in _run(s)) for f in (
+            "timings_refresh.py collect", "timings_refresh.py plan-change",
+            "tools/run_tests.py tests.test_test_shards", "timings_refresh.py propose")]
+        self.assertEqual(order, sorted(order))
+        changed = "steps.change.outputs.changed == 'true'"
+        self.assertEqual(self._step("tests.test_test_shards")["if"], changed)
+        self.assertEqual(self._step("timings_refresh.py propose")["if"], changed)
+        for step in self.steps:
+            self.assertNotIn("continue-on-error", step)  # a refused file must stop the job
+            self.assertNotIn("always()", str(step.get("if", "")))
+        self.assertIn("--output tools/test_timings.json", _run(self._step("plan-change")))
+
+    def test_checkout_keeps_no_credential_and_the_actions_are_pinned(self) -> None:
+        checkout = self.steps[_index(self.steps, lambda s: _uses(s).startswith("actions/checkout@"))]
+        self.assertIs(checkout["with"]["persist-credentials"], False)
+        for step in self.steps:
+            if "uses" in step:
+                self.assertRegex(_uses(step), r"@[0-9a-f]{40}$")
+
+    def test_it_is_not_in_the_runner_graph_because_it_runs_alone_on_a_schedule(self) -> None:
+        scenario_entries = {entry for entry, _, _ in RunnerLimitTest()._scenarios()}
+        self.assertNotIn("timings-refresh.yml", scenario_entries)
+        self.assertNotIn("pull_request", self.workflow["on"])
+        self.assertEqual(self.workflow["concurrency"]["group"], "timings-refresh")
 
 
 #: ``tests.yml``'s and 1.3.0's ``main.yml``'s pipx smoke test (``build-publish.yml``'s with

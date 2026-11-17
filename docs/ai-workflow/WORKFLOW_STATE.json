@@ -82197,7 +82197,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci2d-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci2d-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 4,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -82349,12 +82349,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 1,
-          "external": 0
+          "local": 2,
+          "external": 1
         }
       },
-      "state_revision": 29,
-      "last_transition": "2026-11-17T22:39:53Z",
+      "state_revision": 31,
+      "last_transition": "2026-11-17T22:47:22Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -82505,7 +82505,62 @@
               "at": "2026-11-17T22:35:00Z"
             }
           ]
+        },
+        "F-64f3f98ebe58": {
+          "digest": "64f3f98ebe58f55a6f13a911f7c3cbeb76f9ecf7b00cac882491fd3659e0e654",
+          "text": "**O1.** `docs/guide/ci-and-releases.md` still says, in two places (the unsettled-base rule, around line 760, and the interrupted-run paragraph, around line 812), that a release is completed \"by the next push to `main`\". Since the I1 fix, that holds only for a push that changes code: a documentation-only push leaves a `RESUME` waiting. The \"Documentation-only pull requests\" section states this correctly, but these two sentences should say \"the next push to `main` that changes code\" or link to it. (The claim in the same sentences that a direct `Build and publish` dispatch completes a release predates this item. It contradicts the `NO_RESULTS` notice and is worth checking in the same edit.)",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "e5f4629cc835ad76b0a0ecd523b708ceafd9031535c91ed0afa6ddedcbd54884",
+              "verdict": "APPROVE",
+              "at": "2026-11-17T22:42:38Z"
+            }
+          ]
+        },
+        "F-f286cb069af7": {
+          "digest": "f286cb069af7fb4a61ccea53b110a909539bae95a3530380c458441286fd80dd",
+          "text": "**O2.** Carried over from round 1 and not applied: `tools/timings_refresh.py propose` force-pushes `ci/timings-refresh` even when the open refresh pull request already holds byte-identical `tools/test_timings.json`, which restarts that pull request's CI for nothing. The implementation summary defers it as a saving that needs its own tests. It should be tracked as a follow-up.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "e5f4629cc835ad76b0a0ecd523b708ceafd9031535c91ed0afa6ddedcbd54884",
+              "verdict": "APPROVE",
+              "at": "2026-11-17T22:42:38Z"
+            }
+          ]
+        },
+        "F-4ef1014e9d74": {
+          "digest": "4ef1014e9d74d707a7daee402c2fa2e7c8e7720204b1cf41b5aa66ff852a5dda",
+          "text": "**O1. The runner-limit proof no longer exercises ancestor publication.** In `tests/test_ci_workflows.py`, `_runner_nodes` initializes every non-reuse workflow input to `\"success\"`. The new `code` input requires `\"true\"`, so both `release-target-*` jobs are inactive throughout the enclosing CI scenarios. Initialize this input appropriately and assert that the ancestor scenario activates all target legs. This is a coverage gap; no actual runner-limit violation was found.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "e5f4629cc835ad76b0a0ecd523b708ceafd9031535c91ed0afa6ddedcbd54884",
+              "verdict": "REVISE",
+              "at": "2026-11-17T22:47:22Z"
+            }
+          ]
         }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "e5f4629cc835ad76b0a0ecd523b708ceafd9031535c91ed0afa6ddedcbd54884",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "e5a85a314590909966201f51832d9e656d544881c7b37440cecf50c7a5340ec6",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-17T22:42:38Z",
+          "verdict_sha256": "45290393a85826b50b3bdb5c63e641125f81b59cdbe4ae3f44a158bee250bfd3",
+          "run_ref": "session:local .ai-review/workflow-controller-ci2d/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
       }
     }
   }

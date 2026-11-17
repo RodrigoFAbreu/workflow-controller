@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "work_item_id": "workflow-controller-ci2",
-  "plan_revision": 11,
+  "plan_revision": 12,
   "checkpoints": [
     {
       "id": "CP1",
@@ -12,7 +12,7 @@
     },
     {
       "id": "CP2",
-      "name": "Measure the acceptance-matrix contention and apply it in the planner",
+      "name": "Measure the acceptance-matrix contention and record that no factor qualifies",
       "depends_on": [
         "CP1"
       ],

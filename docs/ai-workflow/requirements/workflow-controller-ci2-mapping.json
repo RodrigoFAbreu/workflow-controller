@@ -9,7 +9,7 @@
       ]
     },
     "R2": {
-      "description": "The planner applies a measured contention factor to the acceptance matrix and leaves every other suite and every selected test unchanged",
+      "description": "The acceptance-matrix contention is measured at the shard on the CI runs and the result is recorded; the planner stays unchanged unless a factor qualifies (none does)",
       "checkpoint_ids": [
         "CP2"
       ]

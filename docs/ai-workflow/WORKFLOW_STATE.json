@@ -80702,7 +80702,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci2b-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci2b-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 2,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -80846,12 +80846,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
+          "local": 1,
           "external": 0
         }
       },
-      "state_revision": 16,
-      "last_transition": "2026-11-17T14:04:47Z",
+      "state_revision": 17,
+      "last_transition": "2026-11-17T14:10:11Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -80942,6 +80942,20 @@
               "review_content_id": "ec5a6fb33374ff6bafae9747fd12d072244f200a208c05aca883e9b75b5864f1",
               "verdict": "APPROVE",
               "at": "2026-11-17T13:37:21Z"
+            }
+          ]
+        },
+        "F-c4d4fd8ace57": {
+          "digest": "c4d4fd8ace57b53ce30997d9ad0315c1f475bb1aa947947caa232c70a4ad1b27",
+          "text": "**O1.** `_flow_call_problems` only counts calls written as attribute access (`tfl.flow_x(...)`). A scenario that called a flow through a bare name (`from ... import flow_x; flow_x(...)`) would show up as \"uncalled\" and fail the pin. That is a false failure, never a false pass, so it is safe. A sentence in its docstring saying calls must go through the module attribute would explain such a failure to whoever hits it.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "43d3b4e2d7e10454d12ce1974930c3abe4c47fe92c734e09a0908e0f170b1cac",
+              "verdict": "REVISE",
+              "at": "2026-11-17T14:10:11Z"
             }
           ]
         }

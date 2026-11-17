@@ -516,7 +516,8 @@ def _flow_names(source: str) -> list[str]:
 
 def _flow_call_problems(flows: list[str], scenarios_source: str) -> list[str]:
     """What is wrong with how the four functional scenarios call ``flows``: each body is called by
-    exactly one scenario, and the scenarios call nothing else."""
+    exactly one scenario, and the scenarios call nothing else. A call counts only when written as
+    attribute access (``tfl.flow_x(...)``); a bare-name call reads as uncalled and fails the pin."""
     import ast
     tree = ast.parse(scenarios_source)
     wanted = {n.name: n for n in ast.walk(tree)

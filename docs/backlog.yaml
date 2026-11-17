@@ -560,7 +560,7 @@ items:
     detail: docs/items/workflow-controller-ci2.md
   - id: workflow-controller-ci2b
     title: "CI: run each test once, the duplicate-run removal (#317)"
-    status: next
+    status: done
     order: 96
     depends_on: [workflow-controller-ci2]
     detail: docs/items/workflow-controller-ci2b.md

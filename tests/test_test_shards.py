@@ -408,10 +408,12 @@ class CiPlacementTest(unittest.TestCase):
         modules = {where: {a.module for a in self.inventory.atoms if set(a.test_ids) & set(ids)}
                    for where, ids in partition.items()}
         self.assertEqual(modules["package"], {"tests.test_packaged_runtime"})
-        self.assertEqual(modules["excluded"], {"tests.test_integration_disposable_repo"})
+        self.assertEqual(modules["excluded"], {"tests.test_integration_disposable_repo",
+                                               "conformance",
+                                               "tests.test_functional_lifecycle"})
         self.assertEqual(modules["main"], {"tests.test_catalogue_determinism",
                                            "tests.test_scenarios_negative"})
-        self.assertIn("conformance", modules["shards"])
+        self.assertNotIn("conformance", modules["shards"])
         self.assertIn("tests.test_scenarios", modules["shards"])
         self.assertIn("tests.test_run_scenarios", modules["shards"])
 
@@ -426,6 +428,59 @@ class CiPlacementTest(unittest.TestCase):
                 self.assertEqual(self.inventory.select([module], ci_placement=True).test_ids, ())
                 self.assertFalse(set(local) & set(shards.ci_partition(self.inventory)["shards"]))
                 self.assertFalse(set(local) & set(shards.ci_partition(self.inventory)["excluded"]))
+
+    def test_the_functional_flows_run_once_as_scenarios(self) -> None:
+        # D3/D4: the unittest copy is excluded from the shards, the scenario copy stays, and a
+        # local selection keeps both.
+        partition = shards.ci_partition(self.inventory)
+        module = "tests.test_functional_lifecycle"
+        self.assertEqual(shards.CI_PLACEMENT[module][0], "excluded")
+        lifecycle = [i for i in self.inventory.test_ids if i.startswith(module + ".")]
+        scenarios = [i for i in self.inventory.test_ids
+                     if i.startswith("tests.test_scenarios.Scenario_scenario_functional_")]
+        self.assertEqual(len(lifecycle), 4)
+        self.assertEqual(len(scenarios), 4)
+        self.assertEqual([i for i in lifecycle if i in partition["excluded"]], lifecycle)
+        self.assertEqual([i for i in scenarios if i in partition["shards"]], scenarios)
+        self.assertFalse(set(lifecycle) & set(partition["shards"]))
+        self.assertEqual(self.inventory.select([module]).test_ids, tuple(lifecycle))
+        self.assertEqual(self.inventory.select([module], ci_placement=True).test_ids, ())
+
+    def test_the_scenario_functions_call_every_flow_body_exactly_once(self) -> None:
+        # D3: the claim "same body" that excluding the unittest copy rests on.
+        flows = _flow_names((fixtures.REPO_ROOT / "tests" / "test_functional_lifecycle.py")
+                            .read_text(encoding="utf-8"))
+        self.assertEqual(len(flows), 4)
+        scenarios = (fixtures.REPO_ROOT / "tests" / "scenarios" / "lifecycle.py").read_text(
+            encoding="utf-8")
+        self.assertEqual(_flow_call_problems(flows, scenarios), [])
+
+    def test_the_same_body_pin_fails_when_a_flow_is_uncalled_or_called_twice(self) -> None:
+        flows = ["flow_a", "flow_b"]
+        template = (
+            "def functional_review_closes_the_cycle(kit):\n    tfl.{0}(1)\n"
+            "def functional_review_stops_for_a_person(kit):\n    tfl.{1}(1)\n"
+            "def functional_review_without_a_run(kit):\n    pass\n"
+            "def functional_tester_isolation(kit):\n    pass\n")
+        self.assertEqual(_flow_call_problems(flows, template.format("flow_a", "flow_b")), [])
+        self.assertTrue(_flow_call_problems(flows, template.format("flow_a", "flow_a")))
+        uncalled = template.replace("tfl.{1}(1)", "pass").format("flow_a")
+        self.assertTrue(_flow_call_problems(flows, uncalled))
+        self.assertTrue(_flow_call_problems(flows + ["flow_c"], template.format("flow_a", "flow_b")))
+
+    def test_the_isolation_scenario_keeps_the_leftover_check(self) -> None:
+        # D3: excluding IsolationTest loses no assertion, because the scenario that stays asserts
+        # a sandbox was built and no short TMPDIR folder is left.
+        import ast
+        tree = ast.parse((fixtures.REPO_ROOT / "tests" / "scenarios" / "lifecycle.py")
+                         .read_text(encoding="utf-8"))
+        func = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)
+                    and n.name == "functional_tester_isolation")
+        text = ast.unparse(func)
+        self.assertIn("short_folders_made()", text)
+        self.assertIn("flow_isolation_holds", text)
+        self.assertIn("the run built no sandbox", text)
+        self.assertIn("the run left a short TMPDIR folder behind", text)
 
     def test_the_ci_selection_is_the_shard_part(self) -> None:
         self.assertEqual(self.inventory.select(ci_placement=True).test_ids,
@@ -446,6 +501,41 @@ class CiPlacementTest(unittest.TestCase):
         inventory = shards.Inventory(test_ids=atom.test_ids, atoms=(atom,))
         with self.assertRaisesRegex(shards.InventoryError, r"tests\.test_packaged_runtime"):
             shards.ci_partition(inventory)
+
+
+SCENARIO_FUNCTIONS = ("functional_review_closes_the_cycle", "functional_review_stops_for_a_person",
+                      "functional_review_without_a_run", "functional_tester_isolation")
+
+
+def _flow_names(source: str) -> list[str]:
+    """The ``flow_*`` functions a module defines at top level."""
+    import ast
+    return [n.name for n in ast.parse(source).body
+            if isinstance(n, ast.FunctionDef) and n.name.startswith("flow_")]
+
+
+def _flow_call_problems(flows: list[str], scenarios_source: str) -> list[str]:
+    """What is wrong with how the four functional scenarios call ``flows``: each body is called by
+    exactly one scenario, and the scenarios call nothing else. A call counts only when written as
+    attribute access (``tfl.flow_x(...)``); a bare-name call reads as uncalled and fails the pin."""
+    import ast
+    tree = ast.parse(scenarios_source)
+    wanted = {n.name: n for n in ast.walk(tree)
+              if isinstance(n, ast.FunctionDef) and n.name in SCENARIO_FUNCTIONS}
+    problems = [f"scenario function {name} is missing" for name in SCENARIO_FUNCTIONS
+                if name not in wanted]
+    calls: dict[str, list[str]] = {flow: [] for flow in flows}
+    for name, node in wanted.items():
+        for sub in ast.walk(node):
+            if isinstance(sub, ast.Call) and isinstance(sub.func, ast.Attribute) \
+                    and sub.func.attr.startswith("flow_"):
+                calls.setdefault(sub.func.attr, []).append(name)
+    for flow, callers in calls.items():
+        if flow not in flows:
+            problems.append(f"{flow} is called but not defined in the module")
+        elif len(callers) != 1:
+            problems.append(f"{flow} is called by {len(callers)} scenarios: {callers}")
+    return problems
 
 
 def _atom(key: str, n: int, *, family: str = "controller", kind: str = "class",

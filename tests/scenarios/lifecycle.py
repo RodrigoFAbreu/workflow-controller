@@ -711,4 +711,11 @@ def functional_tester_isolation(kit) -> None:
     copy under the tester's ``TMPDIR`` is recorded with the clone unchanged (the stated limit); a clone that differs
     after a run records nothing; a session in the job's private home is a breach and records nothing."""
     with functional_world(kit) as (tfl, holder, judge, tools):
-        tfl.flow_isolation_holds(judge, holder, tools, mutation=mutation(kit))
+        # The leftover check (C12a) moved here from ``IsolationTest`` when that copy left the CI shards
+        # (workflow-controller-ci2b D3): the short ``TMPDIR`` folders are made outside the kit's scratch tree, so
+        # ``assert_inside_scratch`` never sees them.
+        with tfl.short_folders_made() as made:
+            tfl.flow_isolation_holds(judge, holder, tools, mutation=mutation(kit))
+            holder.doCleanups()  # the cycles' cleanups remove their kept sandboxes' short TMPDIR folders
+        kit.check(bool(made), "the run built no sandbox")
+        kit.check(not [p for p in made if p.exists()], "the run left a short TMPDIR folder behind")

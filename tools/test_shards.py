@@ -143,6 +143,15 @@ CI_PLACEMENT = {
     "tests.test_integration_disposable_repo": (
         EXCLUDED, "needs the live claude binary, network access and real spend "
                   "(CONTROLLER_LIVE_WORKER=1)"),
+    CONFORMANCE: (
+        EXCLUDED, "the nine frozen Workflow suites run once on a pull request, in the managed "
+                  "workflow-conformance job (a required check on every pull request and every "
+                  "push to main); a local full run keeps them (workflow-controller-ci2b D1)"),
+    "tests.test_functional_lifecycle": (
+        EXCLUDED, "its four flow bodies run once on a pull request, as the four "
+                  "scenario-functional-* scenarios of tests.test_scenarios, which call the same "
+                  "flow_* functions in the kit's sandbox; a local full run keeps both copies "
+                  "(workflow-controller-ci2b D3)"),
     "tests.test_catalogue_determinism": (
         MAIN, "runs every catalogue scenario twice, a property of the whole catalogue and "
               "not of one flow; runs in main.yml after the merge and gates the release, while "
@@ -199,6 +208,8 @@ MAX_UPDATED_FROM = 20
 #: ``validate`` now end at about the same time, so a shard's wall time counts
 #: (amendment 2026-10-13: the conformance lane).
 PLAN_SCHEMA_VERSION = 1
+#: Under ``--ci-placement`` the conformance suites are excluded from the shards
+#: (``CI_PLACEMENT``), so the lane below is local-only; a local plan keeps it.
 #: A shard runs its conformance suites in a second process beside its
 #: controller tests (ADR 0005, amendment 2026-10-13), so its expected
 #: duration is the longer of the two lanes, times this factor when both lanes

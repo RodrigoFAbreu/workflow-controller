@@ -9,10 +9,20 @@ Subcommands:
 
 ``detect``
     Writes ``code=true`` or ``code=false`` to ``GITHUB_OUTPUT`` (and prints
-    it). ``false`` only for a ``pull_request`` event whose merge ref changes
-    paths that are all documentation. Everything else, and any doubt, is
-    ``true``: a push to ``main``, a manual dispatch, a ``HEAD`` that is not a
-    merge commit, an empty or unreadable diff, a failed ``git`` call.
+    it). ``false`` for three events (CI2d, #317), and only for these:
+
+    * a ``pull_request`` whose merge ref changes paths that are all
+      documentation;
+    * a ``push`` whose pushed range ``before..HEAD`` changes paths that are
+      all documentation (``before`` a real commit, ``after`` equal to
+      ``HEAD``);
+    * a Draft ``pull_request`` whose head holds no work item that *entered* a
+      review-bound phase (``REVIEW_BOUND_PHASES``) relative to the base, so
+      the shards run from the first head the acceptance gate can read.
+
+    Everything else, and any doubt, is ``true``: a manual dispatch, a force
+    push, a new branch, an unreadable payload, a ``HEAD`` that is not a merge
+    commit, an empty or unreadable diff or state file, a failed ``git`` call.
 ``require``
     The exit rule of the aggregate job ``tests-result``: exit 0 only when the
     ``changes`` job and the ``docs`` job succeeded and ``code`` is exactly
@@ -29,6 +39,7 @@ growing (D2).
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import subprocess
@@ -114,6 +125,43 @@ FIXTURES: tuple[tuple[str, str, str], ...] = (
 
 
 
+#: Work-item phases from which a Draft pull request runs the shards (D2): the
+#: first head the acceptance gate's ``ci_green`` can read, at or before the
+#: anchor commit. Review-stage writes stay uncommitted, so the committed phase
+#: at the anchor is most often ``APPLYING_REVIEW_FEEDBACK``.
+REVIEW_BOUND_PHASES = frozenset({
+    "SELF_REVIEWING_IMPLEMENTATION",
+    "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+    "AWAITING_MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+    "AWAITING_EXTERNAL_IMPLEMENTATION_REVIEW",
+    "APPLYING_REVIEW_FEEDBACK",
+    "AWAITING_FUNCTIONAL_REVIEW",
+    "FIXING_FUNCTIONAL_FINDINGS",
+    "AWAITING_USER_ACCEPTANCE",
+    "AWAITING_TECHNICAL_APPROVAL",
+    "MILESTONE_COMPLETE",
+})
+
+#: The phases with no signal. Together with ``REVIEW_BOUND_PHASES`` they
+#: partition ``workflow_state.KNOWN_PHASES`` (a test asserts it, so a new
+#: phase cannot be skipped silently); no phase order is used.
+EXCLUDED_PHASES = frozenset({
+    "PLANNING",
+    "SELF_REVIEWING_PLAN",
+    "REVISING_PLAN",
+    "AWAITING_LOCAL_PLAN_REVIEW",
+    "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW",
+    "AWAITING_EXTERNAL_PLAN_REVIEW",
+    "AWAITING_PLAN_APPROVAL",
+    "AMENDING_PLAN",
+    "IMPLEMENTING",
+    "LEGACY_READY",
+})
+
+STATE_FILE = "docs/ai-workflow/WORKFLOW_STATE.json"
+ZERO_ID = "0" * 40
+
+
 def _normal(path: str) -> str | None:
     """The path as a repository-relative POSIX path, or ``None`` when it is
     not one (absolute, backslashes, ``..`` or empty segments, a NUL)."""
@@ -163,35 +211,113 @@ def _git(args: list[str], cwd: Path | None) -> str:
     return done.stdout
 
 
-def changed_paths(cwd: Path | None = None, git: Callable[[list[str], Path | None], str] = _git) -> list[str]:
-    """Every path the merge commit ``HEAD`` introduces over its first parent,
-    a rename counted under both names. ``HEAD`` must be a merge commit (the
-    merge ref of a pull request); anything else is a :class:`DetectError`."""
+def changed_paths(cwd: Path | None = None, git: Callable[[list[str], Path | None], str] = _git,
+                  base: str | None = None) -> list[str]:
+    """Every path the change introduces, a rename counted under both names.
+    Without ``base`` it is the merge commit ``HEAD`` over its first parent
+    (the merge ref of a pull request; anything else is a
+    :class:`DetectError`). With ``base`` it is the range ``base..HEAD`` (a
+    push)."""
+    if base is None:
+        parents = git(["rev-list", "--parents", "-n", "1", "HEAD"], cwd).split()
+        if len(parents) < 3:
+            raise DetectError("HEAD is not a merge commit")
+        base = "HEAD^1"
+    raw = git(["diff", "--name-only", "--no-renames", "-z", base, "HEAD"], cwd)
+    return [name for name in raw.split("\0") if name]
+
+
+def read_event(env: dict[str, str]) -> dict:
+    """The event payload at ``GITHUB_EVENT_PATH``; ``{}`` when it is missing,
+    unreadable or not a JSON object."""
+    target = env.get("GITHUB_EVENT_PATH")
+    if not target:
+        return {}
+    try:
+        with open(target, encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except (OSError, ValueError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _phases(text: str) -> dict[str, str]:
+    """``{work item id: phase}`` from a ``WORKFLOW_STATE.json`` text."""
+    items = json.loads(text)["work_items"]
+    if isinstance(items, dict):
+        items = [{"work_item_id": key, **value} for key, value in items.items()]
+    return {str(item["work_item_id"]): str(item.get("phase")) for item in items}
+
+
+def review_bound_item(cwd: Path | None, git: Callable[[list[str], Path | None], str]) -> str | None:
+    """The id of a work item the head holds at a review-bound phase while the
+    base lacks it or holds it outside that set; ``None`` when there is none.
+    Any unreadable state is a :class:`DetectError`."""
     parents = git(["rev-list", "--parents", "-n", "1", "HEAD"], cwd).split()
     if len(parents) < 3:
         raise DetectError("HEAD is not a merge commit")
-    raw = git(["diff", "--name-only", "--no-renames", "-z", "HEAD^1", "HEAD"], cwd)
-    return [name for name in raw.split("\0") if name]
+    try:
+        head = _phases(git(["show", f"HEAD^2:{STATE_FILE}"], cwd))
+        base = _phases(git(["show", f"HEAD^1:{STATE_FILE}"], cwd))
+    except (ValueError, KeyError, TypeError, AttributeError) as error:
+        raise DetectError(f"the state file is unreadable: {error!r}") from error
+    for item, phase in sorted(head.items()):
+        if phase in REVIEW_BOUND_PHASES and base.get(item) not in REVIEW_BOUND_PHASES:
+            return item
+    return None
+
+
+def _decide_docs(paths: list[str], what: str) -> tuple[str, str]:
+    if not paths:
+        return "true", "the diff is empty: everything runs"
+    if classify(paths) == DOCS:
+        return "false", f"{what}: {len(paths)} changed path(s), all documentation"
+    other = next(path for path in paths if not is_documentation(path))
+    return "true", f"{other} is not documentation: everything runs"
+
+
+def _detect_push(env: dict[str, str], cwd: Path | None, git) -> tuple[str, str]:
+    event = read_event(env)
+    before, after = event.get("before"), event.get("after")
+    if not isinstance(before, str) or not isinstance(after, str) or not before or not after:
+        return "true", "the push payload has no before/after: everything runs"
+    if set(before) == {"0"}:
+        return "true", "the push has no previous commit (a new branch): everything runs"
+    try:
+        head = git(["rev-parse", "--verify", "HEAD^{commit}"], cwd).strip()
+        if head != after:
+            return "true", "the pushed head is not the checked-out commit: everything runs"
+        git(["rev-parse", "--verify", f"{before}^{{commit}}"], cwd)
+        paths = changed_paths(cwd, git, base=before)
+    except Exception as error:  # a force-push, a git failure: any doubt runs everything
+        return "true", f"{error}: everything runs"
+    return _decide_docs(paths, "push")
 
 
 def detect(env: dict[str, str] | None = None, cwd: Path | None = None,
            git: Callable[[list[str], Path | None], str] = _git) -> tuple[str, str]:
-    """``("true"|"false", reason)``. ``false`` only for a pull request whose
-    every changed path is documentation."""
+    """``("true"|"false", reason)``; see the module docstring for the three
+    events that can be ``false``."""
     env = os.environ if env is None else env
     event = env.get("GITHUB_EVENT_NAME", "")
+    if event == "push":
+        return _detect_push(env, cwd, git)
     if event != "pull_request":
-        return "true", f"event {event or '(unset)'!r} is not a pull request: everything runs"
+        return "true", f"event {event or '(unset)'!r} is not a pull request or a push: everything runs"
+    draft = (read_event(env).get("pull_request") or {}).get("draft") is True
+    if draft:
+        try:
+            item = review_bound_item(cwd, git)
+        except Exception as error:  # any doubt runs everything
+            return "true", f"{error}: everything runs"
+        if item is None:
+            return "false", "Draft pull request, no work item has reached a review-bound phase yet"
+        return "true", f"Draft pull request, work item {item} reached a review-bound phase: everything runs"
     try:
         paths = changed_paths(cwd, git)
     except Exception as error:  # any doubt runs everything
         return "true", f"{error}: everything runs"
-    if not paths:
-        return "true", "the diff is empty: everything runs"
-    if classify(paths) == DOCS:
-        return "false", f"{len(paths)} changed path(s), all documentation"
-    other = next(path for path in paths if not is_documentation(path))
-    return "true", f"{other} is not documentation: everything runs"
+    return _decide_docs(paths, "pull request")
 
 
 def _write_output(name: str, value: str, env: dict[str, str]) -> None:

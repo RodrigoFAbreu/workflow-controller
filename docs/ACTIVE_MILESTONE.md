@@ -1,6 +1,12 @@
 # Active Milestone
 
-## Latest milestone (CI2c)
+## Latest milestone (CI2d)
+
+**In progress: `IMPLEMENTING`.** Plan `docs/ai-workflow/CONTROLLER_CI2D_PLAN.md` (revision 4), five checkpoints; it sets the after-merge and trigger policy and automates the timings refresh.
+
+- **CP1 complete (verified state).** `tools/ci_changes.py detect` now decides three events (D1, D2): a `push` whose pushed range `before..HEAD` changes documentation only is `code=false` (`before` a real commit, `after` equal to `HEAD`; a new branch, a force-push, an unreadable payload, an empty diff and any `git` failure are `true`); a Draft `pull_request` is `code=false` unless its head holds a work item at a review-bound phase (`REVIEW_BOUND_PHASES`) that the base lacks or holds outside that set (`EXCLUDED_PHASES` is the other half of an explicit partition of `workflow_state.KNOWN_PHASES`, asserted by a test); a missing `draft` key, an unreadable state file at either parent and a non-draft pull request behave as before. `read_event` reads `GITHUB_EVENT_PATH`; `changed_paths` takes a `base` for the push range. `tests/test_ci_changes.py` adds `PushDetectTests` and `DraftDetectTests`. Verified with `tests.test_ci_changes`, `tests.test_package_structure` and `tests.test_write_containment` (123 tests, exact coverage, passing).
+
+## Previous milestone (CI2c)
 
 **Complete: accepted by policy (`MILESTONE_COMPLETE`).** Accepted after the functional review passed (PR #376, checks green at the approved head). Plan `docs/ai-workflow/CONTROLLER_CI2C_PLAN.md` (revision 2), four checkpoints; it shares fixture snapshots across the tests that reach the same row.
 

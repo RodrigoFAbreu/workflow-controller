@@ -1757,7 +1757,9 @@ def _runner_nodes(model: dict, context: _WorstCase) -> dict:
             continue
         declared = child["on"]["workflow_call"].get("inputs", {})
         inner = _WorstCase(context)
-        inner.update({f"inputs.{key}": "" if key == ci.REUSE_INPUT else "success" for key in declared})
+        # ``code`` is "true" or "" (the release-target legs run only for code), never a result.
+        inner.update({f"inputs.{key}": ("" if key == ci.REUSE_INPUT else "true" if key == "code"
+                                        else "success") for key in declared})
         grandchildren = _runner_nodes(child, inner)
         groups[name] = []
         for key, (weight, child_active, deps) in grandchildren.items():
@@ -1871,6 +1873,15 @@ class RunnerLimitTest(unittest.TestCase):
         # includes them.
         nodes = _runner_nodes(self.models["ci.yml"], _WorstCase({"github.event_name": "push"}))
         self.assertEqual(nodes["after-merge-mutations"][0], 3)
+        # The ancestor publication (CI2d O1): called from ci.yml with code changed, every
+        # release-target leg is active, so the peak tests above count them.
+        ancestor = _runner_nodes(self.models["ci.yml"], _WorstCase(
+            {"github.event_name": "push", "github.ref": "refs/heads/main"}))
+        called = [name for name in ancestor if "release-target-" in name]
+        self.assertTrue(called)
+        for name in called:
+            with self.subTest(job=name):
+                self.assertTrue(ancestor[name][1])
         target = _runner_nodes(self.models["build-publish.yml"], _WorstCase(
             {"github.event_name": "workflow_dispatch", "github.ref": "refs/heads/main"}))
         self.assertEqual(target["release-target-mutations"][0], 3)

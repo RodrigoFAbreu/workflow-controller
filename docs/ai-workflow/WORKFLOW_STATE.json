@@ -79491,7 +79491,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci2-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci2-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 12,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -79604,7 +79604,114 @@
           "workflow_release": "2.29.3"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "d0df22ea516573b796a37316fce7e61311d17a29771c080aab4058a14035860f",
+        "approved_review_content_id": "9426e94c4d75702672701d10210683d34af7f889c79622b6472f8848f7e77fb6",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-ci2-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b6a4bfa6646461dd9f1cf1dc31d921e5b67769b5"
+          },
+          {
+            "path": "docs/guide/ci-and-releases.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "900be03f0ec8d5fabafc4e2aa79ab17c0cc9c2ad"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "d32d7b92f33fc74eb21933be47b859e871419c19"
+          },
+          {
+            "path": "tests/test_codex_apply_regeneration.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9aa90a6af7ca6219d9bdcd1918e39755eff222bc"
+          },
+          {
+            "path": "tests/test_test_shards.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ef757cc29818968e278eff67b4a89978b27bc989"
+          },
+          {
+            "path": "tools/test_timings.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "315c679c47d0575a5ad2b91bbc3e041fe93e6d32"
+          }
+        ],
+        "reviewed_content_commit": "0277c8e8a609d9f301667528dd8e6e97d3f9183e",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-17T11:24:27Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "9426e94c4d75702672701d10210683d34af7f889c79622b6472f8848f7e77fb6",
+            "ledger": {
+              "local": {
+                "bundle_id": "d0df22ea516573b796a37316fce7e61311d17a29771c080aab4058a14035860f",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "360369df444e02a25ccbd165f3b414060b895cd8429682e3dae48dead0979e3d",
+                "ledger_entry_sha256": "87040b383a6e8ee95e128aab9fe354679caeaa072d0c8e3e6a1a1bc3ac8047b3",
+                "run_ref": "session:local .ai-review/workflow-controller-ci2/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "d0df22ea516573b796a37316fce7e61311d17a29771c080aab4058a14035860f",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "792760eee7c66fbeef20e97e8d3197bcd6464d58b8b6e0a59ae5170a72d7e343",
+                "ledger_entry_sha256": "08bf2cf709b88c8bd4ec2c04e641bf8f3e74e04d68d6eb9621fcbc7b349c15f6",
+                "run_ref": "codex:20261117T111738Z-7c2a514f",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-17T11:24:27Z",
+          "workflow_release": "2.29.3"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "ceca2434fd39a0feb10e4b3125ef163ee799455e3f30b7ebf860c0355b47bd69",
@@ -79635,12 +79742,12 @@
           "external": 6
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 66,
-      "last_transition": "2026-11-17T11:10:20Z",
+      "state_revision": 69,
+      "last_transition": "2026-11-17T11:24:27Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -79981,6 +80088,34 @@
               "at": "2026-11-17T10:00:37Z"
             }
           ]
+        },
+        "F-42c20dc6d5d2": {
+          "digest": "42c20dc6d5d2a1ec5e7e1c6574d190de18567d324b76bf87067978303a8dad6e",
+          "text": "**O1. The untimed-share figures do not say which tree they were measured on.** The `MAX_UNTIMED_TEST_SHARE` comment in `tests/test_test_shards.py` says \"656 of 6,650 CI-placed tests\" (the base tree). The CI2 item page says \"657 of 6,654\" and then \"5 of 6,654\" (the CP1 tree, after its four new tests). At head, with CP2's `SplitHistoricalAtomsTest`, the figures are 663 of 6,660 against the base file and 11 of 6,660 against the refreshed one. All of these are correct for their own trees, but none names its tree. The comment's parenthetical also reads as if the 656 were measured at `065ca1e` itself: \"(065ca1e, 2026-11-08: 656 of 6,650 ..., eight days later, ...)\". Suggested fix: name the tree (base `a785d4f` in the comment; the CP1 tree on the page), and reword the comment as \"near zero at `065ca1e` (2026-11-08); 656 of 6,650 at the base `a785d4f`, eight days later\".",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "9426e94c4d75702672701d10210683d34af7f889c79622b6472f8848f7e77fb6",
+              "verdict": "APPROVE",
+              "at": "2026-11-17T11:16:57Z"
+            }
+          ]
+        },
+        "F-f4fbce6e5090": {
+          "digest": "f4fbce6e509057ef61f4aeeeee46a04103cfcae6427bea95e45d027a9846995f",
+          "text": "**O2. One docstring cites the wrong decision.** `RegenerationSplitShapeTest`'s docstring in `tests/test_codex_apply_regeneration.py` cites \"(CI2, D2)\". The class split is CP1's amendment 1; D2 is the staleness ratchet. Suggested fix: \"(CI2, CP1, amendment 1)\".",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "9426e94c4d75702672701d10210683d34af7f889c79622b6472f8848f7e77fb6",
+              "verdict": "APPROVE",
+              "at": "2026-11-17T11:16:57Z"
+            }
+          ]
         }
       },
       "amendment_history": [
@@ -80308,7 +80443,28 @@
           "resolved_review_content_id": "ceca2434fd39a0feb10e4b3125ef163ee799455e3f30b7ebf860c0355b47bd69"
         }
       ],
-      "amendment_base_commit": "4f38e2d0feb1ff4b51ba927490a1db9e39267c75"
+      "amendment_base_commit": "4f38e2d0feb1ff4b51ba927490a1db9e39267c75",
+      "implementation_review_stages": {
+        "review_content_id": "9426e94c4d75702672701d10210683d34af7f889c79622b6472f8848f7e77fb6",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "d0df22ea516573b796a37316fce7e61311d17a29771c080aab4058a14035860f",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-17T11:16:57Z",
+          "verdict_sha256": "360369df444e02a25ccbd165f3b414060b895cd8429682e3dae48dead0979e3d",
+          "run_ref": "session:local .ai-review/workflow-controller-ci2/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "d0df22ea516573b796a37316fce7e61311d17a29771c080aab4058a14035860f",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-17T11:22:33Z",
+          "verdict_sha256": "792760eee7c66fbeef20e97e8d3197bcd6464d58b8b6e0a59ae5170a72d7e343",
+          "run_ref": "codex:20261117T111738Z-7c2a514f",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      }
     }
   }
 }

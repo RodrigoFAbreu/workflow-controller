@@ -79491,7 +79491,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci2-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci2-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "IMPLEMENTING",
+      "phase": "AMENDING_PLAN",
       "plan_revision": 11,
       "implementation_revision": null,
       "functional_review_round": null,
@@ -79507,7 +79507,7 @@
       },
       "current_bundle_id": "393b0504c34ca585db5747c46b3647a7e03e8e97777323423bf57cb37c76ba23",
       "plan_approval": {
-        "status": "CURRENT",
+        "status": "SUPERSEDED",
         "basis": "POLICY_SATISFIED",
         "reviewed_bundle_id": "393b0504c34ca585db5747c46b3647a7e03e8e97777323423bf57cb37c76ba23",
         "approved_review_content_id": "21546a2987131f73542626726d77d27ce60f002cd738dc62906b15e6c83c85e7",
@@ -79631,29 +79631,23 @@
           "external": 0
         }
       },
-      "state_revision": 52,
-      "last_transition": "2026-11-16T23:46:55.154134+00:00",
+      "state_revision": 55,
+      "last_transition": "2026-11-17T09:55:54Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
-        "status": "BOUND",
-        "at": "2026-11-16T23:35:09Z",
+        "status": "CONSUMED",
+        "at": "2026-11-17T09:55:54Z",
         "consumed": {
-          "review_content_id": "b19236257d9e65e63b72d0188390e759156f225cd6eace48e9c2378b62f5f547",
-          "plan_revision": 10,
+          "review_content_id": "21546a2987131f73542626726d77d27ce60f002cd738dc62906b15e6c83c85e7",
+          "plan_revision": 11,
           "legacy": false
         },
-        "published": {
-          "review_content_id": "21546a2987131f73542626726d77d27ce60f002cd738dc62906b15e6c83c85e7",
-          "plan_revision": 11
-        },
-        "bound": {
-          "review_content_id": "21546a2987131f73542626726d77d27ce60f002cd738dc62906b15e6c83c85e7",
-          "bundle_id": "393b0504c34ca585db5747c46b3647a7e03e8e97777323423bf57cb37c76ba23",
-          "plan_revision": 11
-        }
+        "published": null,
+        "bound": null
       },
       "consumed_plan_review_content_ids": [
         "055aff70969d3be095dde5fbcd4bd5a64ee57c4d33da8e3a29e9a16b7270260d",
+        "21546a2987131f73542626726d77d27ce60f002cd738dc62906b15e6c83c85e7",
         "3015037d976d46c186b34b9a69c637204cdb1fc9e41f7b5f541c64e0511c2455",
         "37f1e1f592560d89279cbf0428d4b4e386e1b6a3beed1e2f2a7c485ab681eb76",
         "49c389120cc4859bcb81f6f6c49190a4c5d096c6fe15260478c50a967663f48c",
@@ -80158,9 +80152,114 @@
             "CP3": "retained"
           },
           "resolved_review_content_id": "21546a2987131f73542626726d77d27ce60f002cd738dc62906b15e6c83c85e7"
+        },
+        {
+          "amendment_id": "2",
+          "requested_at": "2026-11-17T09:55:54Z",
+          "requested_from_phase": "IMPLEMENTING",
+          "reason": "CP2 measured each shard's observed wall seconds over its uncontended estimate on the three CI runs 43855824846, 43864443959 and 43879797542: the acceptance-matrix shard is 0.69, 1.08 and 1.07 (never above 1.15) and the other shards are 0.85 to 1.18, so the plan's condition for adding a matrix-specific CONFORMANCE_CONTENTION constant (stably above 1.15 in at least two runs) is not met and the earlier 1.50 figure (from the six-shard layout) is not visible at the shard level in the three-shard layout; owner decided on 2026-11-17 to amend CP2 so that it records the measured ratios and the shared historical-atom mapping, adds no CONFORMANCE_CONTENTION constant and leaves the global 1.15 factor, and the item page records that no suite qualifies for a matrix-specific factor (CP3 reports no matrix-specific factor justified).",
+          "superseded_plan_revision": 11,
+          "superseded_plan_approval": {
+            "status": "CURRENT",
+            "basis": "POLICY_SATISFIED",
+            "reviewed_bundle_id": "393b0504c34ca585db5747c46b3647a7e03e8e97777323423bf57cb37c76ba23",
+            "approved_review_content_id": "21546a2987131f73542626726d77d27ce60f002cd738dc62906b15e6c83c85e7",
+            "review_content_manifest": [
+              {
+                "path": "docs/ai-workflow/CONTROLLER_CI2_PLAN.md",
+                "exists": true,
+                "mode": "100644",
+                "blob": "9eb79e4be9deb52924a651646060297cb8cee434"
+              },
+              {
+                "path": "docs/ai-workflow/registry/workflow-controller-ci2-registry.json",
+                "exists": true,
+                "mode": "100644",
+                "blob": "71328318ea28fba6c8d804706179606b9ff0a613"
+              },
+              {
+                "path": "docs/ai-workflow/requirements/workflow-controller-ci2-mapping.json",
+                "exists": true,
+                "mode": "100644",
+                "blob": "d7b9d45176bdb75b3bdab2ba4e5b5204a75cb159"
+              }
+            ],
+            "reviewed_content_commit": null,
+            "legacy_evidence": null,
+            "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+            "waived_guarantees": [],
+            "recorded_at": "2026-11-16T23:42:27Z",
+            "policy_evidence": {
+              "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+              "policy_source": "default",
+              "file_digest": null,
+              "adopted_digest": null,
+              "adopted_at": null,
+              "requirements": [
+                {
+                  "id": "gate_reachable",
+                  "met": true,
+                  "detail": "the approval gate is reachable"
+                },
+                {
+                  "id": "verdict_approve_bound",
+                  "met": true,
+                  "detail": "the latest verdict is APPROVE and names the current bundle"
+                },
+                {
+                  "id": "distinct_reviewer_models",
+                  "met": true,
+                  "detail": "families 'anthropic' and 'openai' differ"
+                },
+                {
+                  "id": "review_evidence_audited",
+                  "met": true,
+                  "detail": "both stages carry the audit keys"
+                }
+              ],
+              "inputs": {
+                "review_content_id": "21546a2987131f73542626726d77d27ce60f002cd738dc62906b15e6c83c85e7",
+                "ledger": {
+                  "local": {
+                    "bundle_id": "393b0504c34ca585db5747c46b3647a7e03e8e97777323423bf57cb37c76ba23",
+                    "verdict": "APPROVE",
+                    "round": 11,
+                    "verdict_sha256": "a46bd39248b8defc030900706c202b9e41d7565faf5148a5c8e303b8baae0bc8",
+                    "ledger_entry_sha256": "ff061c06fbe4a49330e9b152cbc2576ecf012f57bf784ca98108b6010658cd10",
+                    "run_ref": "session:local .ai-review/workflow-controller-ci2/feedback/REVIEW_FEEDBACK.md",
+                    "reviewer_model": "anthropic/claude-opus-5-5"
+                  },
+                  "manual": {
+                    "bundle_id": "393b0504c34ca585db5747c46b3647a7e03e8e97777323423bf57cb37c76ba23",
+                    "verdict": "APPROVE",
+                    "round": 11,
+                    "verdict_sha256": "0cc9fd8c3ae83dc0a79665202abf6fe9b42361799cf43d49d3218bf9ae924791",
+                    "ledger_entry_sha256": "e68ef4cc37d7f42166a2b2fe5f518d45c026907de9c3e34124ece7632b79d66f",
+                    "run_ref": "codex:20261116T233717Z-f3c842b8",
+                    "reviewer_model": "openai/gpt-6.1-sol"
+                  }
+                },
+                "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+              },
+              "floor_digest": null,
+              "trust": {
+                "review_verdicts": "orchestrator"
+              },
+              "evaluated_at": "2026-11-16T23:42:27Z",
+              "workflow_release": "2.29.3"
+            }
+          },
+          "checkpoints_snapshot": {
+            "CP1": {
+              "status": "COMPLETE",
+              "start_commit": "cea306359bdd2043059d76fadb0011e2b9b869b1"
+            }
+          },
+          "pre_amendment_approval_commit": "cea306359bdd2043059d76fadb0011e2b9b869b1",
+          "resolved_at_plan_revision": null
         }
       ],
-      "amendment_base_commit": "1f06119e2d51712f4824061cc26ea7fff5bcfb70"
+      "amendment_base_commit": "4f38e2d0feb1ff4b51ba927490a1db9e39267c75"
     }
   }
 }

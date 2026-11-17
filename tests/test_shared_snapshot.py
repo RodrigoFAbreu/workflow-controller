@@ -14,10 +14,11 @@ import uuid
 from pathlib import Path
 from unittest import mock
 
-from controller import job, protocol
+from controller import job, protocol, usage
 
 from tests import fixtures
 from tests import test_protocol_lifecycle as lifecycle
+from tests.test_review_job import _ReviewLife
 
 
 class SnapshotCase(unittest.TestCase):
@@ -248,6 +249,48 @@ class FreshBuildTest(SnapshotCase):
         # The bundle verifies at the copy's own path (it records the worktree it was generated in).
         manifest = (copy.root / ".ai-review" / lifecycle.WID / "current" / "MANIFEST.md").read_text()
         self.assertIn(f"worktree_root: {copy.root}", manifest)
+
+
+class ReviewRowTest(SnapshotCase):
+    """D6: the review case's row (the manual plan gate, the clock it was driven at) is the same fresh and restored."""
+
+    ROW = "AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW"
+
+    def drive(self, now: float, *, share: str | None) -> dict:
+        """One review-case setUp at the clock ``now``: what a review test reads at its start, relative to its clock."""
+        life = _ReviewLife(self, "2.9.0")
+        life.review_now = now
+        with mock.patch.object(job, "usage_now", lambda: life.review_now):
+            if share is None:
+                life.run_until(self.ROW)
+            else:
+                life.reach(share, lambda: life.run_until(self.ROW))
+            clock = life.review_now
+        files = sorted(str(p.relative_to(life.root)) for p in life.root.rglob("*") if ".git" not in p.parts)
+        record = usage.load_record(life.runtime)
+
+        def relative(value):
+            if isinstance(value, dict):
+                return {k: relative(v) for k, v in value.items()}
+            if isinstance(value, list):
+                return [relative(v) for v in value]
+            return round(value - clock, 3) if isinstance(value, float) else value
+
+        shape = {"phase": life.phase(), "tasks": list(life.tasks), "files": files,
+                 "row": protocol.next_action(life.root, lifecycle.WID).raw["row"], "clock": clock,
+                 "usage": relative(record)}
+        self.release(life)
+        return shape
+
+    def test_a_restored_review_row_reads_as_a_fresh_one_at_the_clock_it_was_driven_at(self) -> None:
+        fresh = self.drive(1000.0, share=None)
+        name = self.key()
+        source = self.drive(1000.0, share=name)
+        copy = self.drive(5000.0, share=name)  # a later test, whose own clock differs: the copy keeps the saved one
+        self.assertEqual(source, fresh)
+        self.assertEqual(copy["clock"], 1000.0)
+        self.assertEqual(copy, fresh)
+        self.assertEqual(copy["phase"], self.ROW)
 
 
 class CountersTest(SnapshotCase):

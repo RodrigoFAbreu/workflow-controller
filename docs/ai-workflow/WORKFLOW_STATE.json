@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-ci2b",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -80691,6 +80691,247 @@
         },
         "evaluated_at": "2026-11-17T12:29:51Z",
         "workflow_release": "2.29.3"
+      }
+    },
+    "workflow-controller-ci2b": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-ci2b",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CI2B_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-ci2b-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci2b-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 2,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "e30d790d4067af96d0b06127b1416754fc730e1d",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "fe0543568a265a5d0f133a36b53470351e06d7ab599ce8953c656b10b1feda79",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "fe0543568a265a5d0f133a36b53470351e06d7ab599ce8953c656b10b1feda79",
+        "approved_review_content_id": "ec5a6fb33374ff6bafae9747fd12d072244f200a208c05aca883e9b75b5864f1",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CI2B_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b0d9487faf6ab013514716047cb01950abe1f0d6"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-ci2b-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b38681ccd5a7bfd87d61edc6b23a890285f1e05e"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-ci2b-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "cf6b518ffae28ee8197505a03cd62fa4fbb2cbb9"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-17T13:39:19Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "ec5a6fb33374ff6bafae9747fd12d072244f200a208c05aca883e9b75b5864f1",
+            "ledger": {
+              "local": {
+                "bundle_id": "fe0543568a265a5d0f133a36b53470351e06d7ab599ce8953c656b10b1feda79",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "7152105c2470c82d3038ed6d6c2faa9c0f75ec1f0aa849385b4d6410c1bece99",
+                "ledger_entry_sha256": "5f0e85ea9550ee75e4300bc9427806443b135e468f53214204a643c69f6f9219",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-ci2b/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "fe0543568a265a5d0f133a36b53470351e06d7ab599ce8953c656b10b1feda79",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "b6b8c4fecf2e997a02ce6aa14c675f71ed086bc53558a689d67a92d2417a0ae1",
+                "ledger_entry_sha256": "dee110246d4863f44192225aaa78e6b96367375ab08cea77751bac7cdcdddedf",
+                "run_ref": "codex:20261117T133336Z-f99409a3",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-17T13:39:19Z",
+          "workflow_release": "2.29.3"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "ec5a6fb33374ff6bafae9747fd12d072244f200a208c05aca883e9b75b5864f1",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "fe0543568a265a5d0f133a36b53470351e06d7ab599ce8953c656b10b1feda79",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-17T13:33:01Z",
+          "verdict_sha256": "7152105c2470c82d3038ed6d6c2faa9c0f75ec1f0aa849385b4d6410c1bece99",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-ci2b/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "fe0543568a265a5d0f133a36b53470351e06d7ab599ce8953c656b10b1feda79",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-17T13:37:21Z",
+          "verdict_sha256": "b6b8c4fecf2e997a02ce6aa14c675f71ed086bc53558a689d67a92d2417a0ae1",
+          "run_ref": "codex:20261117T133336Z-f99409a3",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 2,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 9,
+      "last_transition": "2026-11-17T13:39:19Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-17T13:30:34Z",
+        "consumed": {
+          "review_content_id": "e4dbb211a7206ea1f7a1827cb63dbdc4405ae53de0542461b74cadc3f267e0bb",
+          "plan_revision": 1,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "ec5a6fb33374ff6bafae9747fd12d072244f200a208c05aca883e9b75b5864f1",
+          "plan_revision": 2
+        },
+        "bound": {
+          "review_content_id": "ec5a6fb33374ff6bafae9747fd12d072244f200a208c05aca883e9b75b5864f1",
+          "bundle_id": "fe0543568a265a5d0f133a36b53470351e06d7ab599ce8953c656b10b1feda79",
+          "plan_revision": 2
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "e4dbb211a7206ea1f7a1827cb63dbdc4405ae53de0542461b74cadc3f267e0bb"
+      ],
+      "optional_findings": {
+        "F-0191b0548ddf": {
+          "digest": "0191b0548ddfab5a1d3195af585d6a525daff543849ecf03bd60ce3340f9272d",
+          "text": "**O-a. D2(a)'s \"pinned by a test\" overstates the required-check part.** `test_the_required_check_contexts_are_unchanged` only asserts that `workflow-conformance:` occurs in the managed file; whether it is a required check is a ruleset setting recorded in `docs/guide/ci-and-releases.md`, which no repository test can see. Say that part is documented, not tested.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "e4dbb211a7206ea1f7a1827cb63dbdc4405ae53de0542461b74cadc3f267e0bb",
+              "verdict": "REVISE",
+              "at": "2026-11-17T13:29:00Z"
+            }
+          ]
+        },
+        "F-03dfbfbea9e9": {
+          "digest": "03dfbfbea9e93d85cfad86384616852be965deb7ea53497e6798161899106477",
+          "text": "**O-b. CP1 could record the item-page numbers it supersedes.** `docs/items/workflow-controller-ci2b.md` quotes 738 s and 737 s for the flows; the plan uses 691 s and 640 s from the committed timings. CP3 replaces the page text, so naming that the old figures are from the CI2 sizing avoids a reader comparing the two.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "e4dbb211a7206ea1f7a1827cb63dbdc4405ae53de0542461b74cadc3f267e0bb",
+              "verdict": "REVISE",
+              "at": "2026-11-17T13:29:00Z"
+            }
+          ]
+        },
+        "F-fa6a7c1e7d7a": {
+          "digest": "fa6a7c1e7d7aed708f5dd6fdc465b3391e17c2c015f3ff60a6adf3d764e69f31",
+          "text": "**O1. CP2's moved leftover check must run the holder's cleanups first.** `IsolationTest` calls `self.doCleanups()` inside `short_folders_made()` before asserting that no recorded folder exists, because the cycles' cleanups remove the kept sandboxes' short `TMPDIR` folders. In the scenario, `functional_world` runs `holder.doCleanups()` only in its `finally`, after the scenario body. A check written as \"wrap the call and assert\" inside the `with functional_world(...)` block would see the folders still present and fail every run. CP2 should say to call `holder.doCleanups()` before the existence check (a second call in `finally` is a no-op).",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "ec5a6fb33374ff6bafae9747fd12d072244f200a208c05aca883e9b75b5864f1",
+              "verdict": "APPROVE",
+              "at": "2026-11-17T13:33:01Z"
+            }
+          ]
+        },
+        "F-13e8d7d1d3f9": {
+          "digest": "13e8d7d1d3f96c7b6353f43581c29d14538e73c9638eb4a4567f876d8a42a6f5",
+          "text": "**O2. R3 in the mapping names only scope item 7.** CP3 also keeps O2's outcome (the moved-base residual) on the item page; the requirement text could mention both owner decisions so the requirement map matches CP3.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "ec5a6fb33374ff6bafae9747fd12d072244f200a208c05aca883e9b75b5864f1",
+              "verdict": "APPROVE",
+              "at": "2026-11-17T13:33:01Z"
+            }
+          ]
+        },
+        "F-d3742a395abe": {
+          "digest": "d3742a395abe46efdc171f29ad8f96f1dd8cac4502530fb4177ac666973e38e8",
+          "text": "CP2 could specify cleanup ordering explicitly: inspect recorded folders after `holder.doCleanups()` or after `functional_world` exits. Checking inside that context before cleanup would incorrectly report the intentionally retained sandbox folders as leaks.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "ec5a6fb33374ff6bafae9747fd12d072244f200a208c05aca883e9b75b5864f1",
+              "verdict": "APPROVE",
+              "at": "2026-11-17T13:37:21Z"
+            }
+          ]
+        }
       }
     }
   }

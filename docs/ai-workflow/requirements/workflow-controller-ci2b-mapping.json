@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ci2b",
+  "requirements": {
+    "R1": {
+      "description": "The nine conformance suites run once on a pull request (the managed workflow-conformance job), not also in the shards, and the proof that keeps them gated is stated and pinned by tests",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The four functional flows run once on a pull request, as scenarios, and a local full run keeps both copies",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "The pages and the item record state the change, the kept proof and the measured effect, and record the owner's answer on scope item 7",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    }
+  }
+}

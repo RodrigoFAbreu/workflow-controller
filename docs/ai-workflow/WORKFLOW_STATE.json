@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-ci2d",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -82186,6 +82186,277 @@
         },
         "evaluated_at": "2026-11-17T20:12:32Z",
         "workflow_release": "2.29.3"
+      }
+    },
+    "workflow-controller-ci2d": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-ci2d",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CI2D_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-ci2d-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci2d-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 4,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "a9a25a502df03f0e23a2147b506bb4b9fb189aee",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "3d44cb8fac096bdf83056c65f3def4f22d86452f4c5770b41fe1e7f729fd12c6",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "3d44cb8fac096bdf83056c65f3def4f22d86452f4c5770b41fe1e7f729fd12c6",
+        "approved_review_content_id": "bef03d0de1eb3439d58f22039161120d4ab3fb9e790b6dc9e00240d6eb3a96a0",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CI2D_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "764b452ef8f6410a634bead59eb22243918ccc76"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-ci2d-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "5428f5d4d942c195325abd38aeaf7f7bb4b29f09"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-ci2d-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b41464bb891cbc56ab3646ab040553870a919de4"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-17T21:57:47Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "bef03d0de1eb3439d58f22039161120d4ab3fb9e790b6dc9e00240d6eb3a96a0",
+            "ledger": {
+              "local": {
+                "bundle_id": "3d44cb8fac096bdf83056c65f3def4f22d86452f4c5770b41fe1e7f729fd12c6",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "58e0eb6b70e5f036d5a45633570b6eff84a075db458aad5b922d2425e4c04561",
+                "ledger_entry_sha256": "1fb1876f0edd41db4867140532da5895a94b5e647b549cd9983c211dbfe18659",
+                "run_ref": "session:local .ai-review/workflow-controller-ci2d/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "3d44cb8fac096bdf83056c65f3def4f22d86452f4c5770b41fe1e7f729fd12c6",
+                "verdict": "APPROVE",
+                "round": 4,
+                "verdict_sha256": "648d8aae88a9711facc58d86aeab83974a3ddaab50351047b56bcdbf60ae2a88",
+                "ledger_entry_sha256": "ab631ea0185dd2ca4e766e3f269aef9d6eba71a466fac11dd4c947feaaf941f0",
+                "run_ref": "codex:20261117T215431Z-e5716063",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-17T21:57:47Z",
+          "workflow_release": "2.29.3"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "bef03d0de1eb3439d58f22039161120d4ab3fb9e790b6dc9e00240d6eb3a96a0",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "3d44cb8fac096bdf83056c65f3def4f22d86452f4c5770b41fe1e7f729fd12c6",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-11-17T21:54:12Z",
+          "verdict_sha256": "58e0eb6b70e5f036d5a45633570b6eff84a075db458aad5b922d2425e4c04561",
+          "run_ref": "session:local .ai-review/workflow-controller-ci2d/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "3d44cb8fac096bdf83056c65f3def4f22d86452f4c5770b41fe1e7f729fd12c6",
+          "verdict": "APPROVE",
+          "round": 4,
+          "completed_at": "2026-11-17T21:56:13Z",
+          "verdict_sha256": "648d8aae88a9711facc58d86aeab83974a3ddaab50351047b56bcdbf60ae2a88",
+          "run_ref": "codex:20261117T215431Z-e5716063",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 4,
+          "external": 2
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 16,
+      "last_transition": "2026-11-17T21:57:47Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-17T21:52:38Z",
+        "consumed": {
+          "review_content_id": "9e1d2abf5710d8edc63eade1adf64a067548d72e88c470d5d37d758f2fabc6b4",
+          "plan_revision": 3,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "bef03d0de1eb3439d58f22039161120d4ab3fb9e790b6dc9e00240d6eb3a96a0",
+          "plan_revision": 4
+        },
+        "bound": {
+          "review_content_id": "bef03d0de1eb3439d58f22039161120d4ab3fb9e790b6dc9e00240d6eb3a96a0",
+          "bundle_id": "3d44cb8fac096bdf83056c65f3def4f22d86452f4c5770b41fe1e7f729fd12c6",
+          "plan_revision": 4
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "9e1d2abf5710d8edc63eade1adf64a067548d72e88c470d5d37d758f2fabc6b4",
+        "b18c318c6febba39cb80819fd5bd4509aed75c71b3e4cbdb6083b6f8f65be9a6",
+        "defd8a896de45365d5987df372864bb3223d34fd1025a2bc79f12afc25cfa497"
+      ],
+      "optional_findings": {
+        "F-98de1838981c": {
+          "digest": "98de1838981c1136327df0843f8609708a369aae3c48ee50ea9a94b9125d8a19",
+          "text": "**O1. D1's text contradicts itself on a multi-commit push.** It lists \"a multi-commit push\" among the `code=true` cases, but its conditions (`before` non-zero, `after == HEAD`, `before` resolves, every path of `before..HEAD` is documentation) would classify a multi-commit, all-documentation push as `false`. Either rule is safe, but the plan should pick one: add a \"`before` is `HEAD^1`\" condition and a CP1 test, or drop the phrase.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "defd8a896de45365d5987df372864bb3223d34fd1025a2bc79f12afc25cfa497",
+              "verdict": "REVISE",
+              "at": "2026-11-17T22:10:00Z"
+            }
+          ]
+        },
+        "F-611d49787ab1": {
+          "digest": "611d49787ab13c059a2f4ab9af60884f8fd4cdf958436807e04f3c74e2207104",
+          "text": "**O2. Say what the after-merge checks do on a documentation-only push and on D6's dispatch run.** `after-merge-determinism`/`after-merge-mutations` run on any non-`pull_request` event once `validate` succeeded. They still run on a documentation-only push to `main`, which is right for the literal scope but leaves about 30 runner-minutes. They also run on the `workflow_dispatch` run D6 starts on `ci/timings-refresh`, which spends up to six runners on a branch. State whether this is intended, or gate the jobs on `github.ref == 'refs/heads/main'`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "defd8a896de45365d5987df372864bb3223d34fd1025a2bc79f12afc25cfa497",
+              "verdict": "REVISE",
+              "at": "2026-11-17T22:10:00Z"
+            }
+          ]
+        },
+        "F-57c6fd84eafd": {
+          "digest": "57c6fd84eafd856e385cb3583396055c3d76de4c99efb45cb4ea3f0f2bdef2f1",
+          "text": "**O3. `docs/ROADMAP.md` is generated.** Its header says it is generated from `docs/backlog.yaml` by `scripts/workflow_backlog.py generate` and must not be edited by hand. CP5 should say \"regenerate\" rather than \"record this item's slice in … `docs/ROADMAP.md`\". D4 also says the tests pin \"`max-parallel` of the legs\" without giving the value. Name it (3, or unset).",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "defd8a896de45365d5987df372864bb3223d34fd1025a2bc79f12afc25cfa497",
+              "verdict": "REVISE",
+              "at": "2026-11-17T22:10:00Z"
+            }
+          ]
+        },
+        "F-15f574f84be4": {
+          "digest": "15f574f84be4c20e77b315b40161e3825bdcd3b3beaab2537a030b33a5d5299b",
+          "text": "**O1. Say how the staleness ratchet runs on the merged copy.** `tests.test_test_shards.CommittedTimingsTest` reads `fixtures.REPO_ROOT / shards.CI_TIMINGS`, the checked-out file. It has no parameter for a copy. D6/CP4 should say the workflow writes the merged file into the checkout before running the test, or that the tool calls `untimed_share_over_the_limit` and the profile-validity check directly on the copy.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "b18c318c6febba39cb80819fd5bd4509aed75c71b3e4cbdb6083b6f8f65be9a6",
+              "verdict": "REVISE",
+              "at": "2026-11-17T22:55:00Z"
+            }
+          ]
+        },
+        "F-d093519f08ec": {
+          "digest": "d093519f08ec1e206e328a46ab07616c310a2c185225274d5477dfe7b6215154",
+          "text": "**O1. CP5 lists \"the open points of O1 to O3\" for the item page, but the plan has four open decisions (O1, O2, O4, O3, in that order).** O4 (after-merge jobs on a documentation-only push and a branch dispatch) is already named for `docs/guide/ci-and-releases.md`. The item page's list would leave it out. Say \"O1 to O4\" in CP5, and consider putting the open decisions in numeric order.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "9e1d2abf5710d8edc63eade1adf64a067548d72e88c470d5d37d758f2fabc6b4",
+              "verdict": "APPROVE",
+              "at": "2026-11-17T21:48:59Z"
+            }
+          ]
+        },
+        "F-8b0e6f85faa5": {
+          "digest": "8b0e6f85faa509ea64d4797b2c7ae356bc75159a2ea3899ba9496d8218c9a1b2",
+          "text": "**O1. Say how the push step authenticates, and fetch the bot branch before the lease.** With `actions/checkout`'s default `persist-credentials: true`, the checkout stores `github.token` (granted only `contents: read`) as an `http.extraheader`, which takes precedence over a token in the push URL, so the push to `ci/timings-refresh` would be refused. Separately, `git push --force-with-lease` without an explicit expected value compares against the remote-tracking ref, and a checkout of `main` has no `origin/ci/timings-refresh`, so on the second run, once the branch exists, the push is rejected as \"stale info\". Neither failure shows up with a fake `gh` offline. CP4 should state `persist-credentials: false` on the checkout (consistent with \"referenced only by the push and pull-request steps\"), add a step that fetches `ci/timings-refresh` when it exists (or use `--force-with-lease=ci/timings-refresh:<fetched sha>`), and pin both in `tests/test_ci_workflows.py`.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "bef03d0de1eb3439d58f22039161120d4ab3fb9e790b6dc9e00240d6eb3a96a0",
+              "verdict": "APPROVE",
+              "at": "2026-11-17T21:54:12Z"
+            }
+          ]
+        },
+        "F-8d1c3208df3b": {
+          "digest": "8d1c3208df3b8dd75d45ee5021f095695a0eab22d365a1f537ae8d554d6c9192",
+          "text": "**O2. \"The same grant `REUSE_PERMISSIONS` … give\" is loose.** `REUSE_PERMISSIONS` also grants `pull-requests: read`. Only `VALIDATE_CALL_PERMISSIONS` is exactly `contents: read` and `actions: read`. Wording only; CP4's \"exactly\" assertion is the binding rule.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "bef03d0de1eb3439d58f22039161120d4ab3fb9e790b6dc9e00240d6eb3a96a0",
+              "verdict": "APPROVE",
+              "at": "2026-11-17T21:54:12Z"
+            }
+          ]
+        }
       }
     }
   }

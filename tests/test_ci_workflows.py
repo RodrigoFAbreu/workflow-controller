@@ -327,7 +327,8 @@ class CoverageTest(unittest.TestCase):
                                     shards.MAIN: ["tests.test_catalogue_determinism",
                                                   "tests.test_scenarios_negative"],
                                     shards.EXCLUDED: ["tests.test_integration_disposable_repo",
-                                                      shards.CONFORMANCE]})
+                                                      shards.CONFORMANCE,
+                                                      "tests.test_functional_lifecycle"]})
         self.assertIn("claude", shards.CI_PLACEMENT["tests.test_integration_disposable_repo"][1])
         self.assertIn("workflow-conformance", shards.CI_PLACEMENT[shards.CONFORMANCE][1])
 

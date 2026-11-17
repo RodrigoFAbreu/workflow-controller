@@ -147,6 +147,11 @@ CI_PLACEMENT = {
         EXCLUDED, "the nine frozen Workflow suites run once on a pull request, in the managed "
                   "workflow-conformance job (a required check on every pull request and every "
                   "push to main); a local full run keeps them (workflow-controller-ci2b D1)"),
+    "tests.test_functional_lifecycle": (
+        EXCLUDED, "its four flow bodies run once on a pull request, as the four "
+                  "scenario-functional-* scenarios of tests.test_scenarios, which call the same "
+                  "flow_* functions in the kit's sandbox; a local full run keeps both copies "
+                  "(workflow-controller-ci2b D3)"),
     "tests.test_catalogue_determinism": (
         MAIN, "runs every catalogue scenario twice, a property of the whole catalogue and "
               "not of one flow; runs in main.yml after the merge and gates the release, while "

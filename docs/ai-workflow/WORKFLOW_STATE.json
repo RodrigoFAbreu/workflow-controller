@@ -81390,7 +81390,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci2c-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci2c-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 2,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -81507,7 +81507,126 @@
           "workflow_release": "2.29.3"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "e69fc8da6f3ef048c781ccfbd47fb6968a79d4d39f8ac9ea3b0ae6c8996942a9",
+        "approved_review_content_id": "8d57b9a38c8a43ac5f6ba3d3d9396358766ffd7bc5488c137b1500a586162377",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-ci2c-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a2a09838a25de76f3fc63a580aded56ac0b45b59"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0e368ca9d37bbf153d84297d39975d4b00833752"
+          },
+          {
+            "path": "tests/fixtures.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "0d973f0454fad90f3b96d4476b11d45bc3868dd7"
+          },
+          {
+            "path": "tests/test_functional_codex_route.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "25e5ee7aefd0c9d068c95f7e722932b536e93461"
+          },
+          {
+            "path": "tests/test_protocol_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ddf89c0f64b3816a92c4a155e106c908e8ee02ba"
+          },
+          {
+            "path": "tests/test_protocol_lifecycle.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "a219cfb5366338b50b34d89dbe05d50e03667eec"
+          },
+          {
+            "path": "tests/test_review_job.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "db083b6b4ef6318321dbc401d2be6620e9c6c74a"
+          },
+          {
+            "path": "tests/test_shared_snapshot.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "2c017128b16fe1bcc6fd0c1f7f920c51273aa7dd"
+          }
+        ],
+        "reviewed_content_commit": "8d84f6d4a8b99d5e6d894567043fc29285a6056c",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-17T17:46:02Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "8d57b9a38c8a43ac5f6ba3d3d9396358766ffd7bc5488c137b1500a586162377",
+            "ledger": {
+              "local": {
+                "bundle_id": "e69fc8da6f3ef048c781ccfbd47fb6968a79d4d39f8ac9ea3b0ae6c8996942a9",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "90a053bacfd0c03bb5af0688d87c72f7e1591e040a5a0536824934698d8458fb",
+                "ledger_entry_sha256": "56f5626418fa053f40a3809a057dc3b3ae6d39eabcbfdf745198cfae9d3392b6",
+                "run_ref": "session:local .ai-review/workflow-controller-ci2c/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "e69fc8da6f3ef048c781ccfbd47fb6968a79d4d39f8ac9ea3b0ae6c8996942a9",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "0b6eaae897965cbd33b2d3098d86522d800b976c866ff76f95f20cd73d65f637",
+                "ledger_entry_sha256": "1ebf310d42231808b062414327ff5f9de84413fcd386769320dd8e86fb955f14",
+                "run_ref": "codex:20261117T173934Z-639bd261",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-17T17:46:02Z",
+          "workflow_release": "2.29.3"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "e6546a6af4660a9f6f244bc0eabf161482929e8463b3df4787f4bd4672a4247b",
@@ -81538,12 +81657,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 18,
-      "last_transition": "2026-11-17T17:32:16Z",
+      "state_revision": 21,
+      "last_transition": "2026-11-17T17:46:02Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -81636,6 +81755,69 @@
               "at": "2026-11-17T16:58:45Z"
             }
           ]
+        },
+        "F-ce3e7b2a887c": {
+          "digest": "ce3e7b2a887c1130e7e0d99993fcbad2544a4befe3a0a5469923350b27beb6d9",
+          "text": "**O1. The saved review clock protects nothing the drive writes, and the D6 usage comparison is vacuous.** D5 and the comments (`tests/test_review_job.py` `_ReviewLife` and `setUp`: \"the drive's usage records carry this clock\"), the guide (\"the clock its drive wrote records at is saved with the tree\") and the item page assume the `to_manual_plan_review` drive writes records at `self.now`. It does not. A probe of `_ReviewLife(...).run_until(\"AWAITING_MANUAL_EXTERNAL_PLAN_REVIEW\")` with `job.usage_now` patched to 1234.5 leaves `usage.load_record(runtime)` as the empty version-2 record (no readings, reservations or ledger), and no file in the tree carries the clock. The base `Lifecycle.step` passes no `usage_gate`, so `usage.renew` and `append_event` never run. As a result, `ReviewRowTest`'s `\"usage\": relative(record)` compares two empty records and proves nothing about record ages. Restoring `self.now = life.review_now` also gives each restored test a clock older than its own, by up to the module's run time in that process, which widens the wall-clock gap Optional F-df01d1ae5f3f named for `FakeCodexEndToEndTest.baseline` and `RetainedReadingsTest`. That gap is bounded and harmless tod",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "8d57b9a38c8a43ac5f6ba3d3d9396358766ffd7bc5488c137b1500a586162377",
+              "verdict": "APPROVE",
+              "at": "2026-11-17T17:39:11Z"
+            }
+          ]
+        },
+        "F-70c187f69410": {
+          "digest": "70c187f6941041abe16d440ddc273904803c9e0c7a879d36ca9e0e549362c2c4",
+          "text": "**O2. `_reach` clears the late guard instead of restoring it.** After the drive, `Lifecycle._reach` sets `self._late_running = frozenset()` in its `finally` instead of restoring the value it replaced. A `reach` nested inside another `reach` drive (a row whose drive reaches another row) would switch off the outer drive's guard for the rest of that drive. No drive nests today: `_to_acceptance`, `_to_38e` and the `to_plan_gate` lambda call `manual_gate`/`run_until` directly. Saving and restoring the previous `(_late_running, _late_row)` pair costs two lines and keeps D4's \"fails loudly\" property if a later row is built on another.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "8d57b9a38c8a43ac5f6ba3d3d9396358766ffd7bc5488c137b1500a586162377",
+              "verdict": "APPROVE",
+              "at": "2026-11-17T17:39:11Z"
+            }
+          ]
+        },
+        "F-e7e2cbcdfbd7": {
+          "digest": "e7e2cbcdfbd7316acd1b850c014718979ae57776e3d72c71e5cd2d4bd9cb8b63",
+          "text": "Clarify the clock rationale in `tests/test_review_job.py:119` and `docs/guide/development.md:652`. The setup drive supplies no usage gate, so it creates no shared usage entries whose timestamps need preserving. `ReviewRowTest` compares empty usage records; that comparison establishes no record-age guarantee. This does not invalidate the snapshot reuse.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "8d57b9a38c8a43ac5f6ba3d3d9396358766ffd7bc5488c137b1500a586162377",
+              "verdict": "APPROVE",
+              "at": "2026-11-17T17:44:30Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "8d57b9a38c8a43ac5f6ba3d3d9396358766ffd7bc5488c137b1500a586162377",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "e69fc8da6f3ef048c781ccfbd47fb6968a79d4d39f8ac9ea3b0ae6c8996942a9",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-17T17:39:11Z",
+          "verdict_sha256": "90a053bacfd0c03bb5af0688d87c72f7e1591e040a5a0536824934698d8458fb",
+          "run_ref": "session:local .ai-review/workflow-controller-ci2c/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "e69fc8da6f3ef048c781ccfbd47fb6968a79d4d39f8ac9ea3b0ae6c8996942a9",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-17T17:44:30Z",
+          "verdict_sha256": "0b6eaae897965cbd33b2d3098d86522d800b976c866ff76f95f20cd73d65f637",
+          "run_ref": "codex:20261117T173934Z-639bd261",
+          "reviewer_model": "openai/gpt-6.1-sol"
         }
       }
     }

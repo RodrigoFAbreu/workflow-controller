@@ -4,8 +4,9 @@
 # The required validation, called by ci.yml, or dispatched by hand. Its input
 # tests-from-run is empty except when ci.yml reuses a pull request run on main
 # (CI_MAIN_REUSE=on); then the shards are skipped and tests-result re-verifies that
-# run's recorded results. A pull request that changes only documentation
-# (tools/ci_changes.py) skips plan and tests; the docs-tests and docs jobs run on every
+# run's recorded results. A pull request or a push to main that changes only
+# documentation, and a Draft pull request before its first review-bound head
+# (tools/ci_changes.py), skips plan and tests; the docs-tests and docs jobs run on every
 # event and tests-result requires docs, which needs docs-tests. docs-tests is the
 # shared python-tests.yml of RodrigoFAbreu/action-workflows.
 name: Tests

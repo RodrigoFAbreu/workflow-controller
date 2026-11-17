@@ -862,10 +862,17 @@ CI_CONCURRENCY_GROUP = ("${{ github.event_name == 'pull_request' && "
                         "format('{0}-{1}', github.workflow, github.run_id) }}")
 
 
+#: ``ci.yml``'s ``pull_request`` activity types: the three defaults plus
+#: ``ready_for_review``, so a person who marks a Draft pull request ready gets
+#: the full suite on that head at once (CI2d D3).
+PR_CI_TYPES = ("opened", "synchronize", "reopened", "ready_for_review")
+
+
 def ci_workflow() -> dict:
     return {
         "name": "CI",
-        "on": {"pull_request": None, "push": {"branches": ["main"]}, "workflow_dispatch": None},
+        "on": {"pull_request": {"types": list(PR_CI_TYPES)}, "push": {"branches": ["main"]},
+               "workflow_dispatch": None},
         "concurrency": {"group": CI_CONCURRENCY_GROUP,
                         "cancel-in-progress": "${{ github.event_name == 'pull_request' }}"},
         "permissions": {"contents": "read"},
@@ -963,6 +970,11 @@ WORKFLOWS = {
                "build-publish.yml with those results, so the revision is validated once before a\n"
                "release. A pull request's newer push cancels its older run; main's runs never cancel\n"
                "one another (main-release). Milestone branches are validated through their Draft PR.\n\n"
+               "Two trigger rules (tools/ci_changes.py): a push to main that changes only documentation\n"
+               "skips the plan and the shards (the managed conformance job, the docs gate and the\n"
+               "after-merge checks still run); a Draft pull request's shards run from the first\n"
+               "review-bound head, so the acceptance gate's ci_green at the anchor commit is a real\n"
+               "run, and ready_for_review starts a full run at once.\n\n"
                "reuse (read-only, never on a pull request) is switched by the repository variable\n"
                "CI_MAIN_REUSE. on: reuse runs first and validate skips the shards when the recorded\n"
                "tree and plan digest match. Any other value: reuse does not run and validate starts\n"
@@ -976,8 +988,9 @@ WORKFLOWS = {
                      "The required validation, called by ci.yml, or dispatched by hand. Its input\n"
                      "tests-from-run is empty except when ci.yml reuses a pull request run on main\n"
                      "(CI_MAIN_REUSE=on); then the shards are skipped and tests-result re-verifies that\n"
-                     "run's recorded results. A pull request that changes only documentation\n"
-                     "(tools/ci_changes.py) skips plan and tests; the docs-tests and docs jobs run on every\n"
+                     "run's recorded results. A pull request or a push to main that changes only\n"
+                     "documentation, and a Draft pull request before its first review-bound head\n"
+                     "(tools/ci_changes.py), skips plan and tests; the docs-tests and docs jobs run on every\n"
                      "event and tests-result requires docs, which needs docs-tests. docs-tests is the\n"
                      "shared python-tests.yml of RodrigoFAbreu/action-workflows."),
     "build-publish.yml": (build_publish_workflow,

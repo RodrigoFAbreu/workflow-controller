@@ -851,8 +851,10 @@ class CiWorkflowTest(unittest.TestCase):
         self.jobs = _jobs(self.workflow)
 
     def test_triggers(self) -> None:
-        self.assertEqual(self.workflow["on"], {"pull_request": None, "push": {"branches": ["main"]},
-                                               "workflow_dispatch": None})
+        self.assertEqual(self.workflow["on"],
+                         {"pull_request": {"types": ["opened", "synchronize", "reopened", "ready_for_review"]},
+                          "push": {"branches": ["main"]}, "workflow_dispatch": None})
+        self.assertEqual(ci.PR_CI_TYPES, ("opened", "synchronize", "reopened", "ready_for_review"))
         self.assertNotIn("tags", self.workflow["on"]["push"])
         self.assertNotIn("inputs", ci.render()["ci.yml"])
 

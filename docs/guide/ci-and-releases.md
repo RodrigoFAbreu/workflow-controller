@@ -288,9 +288,16 @@ required check pending forever.
   `before` that does not resolve) and any doubt are `true`. The skipped push
   runs no `plan` and no shards, but the `after-merge-*` jobs and the release
   gate still run, because they need only `validate` to succeed: about 30
-  runner-minutes remain, on purpose, so a documentation-only commit still
-  passes the release gate. The managed `workflow-conformance` job runs as
-  before.
+  runner-minutes remain, on purpose, so a documentation-only commit passes
+  `validate`. It does not release, though: `tests.yml` exposes the `changes`
+  job's `code` as an output, `ci.yml` hands it to `build-publish.yml`, and
+  `build` and `publish` (and the `release-target-*` checks) also require
+  `code` to be `true`. A documentation-only push could otherwise publish a
+  release range that holds unreleased code no shard has run on `main`, for
+  instance after a `feat:` push whose shards failed, so that `RELEASE_DUE` or
+  `RESUME` waits for the next push that changes code or for a manual `CI`
+  dispatch on `main` (always `code=true`). The `release-plan` job says so in a
+  notice. The managed `workflow-conformance` job runs as before.
 - **A Draft pull request** (CI2d). A pull request whose payload says `draft`
   runs the shards only from the first head the acceptance gate can read: its
   head commit holds a work item whose `phase` is in the review-bound set
@@ -303,8 +310,10 @@ required check pending forever.
   shards, which is the waste the item removes (101 cancelled runs since 12
   November cost about 5,500 runner-minutes). A test asserts that the two sets
   partition `workflow_state.KNOWN_PHASES`, so a new phase cannot be skipped
-  silently. A missing `draft` key, an unreadable state file at either parent
-  and a pull request that is not a draft run everything. The reason is the
+  silently. A missing `draft` key is treated as not a draft (the ordinary
+  documentation-path rule applies, so a documentation-only diff is still
+  `code=false`); an unreadable state file at either parent runs the shards,
+  and so does a pull request that is not a draft and changes code. The reason is the
   Controller's order: it needs green checks at the acceptance commit before it
   marks a pull request ready (`ready_requires_green_checks`), and the
   acceptance gate's `ci_green` reads the checks at the anchor commit, which is

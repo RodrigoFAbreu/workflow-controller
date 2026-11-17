@@ -897,6 +897,7 @@ class CiWorkflowTest(unittest.TestCase):
             "permissions": {"contents": "write"},
             "uses": "./.github/workflows/build-publish.yml",
             "with": {"validate-result": "${{ needs.validate.result }}",
+                     "code": "${{ needs.validate.outputs.code }}",
                      "after-merge-determinism": "${{ needs.after-merge-determinism.result }}",
                      "after-merge-mutations": "${{ needs.after-merge-mutations.result }}"}})
         # The inputs it passes are exactly the ones build-publish.yml declares.
@@ -958,7 +959,11 @@ class CiWorkflowTest(unittest.TestCase):
         on = ci.tests_workflow()["on"]
         self.assertEqual(list(on), ["workflow_call", "workflow_dispatch"])
         self.assertIsNone(on["workflow_dispatch"])
-        self.assertEqual(list(on["workflow_call"]), ["inputs"])
+        self.assertEqual(list(on["workflow_call"]), ["inputs", "outputs"])
+        # The one output a caller needs: did the shards run (CI2d I1).
+        self.assertEqual(list(on["workflow_call"]["outputs"]), ["code"])
+        self.assertEqual(on["workflow_call"]["outputs"]["code"]["value"],
+                         "${{ jobs.changes.outputs.code }}")
         inputs = on["workflow_call"]["inputs"]
         self.assertEqual(list(inputs), ["tests-from-run"])
         self.assertEqual((inputs["tests-from-run"]["type"], inputs["tests-from-run"]["default"],
@@ -1016,7 +1021,8 @@ class BuildPublishWorkflowTest(unittest.TestCase):
         self.assertEqual(list(on), ["workflow_call", "workflow_dispatch"])
         self.assertIsNone(on["workflow_dispatch"])
         inputs = on["workflow_call"]["inputs"]
-        self.assertEqual(list(inputs), ["validate-result", "after-merge-determinism", "after-merge-mutations"])
+        self.assertEqual(list(inputs), ["validate-result", "code", "after-merge-determinism",
+                                       "after-merge-mutations"])
         for name, spec in inputs.items():
             with self.subTest(input=name):
                 self.assertEqual((spec["type"], spec["required"], spec["default"]), ("string", False, ""))
@@ -1044,7 +1050,7 @@ class BuildPublishWorkflowTest(unittest.TestCase):
 
     def test_conditions(self) -> None:
         on_trunk = "github.ref == 'refs/heads/main'"
-        validated = "inputs.validate-result == 'success'"
+        validated = "inputs.validate-result == 'success' && inputs.code == 'true'"
         publishing = (f"{on_trunk} && (needs.release-plan.outputs.state == 'RELEASE_DUE' || "
                       "needs.release-plan.outputs.state == 'RESUME')")
         self.assertEqual(self.jobs["release-plan"]["if"], f"!cancelled() && {on_trunk}")
@@ -1086,11 +1092,12 @@ class BuildPublishWorkflowTest(unittest.TestCase):
             with self.subTest(job=name):
                 expression = self.jobs[name]["if"]
                 self.assertIn("inputs.validate-result == 'success'", self._conjuncts(expression))
+                self.assertIn("inputs.code == 'true'", self._conjuncts(expression))
                 self.assertNotIn("always()", expression)
                 self.assertIn("!cancelled()", self._conjuncts(expression))
                 # Only the inputs, release-plan, the targets and the build are read.
                 for reference in re.findall(r"\b(?:inputs|needs|github)\.[A-Za-z0-9_.-]*[A-Za-z0-9_]", expression):
-                    self.assertRegex(reference, r"^(inputs\.(validate-result|after-merge-[a-z]+)|"
+                    self.assertRegex(reference, r"^(inputs\.(validate-result|code|after-merge-[a-z]+)|"
                                                 r"needs\.(release-plan|build|release-target-[a-z]+)\.[a-z.]+|"
                                                 r"github\.(ref|sha))$")
         self.assertNotIn("inputs.validate-result", self.jobs["release-plan"]["if"])
@@ -1113,7 +1120,7 @@ class BuildPublishWorkflowTest(unittest.TestCase):
         return bool(_gh_eval(job["if"], context))
 
     #: ``ci.yml``'s call: its validate and after-merge results for the pushed commit.
-    CALLED = {"validate-result": "success", "after-merge-determinism": "success",
+    CALLED = {"validate-result": "success", "code": "true", "after-merge-determinism": "success",
               "after-merge-mutations": "success"}
     STATES = ("RELEASE_DUE", "RESUME", "NO_CHANGE", "NOT_DUE")
 
@@ -1142,7 +1149,34 @@ class BuildPublishWorkflowTest(unittest.TestCase):
                 inputs = {**self.CALLED, "validate-result": result}
                 self.assertEqual(self._chain(inputs=inputs), (True, False, False, False))
         # A caller that hands in no after-merge results publishes nothing for the pushed commit.
-        self.assertEqual(self._chain(inputs={"validate-result": "success"}), (True, False, False, False))
+        self.assertEqual(self._chain(inputs={"validate-result": "success", "code": "true"}),
+                         (True, False, False, False))
+
+    def test_a_documentation_only_push_never_builds_or_publishes_a_release(self) -> None:
+        """CI2d I1: validate passes without the shards when the pushed range is
+        documentation only, but the release range may hold unreleased code that
+        no shard has run on main. RELEASE_DUE and RESUME then wait for a code
+        push or a CI dispatch (always code=true)."""
+        for state in ("RELEASE_DUE", "RESUME"):
+            for code in ("false", "", "TRUE"):
+                for pushed in (True, False):
+                    with self.subTest(state=state, code=code, pushed=pushed):
+                        inputs = {**self.CALLED, "code": code}
+                        plan, target, build, publish = self._chain(
+                            state, inputs=inputs, target_is_pushed=pushed, targets="success")
+                        self.assertEqual((plan, target, build, publish), (True, False, False, False))
+            # ... and with the shards run, the same state does publish.
+            self.assertEqual(self._chain(state, target_is_pushed=True)[3], True)
+        # The release-plan job says why it published nothing.
+        notice = [step for step in _steps(self.jobs["release-plan"]) if step.get("name") == "no shards ran"]
+        self.assertEqual(len(notice), 1)
+        self.assertEqual(notice[0]["if"], "inputs.validate-result == 'success' && inputs.code != 'true'")
+        self.assertTrue(_gh_eval(notice[0]["if"], {"inputs.validate-result": "success", "inputs.code": "false"}))
+        self.assertFalse(_gh_eval(notice[0]["if"], {"inputs.validate-result": "success", "inputs.code": "true"}))
+        self.assertIn("dispatch of the CI workflow on main", notice[0]["run"])
+        # ci.yml hands the output of validate over.
+        self.assertEqual(_jobs(ci.ci_workflow())["build-publish"]["with"]["code"],
+                         "${{ needs.validate.outputs.code }}")
 
     def test_a_direct_dispatch_runs_no_test_and_publishes_nothing(self) -> None:
         # Every input a dispatch can produce: absent (null) or empty or any other string.

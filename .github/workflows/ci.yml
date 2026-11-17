@@ -153,5 +153,6 @@ jobs:
     uses: "./.github/workflows/build-publish.yml"
     with:
       validate-result: "${{ needs.validate.result }}"
+      code: "${{ needs.validate.outputs.code }}"
       after-merge-determinism: "${{ needs.after-merge-determinism.result }}"
       after-merge-mutations: "${{ needs.after-merge-mutations.result }}"

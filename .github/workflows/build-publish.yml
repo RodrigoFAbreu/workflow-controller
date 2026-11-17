@@ -37,6 +37,11 @@ name: "Build and publish"
         type: string
         required: false
         default: ""
+      code:
+        description: "The caller's tests.yml code output: true when the shards ran."
+        type: string
+        required: false
+        default: ""
       after-merge-determinism:
         description: "The caller's after-merge-determinism result for github.sha."
         type: string
@@ -85,10 +90,13 @@ jobs:
       - name: "no test results"
         if: "inputs.validate-result != 'success'"
         run: "echo '::notice::Build and publish was handed no test results, so it builds nothing. To publish, dispatch the CI workflow on main: it runs the tests and calls this workflow with their results.'"
+      - name: "no shards ran"
+        if: "inputs.validate-result == 'success' && inputs.code != 'true'"
+        run: "echo '::notice::The pushed range touches documentation only, so the shards did not run on this commit and nothing is built or published. A release that is due or resumable waits for the next push that alters code, or for a dispatch of the CI workflow on main.'"
   release-target-determinism:
     needs:
       - release-plan
-    if: "!cancelled() && needs.release-plan.result == 'success' && inputs.validate-result == 'success' && github.ref == 'refs/heads/main' && (needs.release-plan.outputs.state == 'RELEASE_DUE' || needs.release-plan.outputs.state == 'RESUME') && needs.release-plan.outputs.commit != github.sha"
+    if: "!cancelled() && needs.release-plan.result == 'success' && inputs.validate-result == 'success' && inputs.code == 'true' && github.ref == 'refs/heads/main' && (needs.release-plan.outputs.state == 'RELEASE_DUE' || needs.release-plan.outputs.state == 'RESUME') && needs.release-plan.outputs.commit != github.sha"
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -110,7 +118,7 @@ jobs:
   release-target-mutations:
     needs:
       - release-plan
-    if: "!cancelled() && needs.release-plan.result == 'success' && inputs.validate-result == 'success' && github.ref == 'refs/heads/main' && (needs.release-plan.outputs.state == 'RELEASE_DUE' || needs.release-plan.outputs.state == 'RESUME') && needs.release-plan.outputs.commit != github.sha"
+    if: "!cancelled() && needs.release-plan.result == 'success' && inputs.validate-result == 'success' && inputs.code == 'true' && github.ref == 'refs/heads/main' && (needs.release-plan.outputs.state == 'RELEASE_DUE' || needs.release-plan.outputs.state == 'RESUME') && needs.release-plan.outputs.commit != github.sha"
     name: "release-target-mutations (${{ matrix.shard }})"
     strategy:
       fail-fast: false
@@ -142,7 +150,7 @@ jobs:
       - release-plan
       - release-target-determinism
       - release-target-mutations
-    if: "!cancelled() && inputs.validate-result == 'success' && needs.release-plan.result == 'success' && github.ref == 'refs/heads/main' && (needs.release-plan.outputs.state == 'RELEASE_DUE' || needs.release-plan.outputs.state == 'RESUME') && ((needs.release-plan.outputs.commit == github.sha && inputs.after-merge-determinism == 'success') || (needs.release-plan.outputs.commit != github.sha && needs.release-target-determinism.result == 'success')) && ((needs.release-plan.outputs.commit == github.sha && inputs.after-merge-mutations == 'success') || (needs.release-plan.outputs.commit != github.sha && needs.release-target-mutations.result == 'success'))"
+    if: "!cancelled() && inputs.validate-result == 'success' && inputs.code == 'true' && needs.release-plan.result == 'success' && github.ref == 'refs/heads/main' && (needs.release-plan.outputs.state == 'RELEASE_DUE' || needs.release-plan.outputs.state == 'RESUME') && ((needs.release-plan.outputs.commit == github.sha && inputs.after-merge-determinism == 'success') || (needs.release-plan.outputs.commit != github.sha && needs.release-target-determinism.result == 'success')) && ((needs.release-plan.outputs.commit == github.sha && inputs.after-merge-mutations == 'success') || (needs.release-plan.outputs.commit != github.sha && needs.release-target-mutations.result == 'success'))"
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -183,7 +191,7 @@ jobs:
       - build
       - release-target-determinism
       - release-target-mutations
-    if: "!cancelled() && inputs.validate-result == 'success' && needs.release-plan.result == 'success' && needs.build.result == 'success' && github.ref == 'refs/heads/main' && (needs.release-plan.outputs.state == 'RELEASE_DUE' || needs.release-plan.outputs.state == 'RESUME') && ((needs.release-plan.outputs.commit == github.sha && inputs.after-merge-determinism == 'success') || (needs.release-plan.outputs.commit != github.sha && needs.release-target-determinism.result == 'success')) && ((needs.release-plan.outputs.commit == github.sha && inputs.after-merge-mutations == 'success') || (needs.release-plan.outputs.commit != github.sha && needs.release-target-mutations.result == 'success'))"
+    if: "!cancelled() && inputs.validate-result == 'success' && inputs.code == 'true' && needs.release-plan.result == 'success' && needs.build.result == 'success' && github.ref == 'refs/heads/main' && (needs.release-plan.outputs.state == 'RELEASE_DUE' || needs.release-plan.outputs.state == 'RESUME') && ((needs.release-plan.outputs.commit == github.sha && inputs.after-merge-determinism == 'success') || (needs.release-plan.outputs.commit != github.sha && needs.release-target-determinism.result == 'success')) && ((needs.release-plan.outputs.commit == github.sha && inputs.after-merge-mutations == 'success') || (needs.release-plan.outputs.commit != github.sha && needs.release-target-mutations.result == 'success'))"
     runs-on: ubuntu-latest
     permissions:
       contents: write

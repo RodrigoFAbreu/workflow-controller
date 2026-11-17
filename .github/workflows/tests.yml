@@ -18,6 +18,10 @@ name: Tests
         type: string
         required: false
         default: ""
+    outputs:
+      code:
+        description: "true unless the run was documentation-only: the shards ran (or were reused)."
+        value: "${{ jobs.changes.outputs.code }}"
   workflow_dispatch:
 jobs:
   changes:

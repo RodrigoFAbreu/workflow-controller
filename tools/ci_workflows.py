@@ -220,7 +220,8 @@ REUSE_RESULTS = f"inputs.{REUSE_INPUT} != ''"
 #: The ``changes`` job's one output: ``true`` unless the pull request changes
 #: only documentation (``tools/ci_changes.py``). Every job and step the
 #: documentation-only mode skips carries this condition.
-CHANGES_CODE_OUTPUT = "needs.changes.outputs.code"
+CODE_OUTPUT = "code"
+CHANGES_CODE_OUTPUT = f"needs.changes.outputs.{CODE_OUTPUT}"
 IS_CODE = f"{CHANGES_CODE_OUTPUT} == 'true'"
 #: The recorded tree, written next to the plan and the shard records.
 TREE_FILE = "tree.txt"
@@ -411,7 +412,13 @@ def tests_workflow() -> dict:
         # compares equal to '' (GitHub coerces both to 0), so the shards run.
         "on": {"workflow_call": {"inputs": {REUSE_INPUT: {
             "description": "Id of a pull request run to reuse the results of; empty runs the shards.",
-            "type": "string", "required": False, "default": ""}}},
+            "type": "string", "required": False, "default": ""}},
+                         # What ``changes`` decided, for a caller that must know whether
+                         # the shards ran (ci.yml hands it to build-publish.yml).
+                         "outputs": {CODE_OUTPUT: {
+                             "description": "true unless the run was documentation-only: "
+                                            "the shards ran (or were reused).",
+                             "value": f"${{{{ jobs.changes.outputs.{CODE_OUTPUT} }}}}"}}},
                "workflow_dispatch": None},
         "jobs": {
             # Detection is a job, never a workflow-level paths filter: the
@@ -420,7 +427,7 @@ def tests_workflow() -> dict:
             "changes": {
                 "runs-on": RUNNER,
                 "permissions": read,
-                "outputs": {"code": "${{ steps.detect.outputs.code }}"},
+                "outputs": {CODE_OUTPUT: f"${{{{ steps.detect.outputs.{CODE_OUTPUT} }}}}"},
                 "steps": [
                     _checkout(pinned=False, fetch_depth=0),
                     _setup_python(pinned=False),
@@ -613,9 +620,19 @@ VALIDATE_RESULT_INPUT = "validate-result"
 #: The caller validated the revision. Every job that builds or publishes
 #: requires exactly this, as a conjunct, so no input combination (null and
 #: empty included) reaches them without the caller's result (CI3 D2).
-VALIDATED = f"inputs.{VALIDATE_RESULT_INPUT} == 'success'"
+VALIDATE_SUCCEEDED = f"inputs.{VALIDATE_RESULT_INPUT} == 'success'"
+#: Whether the caller's validation ran the shards (``tests.yml``'s ``code``
+#: output). A documentation-only push passes ``validate`` without them, so it
+#: must never build or publish a release range that holds unreleased code
+#: (CI2d I1): ``RELEASE_DUE`` and ``RESUME`` wait for a code push or a
+#: dispatch of ``CI`` on ``main``, which is always ``code=true``.
+CODE_INPUT = "code"
+SHARDS_RAN = f"inputs.{CODE_INPUT} == 'true'"
+VALIDATED = f"{VALIDATE_SUCCEEDED} && {SHARDS_RAN}"
 #: Nothing was handed in: a direct dispatch of ``build-publish.yml``.
 NO_RESULTS = f"inputs.{VALIDATE_RESULT_INPUT} != 'success'"
+#: ``validate`` succeeded but ran no shard (a documentation-only push).
+NO_SHARDS = f"{VALIDATE_SUCCEEDED} && inputs.{CODE_INPUT} != 'true'"
 
 
 def _after_merge_ok(check: str) -> str:
@@ -793,6 +810,10 @@ def build_publish_workflow() -> dict:
     notice = ("echo '::notice::Build and publish was handed no test results, so it builds "
               "nothing. To publish, dispatch the CI workflow on main: it runs the tests and "
               "calls this workflow with their results.'")
+    notice_docs = ("echo '::notice::The pushed range touches documentation only, so the shards did "
+                   "not run on this commit and nothing is built or published. A release that is "
+                   "due or resumable waits for the next push that alters code, or for a "
+                   "dispatch of the CI workflow on main.'")
     caller_result = {"type": "string", "required": False, "default": ""}
     read = {"contents": "read"}
     return {
@@ -801,6 +822,9 @@ def build_publish_workflow() -> dict:
             "workflow_call": {"inputs": {
                 VALIDATE_RESULT_INPUT: {
                     "description": "The caller's tests.yml result for github.sha.",
+                    **caller_result},
+                CODE_INPUT: {
+                    "description": "The caller's tests.yml code output: true when the shards ran.",
                     **caller_result},
                 **{f"after-merge-{check}": {
                     "description": f"The caller's after-merge-{check} result for github.sha.",
@@ -826,6 +850,7 @@ def build_publish_workflow() -> dict:
                     _setup_python(pinned=True),
                     {"name": "classify", "id": "classify", "env": dict(GIT_CREDENTIAL_ENV), "run": classify},
                     {"name": "no test results", "if": NO_RESULTS, "run": notice},
+                    {"name": "no shards ran", "if": NO_SHARDS, "run": notice_docs},
                 ],
             },
             "release-target-determinism": _main_check_job("determinism", release_target=True),
@@ -928,6 +953,7 @@ def ci_workflow() -> dict:
                 "permissions": {"contents": "write"},
                 "uses": BUILD_PUBLISH_WORKFLOW,
                 "with": {VALIDATE_RESULT_INPUT: "${{ needs.validate.result }}",
+                         CODE_INPUT: f"${{{{ needs.validate.outputs.{CODE_OUTPUT} }}}}",
                          **{f"after-merge-{check}": f"${{{{ needs.after-merge-{check}.result }}}}"
                             for check in MAIN_TEST_MODULES}},
             },

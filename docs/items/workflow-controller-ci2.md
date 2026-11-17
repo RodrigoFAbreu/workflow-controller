@@ -65,7 +65,16 @@ Each shard's observed `wall_seconds` next to its estimate, before (the base timi
 
 Across the three runs the shard that held the matrix ran from 2,467 s to 3,851 s and the others from 2,391 s to 3,345 s, so the imbalance the goal names (1.08 to 1.50 times the average) is large and varies from run to run; the observed spread of a single shard between runs (2,467 to 3,851 s) is larger than the estimator's change, which is why the gain above is a prediction and not a promise.
 
-**Elapsed CI time.** To be recorded once this pull request's CI has run, as one interval for both sides (`run_started_at` to the `completed_at` of `tests-result`) against the 35 to 41 minute baseline. The page will state the result either way; a gain smaller than the planner predicts is reported, not argued away.
+**Elapsed CI time**, one interval for both sides: the workflow run's `run_started_at` to the `completed_at` of its `tests-result` job. The 35 to 41 minute figure in the owner's notes below was measured at six shards, before CI3 moved CI to three, so the baseline here is the three three-shard code pull request runs the refresh used, measured the same way:
+
+| run | head | elapsed | shard 0 | shard 1 | shard 2 | longest over shortest shard |
+| --- | --- | --- | --- | --- | --- | --- |
+| 43855824846 (baseline) | `989d74e` | 57 min 12 s | 41.6 min | 52.4 min | 56.0 min | 1.35 |
+| 43864443959 (baseline) | `db4da6c` | 65 min 16 s | 64.4 min | 44.3 min | 53.8 min | 1.45 |
+| 43879797542 (baseline) | `703c9e7` | 64 min 40 s | 63.9 min | 42.5 min | 40.1 min | 1.59 |
+| 44062553881 (this pull request, refreshed timings) | `429f97f` | **55 min 41 s** | 47.1 min | 50.6 min | 54.5 min | 1.16 |
+
+Shard times are the `tests (i)` jobs' `started_at` to `completed_at`. This pull request's run is 1.5 to 9.6 minutes shorter than each baseline run (6.7 minutes below their 62.4-minute mean) and its longest shard is 54.5 minutes against 56.0 to 64.4 (6.9 minutes below their 61.4-minute mean), close to the planner's predicted 598.7 s (10.0 minutes) but smaller. The shards are also more level (1.16 times longest over shortest against 1.35 to 1.59), and every shard finished under the planner's 3,494 s (58.2 minutes). This is one run against three, and a single shard varied by up to 23 minutes between the baseline runs, so the gain is within runner noise of a few minutes and is reported as measured, not as proven. PR CI is still far from the 20-minute target of [#317](https://github.com/RodrigoFAbreu/workflow-controller/issues/317); the later slices (ci2b to ci2e) are what cut the work itself. The run tested `429f97f`; the self-review commit after it changes only a test helper and this page, not the timings or the planner.
 
 ## The owner's decision of 2026-11-16 (test-suite performance)
 

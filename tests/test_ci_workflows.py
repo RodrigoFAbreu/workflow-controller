@@ -1337,8 +1337,27 @@ class AfterMergeChecksTest(unittest.TestCase):
                     self.assertEqual(_run(steps[2]), "pip install -e .")
                     self.assertEqual(_run(steps[3]), ci.ALLOW_USERNS)
                     self.assertEqual(steps[3], shard[3])
-                    self.assertEqual(_run(steps[4]), f"python3 tools/run_tests.py main-check {module}")
+                    legs = ci.MAIN_CHECK_LEGS[check]
+                    flags = f" --shard ${{{{ matrix.shard }}}} --of {legs}" if legs > 1 else ""
+                    self.assertEqual(_run(steps[4]), f"python3 tools/run_tests.py main-check {module}{flags}")
                     self.assertEqual(len(steps), 5)
+
+    def test_the_mutation_check_runs_in_three_legs_under_the_same_job_id(self) -> None:
+        # CI2d D4: a matrix of legs is one job id, so the release gate's inputs, the
+        # needs and the conditions read the job's result exactly as before; the
+        # determinism check is not split (D5).
+        self.assertEqual(ci.MAIN_CHECK_LEGS, {"determinism": 1, "mutations": 3})
+        for kind, jobs in (("after-merge", self.ci_jobs), ("release-target", self.jobs)):
+            job = jobs[f"{kind}-mutations"]
+            with self.subTest(job=f"{kind}-mutations"):
+                self.assertEqual(job["strategy"], {"fail-fast": False, "matrix": {"shard": [0, 1, 2]}})
+                self.assertNotIn("max-parallel", job["strategy"])
+                self.assertEqual(job["name"], f"{kind}-mutations (${{{{ matrix.shard }}}})")
+            plain = jobs[f"{kind}-determinism"]
+            self.assertNotIn("strategy", plain)
+            self.assertNotIn("name", plain)
+        self.assertEqual(list(self.jobs), ["release-plan", *self.TARGETS, "build", "publish"])
+
 
     def test_the_target_jobs_check_out_the_publication_target(self) -> None:
         for check in self.CHECKS:
@@ -1673,7 +1692,9 @@ def _runner_nodes(model: dict, context: _WorstCase) -> dict:
     """``model``'s jobs, the called local workflows flattened in, as
     ``{node: (weight, active, direct_dependencies)}``. A static job is one
     runner, a call to a shared workflow is one (assumed, see CI3 D4), a matrix
-    counts its ``max-parallel`` and fails without one."""
+    counts its ``max-parallel``, or, with none, its literal list of legs (CI2d
+    D4: every leg may run at once), and fails for a computed matrix with no
+    ``max-parallel``."""
     nodes: dict = {}
     groups: dict = {}
     for name, job in _jobs(model).items():
@@ -1682,9 +1703,15 @@ def _runner_nodes(model: dict, context: _WorstCase) -> dict:
         child = _called_model(job)
         if child is None:
             matrix = job.get("strategy", {}).get("matrix")
-            if matrix is not None and "max-parallel" not in job["strategy"]:
-                raise AssertionError(f"{name}: a matrix without max-parallel is unbounded")
-            weight = job["strategy"]["max-parallel"] if matrix is not None else 1
+            weight = 1
+            if matrix is not None:
+                legs = matrix.get("shard")
+                if "max-parallel" in job["strategy"]:
+                    weight = job["strategy"]["max-parallel"]
+                elif isinstance(legs, list):
+                    weight = len(legs)
+                else:
+                    raise AssertionError(f"{name}: a computed matrix without max-parallel is unbounded")
             nodes[name] = (weight, active, set(outer))
             groups[name] = [name]
             continue
@@ -1794,6 +1821,20 @@ class RunnerLimitTest(unittest.TestCase):
         # A direct build-publish run classifies and nothing else.
         self.assertEqual(self._peak("build-publish.yml", "workflow_dispatch", "refs/heads/main", None), 1)
 
+    def test_a_literal_list_of_legs_counts_every_leg(self) -> None:
+        model = {"jobs": {"legs": {"runs-on": "ubuntu-latest",
+                                   "strategy": {"matrix": {"shard": [0, 1, 2]}}}}}
+        self.assertEqual(_runner_nodes(model, _WorstCase())["legs"][0], 3)
+        # The generated mutation legs are counted at three each, so the peak for a
+        # push to main (six, above) and for a publication of an ancestor (checked
+        # for every event by test_no_event_and_no_reuse_mode_holds_more_than_the_limit)
+        # includes them.
+        nodes = _runner_nodes(self.models["ci.yml"], _WorstCase({"github.event_name": "push"}))
+        self.assertEqual(nodes["after-merge-mutations"][0], 3)
+        target = _runner_nodes(self.models["build-publish.yml"], _WorstCase(
+            {"github.event_name": "workflow_dispatch", "github.ref": "refs/heads/main"}))
+        self.assertEqual(target["release-target-mutations"][0], 3)
+
     def test_a_matrix_without_max_parallel_fails(self) -> None:
         model = {"jobs": {"tests": {"runs-on": "ubuntu-latest", "strategy": {"matrix": {"shard": "x"}}}}}
         with self.assertRaises(AssertionError):
@@ -1801,13 +1842,20 @@ class RunnerLimitTest(unittest.TestCase):
 
     def test_every_shard_matrix_is_bounded_and_tied_to_the_planner_ceiling(self) -> None:
         count = 0
+        legs_seen = []
         for name, model in self.models.items():
             for job_name, job in _jobs(model).items():
                 if "matrix" in job.get("strategy", {}):
+                    if job_name.endswith("-mutations"):
+                        # CI2d D4: a literal list of legs, all allowed at once and counted
+                        # as such by _runner_nodes; the peak test proves the limit.
+                        legs_seen.append(job["strategy"]["matrix"]["shard"])
+                        continue
                     count += 1
                     with self.subTest(workflow=name, job=job_name):
                         self.assertEqual(job["strategy"]["max-parallel"], ci.TEST_MAX_PARALLEL)
         self.assertEqual(count, 1)
+        self.assertEqual(legs_seen, [[0, 1, 2]] * 2)
         # The model does not import the planner: this test ties the two numbers.
         self.assertLessEqual(ci.TEST_MAX_PARALLEL, shards.CI_MAX_SHARDS)
         # Option B (CI3 O1): the planner plans no more shards than may run.

@@ -1217,6 +1217,87 @@ class MainCheckTest(unittest.TestCase):
         completed = self.repo.run("main-check-that-an-old-runner-does-not-know", "tests.test_pass")
         self.assertEqual(completed.returncode, 2)
 
+    TWO_CLASSES = """
+        import unittest
+
+        class A(unittest.TestCase):
+            def test_a(self): pass
+            def test_b(self): pass
+
+        class B(unittest.TestCase):
+            def test_c(self): pass
+            def test_d(self): pass
+    """
+
+    def leg(self, index, of, module: str | None = None) -> subprocess.CompletedProcess:
+        return self.repo.run("main-check", module or self.MODULE, "--shard", str(index), "--of", str(of),
+                             "--results-dir", str(self.repo.results()))
+
+    def test_the_legs_of_one_module_cover_its_ids_exactly_once(self) -> None:
+        self.write(self.TWO_CLASSES)
+        def planned(shards: int) -> list[list[str]]:
+            output = self.repo.results() / f"plan-{shards}.json"
+            completed = self.repo.run("plan", self.MODULE, "--profile", "ci", "--shards", str(shards),
+                                      "--output", str(output))
+            self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+            return [shard["test_ids"] for shard in json.loads(output.read_text())["shards"]]
+
+        legs, whole = planned(2), planned(1)
+        self.assertEqual(len(legs), 2)
+        self.assertTrue(all(legs), "no leg is empty")
+        self.assertEqual(sorted(sum(legs, [])), sorted(whole[0]))
+        self.assertEqual(len(set(legs[0]) & set(legs[1])), 0)
+
+    def test_each_leg_runs_only_its_own_tests_and_all_pass(self) -> None:
+        self.write(self.TWO_CLASSES)
+        counts = []
+        for index in (0, 1):
+            completed = self.leg(index, 2)
+            self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+            self.assertIn(f"(leg {index} of 2)", completed.stdout)
+            counts.append(int(completed.stdout.split(": ")[1].split(" tests")[0]))
+        self.assertEqual(sum(counts), 4)
+        self.assertTrue(all(counts))
+
+    def test_a_failing_test_fails_its_own_leg_only(self) -> None:
+        self.write(self.TWO_CLASSES.replace("def test_c(self): pass", "def test_c(self): self.fail('x')"))
+        statuses = sorted(self.leg(index, 2).returncode for index in (0, 1))
+        self.assertEqual(statuses, [0, 1])
+
+    def test_a_skipped_test_fails_its_own_leg_only(self) -> None:
+        self.write(self.TWO_CLASSES.replace("def test_c(self): pass", "def test_c(self): self.skipTest('x')"))
+        results = [self.leg(index, 2) for index in (0, 1)]
+        self.assertEqual(sorted(r.returncode != 0 for r in results), [False, True])
+        failing = next(r for r in results if r.returncode != 0)
+        self.assertIn("skipped: tests.test_catalogue_determinism.B.test_c", failing.stderr)
+
+    def test_more_legs_than_the_module_can_fill_fails_closed(self) -> None:
+        self.write(self.TWO_CLASSES.split("class B")[0])
+        completed = self.leg(0, 3)
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn("not the 3 legs asked for", completed.stderr)
+
+    def test_one_flag_without_the_other_is_refused(self) -> None:
+        self.write(self.TWO_CLASSES)
+        for flags in (["--shard", "0"], ["--of", "2"]):
+            completed = self.repo.run("main-check", self.MODULE, *flags,
+                                      "--results-dir", str(self.repo.results()))
+            self.assertEqual(completed.returncode, 2, flags)
+            self.assertIn("give both or neither", completed.stderr)
+
+    def test_an_index_outside_the_legs_is_refused(self) -> None:
+        self.write(self.TWO_CLASSES)
+        for index, of in ((2, 2), (-1, 2), (0, 0)):
+            completed = self.leg(index, of)
+            self.assertEqual(completed.returncode, 2, (index, of))
+            self.assertIn("run_tests: error:", completed.stderr)
+
+    def test_a_single_leg_of_one_is_today_s_run(self) -> None:
+        self.write(self.TWO_CLASSES)
+        completed = self.leg(0, 1)
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        self.assertIn("4 tests ran", completed.stdout)
+
     def test_the_verdict_function_names_each_way_a_run_cannot_establish_coverage(self) -> None:
         run_tests = _import_run_tests()
         ids = ["m.T.a", "m.T.b"]

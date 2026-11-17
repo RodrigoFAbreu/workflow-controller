@@ -111,6 +111,14 @@ jobs:
     needs:
       - release-plan
     if: "!cancelled() && needs.release-plan.result == 'success' && inputs.validate-result == 'success' && github.ref == 'refs/heads/main' && (needs.release-plan.outputs.state == 'RELEASE_DUE' || needs.release-plan.outputs.state == 'RESUME') && needs.release-plan.outputs.commit != github.sha"
+    name: "release-target-mutations (${{ matrix.shard }})"
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - 0
+          - 1
+          - 2
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -128,7 +136,7 @@ jobs:
       - name: "allow unprivileged user namespaces"
         run: "if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0; fi"
       - name: mutations
-        run: "python3 tools/run_tests.py main-check tests.test_scenarios_negative"
+        run: "python3 tools/run_tests.py main-check tests.test_scenarios_negative --shard ${{ matrix.shard }} --of 3"
   build:
     needs:
       - release-plan

@@ -163,6 +163,15 @@ assert set(MAIN_TEST_MODULES.values()) == {module for module, (where, _) in
                                            test_shards.CI_PLACEMENT.items()
                                            if where == test_shards.MAIN}
 
+#: How many legs each after-merge check runs in (CI2d D4/D5): ``main-check``
+#: plans the module into that many shards and each leg runs one, so a matrix of
+#: legs is one job id (``needs.<id>.result`` is ``success`` only when every leg
+#: succeeded) and the release gate and ``build-publish.yml``'s inputs are
+#: unchanged. The determinism check compares two runs inside one test and is
+#: not split here.
+MAIN_CHECK_LEGS = {"determinism": 1, "mutations": 3}
+assert set(MAIN_CHECK_LEGS) == set(MAIN_TEST_MODULES)
+
 #: The ``tests`` jobs' planning inputs. ``plan`` and every shard job pass
 #: exactly these, so a digest match proves they computed the same plan.
 PLANNING_ARGS = "--profile ci --ci-placement"
@@ -650,8 +659,12 @@ def _main_check_job(check: str, *, release_target: bool, condition: str | None =
     (the commit ``release-plan`` selected, only when that is an ancestor and
     the run publishes). Both run ``run_tests.py main-check``, which fails when
     the module's selection is empty or short, or any test was skipped. The
-    steps are the ``tests`` job's, ``ALLOW_USERNS`` included."""
+    steps are the ``tests`` job's, ``ALLOW_USERNS`` included. A check with
+    more than one leg (``MAIN_CHECK_LEGS``) is a matrix of ``--shard I --of N``
+    runs under the same job id; a leg that fails fails the job."""
     module = MAIN_TEST_MODULES[check]
+    legs = MAIN_CHECK_LEGS[check]
+    command = f"python3 tools/run_tests.py main-check {module}"
     job: dict = {}
     if condition is not None:
         job["needs"] = ["validate"]
@@ -662,6 +675,12 @@ def _main_check_job(check: str, *, release_target: bool, condition: str | None =
             "if": f"{_after('release-plan')} && {VALIDATED} && {_publishing_condition()} "
                   f"&& {TARGET_IS_ANCESTOR}",
         })
+    if legs > 1:
+        prefix = "release-target" if release_target else "after-merge"
+        job["name"] = f"{prefix}-{check} (${{{{ matrix.shard }}}})"
+        job["strategy"] = {"fail-fast": False,
+                           "matrix": {"shard": list(range(legs))}}
+        command += f" --shard ${{{{ matrix.shard }}}} --of {legs}"
     job.update({
         "runs-on": RUNNER,
         "permissions": {"contents": "read"},
@@ -672,7 +691,7 @@ def _main_check_job(check: str, *, release_target: bool, condition: str | None =
             _setup_python(pinned=True),
             _install_editable(),
             {"name": "allow unprivileged user namespaces", "run": ALLOW_USERNS},
-            {"name": check, "run": f"python3 tools/run_tests.py main-check {module}"},
+            {"name": check, "run": command},
         ],
     })
     return job

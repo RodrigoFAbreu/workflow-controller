@@ -40,9 +40,10 @@ Building blocks (used by the local runner and by CI):
   a failure's evidence can be downloaded from; ``--upstream-result`` fails
   a run whose current-attempt ``plan`` or ``tests`` job did not succeed;
   ``--write-selected`` copies the plan and the selected records, flat);
-- ``main-check MODULE``: run one module the CI placement moved to ``main.yml``
-  (``test_shards.MAIN``) as one shard, and exit non-zero unless every test the
-  inventory holds for it ran, none was skipped, and all passed, so an empty,
+- ``main-check MODULE [--shard I --of N]``: run one module the CI placement
+  moved to ``main.yml`` (``test_shards.MAIN``) as one shard, or as leg ``I`` of
+  ``N`` planned legs, and exit non-zero unless every test the inventory holds
+  for it (for that leg) ran, none was skipped, and all passed, so an empty,
   short or skipped run cannot establish coverage (``main.yml``'s
   ``after-merge-*`` and ``release-target-*`` jobs);
 - ``timings merge --into FILE DIR...``: fold results into a timing profile,
@@ -649,27 +650,44 @@ def cmd_main_check(args) -> int:
     placed = ts.CI_PLACEMENT.get(args.module)
     if placed is None or placed[0] != ts.MAIN:
         return _error(f"{args.module} is not placed in main.yml (test_shards.CI_PLACEMENT)")
-    plan, inventory, _ = compute_plan(repo_root, ts.CI, [args.module], shards=1,
+    if (args.shard is None) != (args.of is None):
+        return _error("--shard and --of go together: give both or neither")
+    legs = 1 if args.of is None else args.of
+    leg = 0 if args.shard is None else args.shard
+    if legs < 1:
+        return _error(f"--of must be at least 1, not {legs}")
+    if not 0 <= leg < legs:
+        return _error(f"--shard must be in 0..{legs - 1}, not {leg}")
+    plan, inventory, _ = compute_plan(repo_root, ts.CI, [args.module], shards=legs,
                                       conformance_lane=False)
-    expected = list(inventory.select([args.module]).test_ids)
+    if plan["shard_count"] != legs:
+        return _error(f"{args.module} planned into {plan['shard_count']} shards, "
+                      f"not the {legs} legs asked for")
+    # One leg expects exactly its own planned ids; the legs of one plan are
+    # disjoint and together hold the module's inventory (planning is a pure
+    # function of the checkout and the committed timings, so each leg's own
+    # computation agrees with its siblings').
+    expected = list(plan["shards"][leg]["test_ids"]) if args.of is not None \
+        else list(inventory.select([args.module]).test_ids)
+    label = args.module if args.of is None else f"{args.module} (leg {leg} of {legs})"
     signal.signal(signal.SIGINT, signal.SIG_DFL)
     sys.path[0] = str(repo_root)
     os.chdir(repo_root)
     results_dir = args.results_dir or Path(tempfile.mkdtemp(prefix="main-check-"))
     results_dir.mkdir(parents=True, exist_ok=True)
     _write_plan(results_dir / "plan.json", plan)
-    inherited = os.environ.get(ts.SHARD_MARKER_ENV) or f"{plan['plan_digest'][:16]}/0"
+    inherited = os.environ.get(ts.SHARD_MARKER_ENV) or f"{plan['plan_digest'][:16]}/{leg}"
     os.environ[ts.SHARD_MARKER_ENV] = f"{inherited}/{os.getpid()}"
-    record, status = ts.execute_shard(plan, 0, results_dir, repo_root,
+    record, status = ts.execute_shard(plan, leg, results_dir, repo_root,
                                       argv=[sys.executable, *sys.argv])
     if status != ts.EXIT_PASS:
         sys.stderr.write(ts.shard_verdict(record, status, results_dir))
     problems = executed_problems(expected, record, status)
     if problems:
         for problem in problems:
-            print(f"main-check {args.module}: {problem}", file=sys.stderr)
+            print(f"main-check {label}: {problem}", file=sys.stderr)
         return status if status != ts.EXIT_PASS else ts.EXIT_FAIL
-    print(f"main-check {args.module}: {len(expected)} tests ran, none skipped, all passed")
+    print(f"main-check {label}: {len(expected)} tests ran, none skipped, all passed")
     return ts.EXIT_PASS
 
 
@@ -723,6 +741,10 @@ def _main_check_parser() -> argparse.ArgumentParser:
         description="Run a module placed in main.yml and fail unless all of it ran and passed.")
     parser.add_argument("module", help="a module in test_shards.CI_PLACEMENT placed as 'main'")
     parser.add_argument("--results-dir", type=Path, help="default: a fresh temporary directory")
+    parser.add_argument("--shard", type=int, metavar="I",
+                        help="run leg I (0-based) of the module planned into --of legs")
+    parser.add_argument("--of", type=int, metavar="N",
+                        help="the number of legs the module is planned into (with --shard)")
     _add_repo_root(parser)
     return parser
 

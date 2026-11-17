@@ -709,8 +709,8 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-ci2c` (CI2c: fixture snapshot reuse), implementation revision 1 (technical approval by policy `e13ac0e`), plan
-`docs/ai-workflow/CONTROLLER_CI2C_PLAN.md` (revision 2), base commit `04ad545`. Four checkpoints, all complete: CP1 (snapshot outcome counters and
+Item `workflow-controller-ci2c` (CI2c: fixture snapshot reuse), implementation revision 3 (technical approval by policy `e744898`), plan
+`docs/ai-workflow/CONTROLLER_CI2C_PLAN.md` (revision 3), base commit `04ad545`. Revision 3 follows the red pull request: `AdoptedPolicyLoopTest` is now `SHARE_SNAPSHOT = False` (flow 7). Four checkpoints, all complete: CP1 (snapshot outcome counters and
 `WFC_SNAPSHOT_REPORT`), CP2 (a snapshot key holds what the drive reads: `late` parts and the `life.late` guard), CP3 (the review case reaches
 `to_manual_plan_review` once per process) and CP4 (the figures, the pages and the CI2f/CI2g split). A `ci:` change that edits tests, test helpers and pages
 only; it publishes no release.
@@ -748,6 +748,10 @@ Read the snapshot part of `docs/guide/development.md`, then run `python3 -B tool
 `python3 -B tools/run_tests.py tests.test_docs tests.test_plan_document_consistency; echo rc=$?`, `python3 -B scripts/workflow_backlog.py check; echo rc=$?` and
 `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-ci2c; echo rc=$?`.
 Expected: the guide describes the counters, the `late` keying and the review case; every `rc=0`; `# Test run: PASS`; `preflight-accept` `"ok": true`.
+
+**Flow 7: the lowered-policy class stays out of the shared snapshot (revision 3).**
+Run `grep -n "SHARE_SNAPSHOT" tests/test_review_same_provider.py`, then `python3 -B tools/run_tests.py tests.test_review_same_provider; echo rc=$?`, and read the CP3 bullet of `docs/items/workflow-controller-ci2c.md`.
+Expected: `AdoptedPolicyLoopTest` sets `SHARE_SNAPSHOT = False` with the comment naming the policy the key does not carry; `# Test run: PASS`, `rc=0` (including `DefaultPolicyRefusalTest`); the page names the class, the cause and that CI found it.
 
 **Known limitations / out of scope.** The gain of CP2 is small, because each shard process builds a row once whatever the key: the saving needs the tests that
 share a row on one shard (CI2g). Process starts per lifecycle step are CI2f. The figures are from this machine, one run each; the saving on a pull request is

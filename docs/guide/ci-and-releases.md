@@ -66,9 +66,9 @@ Python 3.12 and read-only permissions (`tests-result` also has
   their count and the plan's digest, and it uploads `plan.json`;
 - `tests`: (only when `code` is `true`) one matrix job per planned shard (`fail-fast: false`). Each
   recomputes the plan from the checked-out commit, refuses to run unless
-  its digest equals `plan`'s, runs its shard (its Controller tests and,
-  beside them in a second process, its Workflow conformance suites in a local
-  run only, since CI2b; see [How a shard runs](#how-a-shard-runs)) and uploads its result
+  its digest equals `plan`'s, runs its shard (its Controller tests; since CI2b
+  a CI shard holds no Workflow conformance suites, which only a local shard runs
+  beside its Controller tests, see [How a shard runs](#how-a-shard-runs)) and uploads its result
   record and log as the `results-<i>-attempt-<a>` artifact, where `<a>`
   is the run attempt (`github.run_attempt`), also written into the
   record. A shard that does not pass, or that leaked a process, fails its

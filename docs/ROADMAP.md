@@ -100,7 +100,7 @@
 | 94 | [Align CI with the agreed standard: CI, Tests and Build and publish](items/workflow-controller-ci3.md) `workflow-controller-ci3` | Done | - | - |
 | 95 | [CI: fresh shard timings, a measured contention estimate and the CI1b review follow-ups (#317, #324)](items/workflow-controller-ci2.md) `workflow-controller-ci2` | Done | - | - |
 | 96 | [CI: run each test once, the duplicate-run removal (#317)](items/workflow-controller-ci2b.md) `workflow-controller-ci2b` | Done | - | workflow-controller-ci2 |
-| 97 | [CI: fixture snapshot reuse (#317)](items/workflow-controller-ci2c.md) `workflow-controller-ci2c` | Next | - | workflow-controller-ci2 |
+| 97 | [CI: fixture snapshot reuse (#317)](items/workflow-controller-ci2c.md) `workflow-controller-ci2c` | Done | - | workflow-controller-ci2 |
 | 98 | [CI: after-merge and trigger policy, and the automated timings refresh (#317)](items/workflow-controller-ci2d.md) `workflow-controller-ci2d` | Next | - | workflow-controller-ci2 |
 | 99 | [CI: a runtime check replacing the static repo-reach heuristic (#322)](items/workflow-controller-ci2e.md) `workflow-controller-ci2e` | Next | - | workflow-controller-ci2 |
 | 100 | [CI: process starts per lifecycle step (#317)](items/workflow-controller-ci2f.md) `workflow-controller-ci2f` | Next | - | workflow-controller-ci2 |

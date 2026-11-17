@@ -566,7 +566,7 @@ items:
     detail: docs/items/workflow-controller-ci2b.md
   - id: workflow-controller-ci2c
     title: "CI: fixture snapshot reuse (#317)"
-    status: next
+    status: done
     order: 97
     depends_on: [workflow-controller-ci2]
     detail: docs/items/workflow-controller-ci2c.md

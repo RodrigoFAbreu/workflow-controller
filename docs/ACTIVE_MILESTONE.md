@@ -690,57 +690,51 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-ci3` (CI3), implementation revision 1, plan `docs/ai-workflow/CONTROLLER_CI3_PLAN.md` (revision 3), base commit
-`3166305`. Four checkpoints, all complete: CP1 (the reusable test workflow is `tests.yml`, workflow name `Tests`), CP2 (`build-publish.yml` only builds
-and publishes), CP3 (the six-runner limit, shard cap three, and its proof) and CP4 (the pages and the item record).
+Item `workflow-controller-ci2` (CI2), implementation revision 1, plan `docs/ai-workflow/CONTROLLER_CI2_PLAN.md` (revision 12), base commit
+`a785d4f`. Three checkpoints, all complete: CP1 (refreshed `tools/test_timings.json`, the staleness ratchet and the `PlanRegenerationTest` split), CP2 (the
+acceptance-matrix contention measured at the shard; no `CONFORMANCE_CONTENTION` constant) and CP3 (the guides, the item pages and the backlog split into
+`ci2b` to `ci2e`), plus the self-review fixes.
 Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the
 system directories, and no write inside the read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write only
 to the scratch `TMPDIR`. No flow needs a pull request or a forge call, and none runs the full suite.
 
 Setup: `export TMPDIR=$(mktemp -d)`. No data to seed.
 
-**Flow 1: the workflow files and the generated models.**
-Run `ls .github/workflows` and `python3 -B tools/ci_workflows.py --check; echo rc=$?`.
-Expected: `tests.yml` exists and `validate.yml` does not; the other files are `build-publish.yml`, `ci.yml`, `main-reuse-report.yml`, `pr-title.yml` and
-`workflow-conformance.yml`; `--check` reports the committed files match the models, `rc=0`.
+**Flow 1: the refreshed timings and the ratchet.**
+Run `python3 -B tools/run_tests.py tests.test_test_shards; echo rc=$?`.
+Expected: `# Test run: PASS`, exact coverage, `rc=0`; a `namespace: none` line is expected in this sandbox. `CommittedTimingsTest` and
+`SplitHistoricalAtomsTest` are among the classes run. `MAX_UNTIMED_TEST_SHARE` is 0.20 (`grep -n "MAX_UNTIMED_TEST_SHARE =" tests/test_test_shards.py`).
 
-**Flow 2: the names.**
-Run `grep -n "^name:" .github/workflows/tests.yml .github/workflows/ci.yml .github/workflows/build-publish.yml` and `grep -n "validate:\|uses:" .github/workflows/ci.yml`.
-Expected: `tests.yml` is named `Tests`; `ci.yml`'s calling job keeps the id `validate` (so the five required check names are unchanged) and calls
-`./.github/workflows/tests.yml`.
+**Flow 2: the split class.**
+Run `python3 -B tools/run_tests.py tests.test_codex_apply_regeneration; echo rc=$?` and `grep -n "^class .*Regeneration\|^class RegenerationGate\|^class RegenerationRecord" tests/test_codex_apply_regeneration.py`.
+Expected: `PASS`, `rc=0`; `PlanRegenerationTest` and `PlanRegenerationRecordTest` (five tests each, through the mixins `RegenerationGate` and
+`RegenerationRecord`) and `ImplRegenerationTest` (its twelve) exist; the ten original plan tests are all still run.
 
-**Flow 3: build and publish only builds and publishes.**
-Run `grep -n "^  [a-z-]*:$" .github/workflows/build-publish.yml` and `grep -n "validate-result\|concurrency\|group:" .github/workflows/build-publish.yml`.
-Expected: no `validate`, `after-merge-determinism` or `after-merge-mutations` job in `build-publish.yml`; `build`, `publish` and the `release-target-*`
-jobs carry `inputs.validate-result == 'success'`; the concurrency group is `build-publish-<run id>`; `ci.yml`'s `build-publish` call grants `contents: write` alone.
+**Flow 3: the planner is unchanged.**
+Run `git diff --stat a785d4f HEAD -- tools/test_shards.py tools/run_tests.py; echo rc=$?` and `grep -n "LANE_CONTENTION\|CONFORMANCE_CONTENTION" tools/test_shards.py`.
+Expected: no diff for the two tools; `LANE_CONTENTION = 1.15` present, no `CONFORMANCE_CONTENTION`.
 
-**Flow 4: the six-runner limit and the shard cap.**
-Run `grep -n "RUNNER_LIMIT\|TEST_MAX_PARALLEL" tools/ci_workflows.py | head`, `grep -n "CI_MAX_SHARDS" tools/test_shards.py | head -3` and
-`grep -n "max-parallel" .github/workflows/tests.yml`.
-Expected: `RUNNER_LIMIT = 6`, `TEST_MAX_PARALLEL = 3`, `CI_MAX_SHARDS = 3`; `max-parallel` is set on the shard matrix in `tests.yml`; `ci.yml`'s two `after-merge-*`
-jobs wait for `validate`.
+**Flow 4: the item pages.**
+Read `docs/items/workflow-controller-ci2.md` and the head of `docs/items/workflow-controller-ci2b.md` to `ci2e.md`.
+Expected: the ci2 page is retitled to this slice; it records the measured ratios (matrix shard 0.69, 1.08, 1.07; the others between 0.85 and 1.18), the
+base plan rescored (4,092.6 s longest over a 3,488.5 s mean against 3,493.9 s, a predicted gain of 598.7 s), the elapsed CI time (PR #373 run 44062553881,
+55 min 41 s against 57 min 12 s, 65 min 16 s and 64 min 40 s) and the statement that no matrix-specific factor is justified; each of ci2b to ci2e is one
+page naming its scope items and sources.
 
-**Flow 5: the proofs.**
-Run `python3 -B tools/run_tests.py tests.test_ci_workflows tests.test_ci_changes tests.test_ci_reuse tests.test_test_shards tests.test_package_structure; echo rc=$?`.
-Expected: `# Test run: PASS`, exact coverage, `rc=0`. A `namespace: none` line is expected in this sandbox. Look for `RunnerLimitTest` in `tests.test_ci_workflows`
-(the flattened job graph never exceeds six concurrent runners for any event or `CI_MAIN_REUSE` mode).
+**Flow 5: the guides.**
+Read the staleness-ratchet part of `docs/guide/development.md` and the refresh of 2026-11-17 in `docs/guide/ci-and-releases.md`.
+Expected: the ratchet, the D4 rule parts, "blends" and "a base without test methods" are described; the Controller lane is stated as the longer one at three
+shards and the 1.15 rule as unchanged.
 
-**Flow 6: the pages and the item record.**
-Read `docs/guide/ci-and-releases.md` ("The six-runner limit", the manual publish route as a CI dispatch from `main`, the release latency) and
-`docs/items/workflow-controller-ci3.md`.
-Expected: the guide describes `tests.yml`, the six-runner limit with its mutable-ref assumption about `docs-tests`, and the push-to-`main` after-merge checks
-waiting for `validate`; `docs/guide/development.md` states the shard ceiling of three; the item page records the status, the owner's choice of option B for
-O1, what was done and the measured run (PR #370's `CI` run 43844429224, 63.6 minutes).
-
-**Flow 7: the docs checks.**
+**Flow 6: backlog and docs checks.**
 Run `python3 -B tools/run_tests.py tests.test_docs tests.test_plan_document_consistency; echo rc=$?`, `python3 -B tools/check_docs.py; echo rc=$?`,
-`python3 -B scripts/workflow_backlog.py check; echo rc=$?` and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-ci3; echo rc=$?`.
-Expected: `# Test run: PASS`, exact coverage, every `rc=0`, `preflight-accept` `"ok": true`.
+`python3 -B scripts/workflow_backlog.py check; echo rc=$?`, and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-ci2; echo rc=$?`.
+Expected: `# Test run: PASS`, exact coverage, every `rc=0`, `preflight-accept` `"ok": true`; `docs/backlog.yaml` lists `ci2b` to `ci2e` right after `ci2`.
 
-**Known limitations / out of scope.** The workflows run only on GitHub; the sandbox has no forge, so a real `CI` run, a real release and the six-runner limit
-under load are not flows (the model-level proof in Flow 5 and the recorded run in the item page stand in). The full suite is CI's on the pull request; the
-self-review run's six failures (three `tests.test_fake_codex_contract` cases from the operator's `~/.codex/config.toml`, and `tests.test_job_codex_review`,
-`tests.test_codex_worker`, `tests.test_job_codex_worker` timing under load, which pass alone) are in code this item does not touch and are not flows.
+**Known limitations / out of scope.** The workflows run only on GitHub; the sandbox has no forge, so the real CI timing comparison is read from the item
+page, not re-run. The full suite is CI's on the pull request; the self-review run's five failures (three `tests.test_fake_codex_contract` cases from the
+operator's `~/.codex/config.toml`, and `tests.test_codex_worker` and `tests.test_job_codex_apply` under load, which pass alone) are in code this item does
+not touch and are not flows. No `CONFORMANCE_CONTENTION` factor is added; `ci2b` to `ci2e` are later slices.
 
 ## Next action
 

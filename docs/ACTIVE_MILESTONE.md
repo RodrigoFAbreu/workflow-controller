@@ -1,5 +1,11 @@
 # Active Milestone
 
+## Current milestone (CI2c)
+
+**In progress: implementing.** Plan `docs/ai-workflow/CONTROLLER_CI2C_PLAN.md` (revision 2), four checkpoints; it shares fixture snapshots across the tests that reach the same row.
+
+- **CP1 complete (verified state).** `tests/fixtures.py` counts the outcome of every `take_snapshot` (`built`, `already_kept`, `unkept`) and `restore_snapshot` (`restored`, `missing`, `in_use`, `copy_failed`) call by row name (`snapshot_counts()`), `Lifecycle.reach` adds `kit_drove`, and `WFC_SNAPSHOT_REPORT` makes an `atexit` hook append one JSON line per process (off by default). `tests/test_shared_snapshot.py` has `CountersTest`. Baseline, from one run of `tests.test_protocol_lifecycle`, `tests.test_protocol_job` and `tests.test_functional_codex_route` in 8 shards (counts summed over the shard processes, so `missing`/`built` are larger than the single-process figures of the plan): `to_acceptance` built 11, restored 1; `to_refused_acceptance` built 8, restored 0; `to_plan_gate` built 1, restored 4; `to_38e` built 14, restored 24, in use 4; `kit_drove` 0 (no row counted it). Verified with `tests.test_shared_snapshot`, `tests.test_protocol_lifecycle`, `tests.test_protocol_job`, `tests.test_functional_codex_route`, `tests.test_package_structure`, `tests.test_write_containment` and `tests.test_docs` (all passing, exact coverage).
+
 ## Latest milestone (CI2b)
 
 **Complete: accepted by policy (`MILESTONE_COMPLETE`).** Accepted after the functional review passed (PR #375, checks green at the approved head). Plan `docs/ai-workflow/CONTROLLER_CI2B_PLAN.md` (revision 2), three checkpoints; it runs each test once on a pull request: the nine frozen conformance suites (CP1) and the four functional flows (CP2) leave the shard matrix through the committed CI placement.

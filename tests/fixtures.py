@@ -919,6 +919,47 @@ def _snapshot_area() -> Path:
     return _SNAPSHOT_AREA
 
 
+#: row name -> outcome -> number of calls (``CI2c`` D1). ``take_snapshot``: ``built``, ``already_kept`` (the key had a
+#: snapshot, the drive after an ``in_use`` refusal) and ``unkept`` (the tree could not be copied).
+#: ``restore_snapshot``: ``restored``, ``missing`` (no snapshot yet, the first life of a row), ``in_use`` (the path
+#: is taken) and ``copy_failed``. ``Lifecycle.reach`` adds ``kit_drove``. Read-only reporting: no decision reads it.
+_SNAPSHOT_COUNTS: dict[str, dict[str, int]] = {}
+_REPORT_VARIABLE = "WFC_SNAPSHOT_REPORT"
+_REPORT_HOOKED = False
+
+
+def _row_name(key: object) -> str:
+    """The row a key belongs to: its first element when the key is a ``(name, inputs)`` pair, else the key."""
+    return str(key[0] if isinstance(key, tuple) and key else key)
+
+
+def count_snapshot_outcome(key: object, outcome: str) -> None:
+    row = _SNAPSHOT_COUNTS.setdefault(_row_name(key), {})
+    row[outcome] = row.get(outcome, 0) + 1
+    _hook_snapshot_report()
+
+
+def snapshot_counts() -> dict[str, dict[str, int]]:
+    """A copy of the per-row outcome counts of this process."""
+    return {row: dict(outcomes) for row, outcomes in _SNAPSHOT_COUNTS.items()}
+
+
+def _write_snapshot_report() -> None:
+    target = os.environ.get(_REPORT_VARIABLE)
+    if not target or not _SNAPSHOT_COUNTS:
+        return
+    line = json.dumps({"pid": os.getpid(), "counts": snapshot_counts()}, sort_keys=True)
+    with open(target, "a", encoding="utf-8") as handle:
+        handle.write(line + "\n")
+
+
+def _hook_snapshot_report() -> None:
+    global _REPORT_HOOKED
+    if not _REPORT_HOOKED and os.environ.get(_REPORT_VARIABLE):
+        _REPORT_HOOKED = True
+        atexit.register(_write_snapshot_report)
+
+
 def has_snapshot(key: object) -> bool:
     return _SNAPSHOTS.get(key) is not None
 
@@ -928,6 +969,7 @@ def take_snapshot(key: object, built_at: Path, state: dict) -> bool:
     :func:`restore_snapshot` can give a later test the same tree without building it again. The first taker of a
     key wins. Never raises: a tree that cannot be copied just means every later test builds its own."""
     if key in _SNAPSHOTS:
+        count_snapshot_outcome(key, "already_kept")
         return False
     try:
         import tempfile
@@ -936,7 +978,9 @@ def take_snapshot(key: object, built_at: Path, state: dict) -> bool:
         _SNAPSHOTS[key] = (target, built_at, copy.deepcopy(state))
     except (OSError, shutil.Error):
         _SNAPSHOTS[key] = None
+        count_snapshot_outcome(key, "unkept")
         return False
+    count_snapshot_outcome(key, "built")
     return True
 
 
@@ -947,17 +991,21 @@ def restore_snapshot(key: object) -> tuple[Path, dict] | None:
     copy fails; the caller then builds fresh. The caller removes the returned path when its test ends."""
     kept = _SNAPSHOTS.get(key)
     if kept is None:
+        count_snapshot_outcome(key, "missing")
         return None
     source, built_at, state = kept
     try:
         built_at.mkdir()  # not ``exist_ok``: a path in use is never overwritten
     except OSError:
+        count_snapshot_outcome(key, "in_use")
         return None
     try:
         shutil.copytree(source, built_at, symlinks=True, dirs_exist_ok=True)
     except (OSError, shutil.Error):
         shutil.rmtree(built_at, ignore_errors=True)
+        count_snapshot_outcome(key, "copy_failed")
         return None
+    count_snapshot_outcome(key, "restored")
     return built_at, copy.deepcopy(state)
 
 

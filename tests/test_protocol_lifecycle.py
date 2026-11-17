@@ -300,6 +300,8 @@ class Lifecycle:
         kit, whose isolation boundary this does not change."""
         key = (name, self.snapshot_inputs())
         kit = getattr(self.test, "stub_dir", None) is not None
+        if kit:
+            fixtures.count_snapshot_outcome(key, "kit_drove")
         restored = None if kit else fixtures.restore_snapshot(key)
         if restored is not None:
             td, state = restored

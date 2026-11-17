@@ -173,5 +173,76 @@ class FreshBuildTest(SnapshotCase):
         self.assertIn(f"worktree_root: {copy.root}", manifest)
 
 
+class CountersTest(SnapshotCase):
+    """``CI2c`` D1: every outcome of a snapshot call is counted once, by row name; the report is opt-in."""
+
+    def counts(self, name: str) -> dict[str, int]:
+        return fixtures.snapshot_counts().get(name, {})
+
+    def test_a_built_a_missing_and_a_restored_row_are_each_counted_once(self) -> None:
+        name = self.key()
+        first = self.built(name)
+        self.assertEqual(self.counts(name), {"missing": 1, "built": 1})
+        self.release(first)
+        lifecycle.GateLifecycle(self).reach(name, lambda: self.fail("must restore"))
+        self.assertEqual(self.counts(name), {"missing": 1, "built": 1, "restored": 1})
+
+    def test_a_path_in_use_and_the_drive_after_it_are_counted(self) -> None:
+        name = self.key()
+        self.release(self.built(name))
+        lifecycle.GateLifecycle(self).reach(name, lambda: self.fail("must restore"))
+        third = lifecycle.GateLifecycle(self)
+        third.reach(name, lambda: None)
+        self.assertEqual(self.counts(name), {"missing": 1, "built": 1, "restored": 1, "in_use": 1, "already_kept": 1})
+
+    def test_a_failed_copy_is_counted_on_restore_and_on_take(self) -> None:
+        name = self.key()
+        self.release(self.built(name))
+        second = lifecycle.GateLifecycle(self)
+        with mock.patch.object(fixtures.shutil, "copytree", side_effect=OSError("disk full")):
+            second.reach(name, lambda: None)
+        self.assertEqual(self.counts(name), {"missing": 1, "built": 1, "copy_failed": 1, "already_kept": 1})
+        other = self.key()
+        with mock.patch.object(fixtures.shutil, "copytree", side_effect=OSError("disk full")):
+            lifecycle.GateLifecycle(self).reach(other, lambda: None)
+        self.assertEqual(self.counts(other), {"missing": 1, "unkept": 1})
+
+    def test_a_kit_drive_is_counted_and_nothing_else(self) -> None:
+        name = self.key()
+        self.stub_dir = "/nonexistent"
+        self.addCleanup(delattr, self, "stub_dir")
+        lifecycle.GateLifecycle(self).reach(name, lambda: None)
+        self.assertEqual(self.counts(name), {"kit_drove": 1})
+
+    def test_the_counts_are_keyed_by_the_row_name_and_are_a_copy(self) -> None:
+        one, two = self.key(), self.key()
+        self.built(one)
+        self.built(two)
+        self.assertEqual(self.counts(one), self.counts(two))
+        fixtures.snapshot_counts()[one]["built"] = 99
+        self.assertEqual(self.counts(one)["built"], 1)
+
+    def test_the_report_gets_one_json_line_and_nothing_is_written_with_the_variable_unset(self) -> None:
+        import json
+        import os
+        import tempfile
+        name = self.key()
+        self.built(name)
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "report.jsonl"
+            with mock.patch.dict(os.environ, {fixtures._REPORT_VARIABLE: str(target)}):
+                fixtures._write_snapshot_report()
+            lines = target.read_text().splitlines()
+            self.assertEqual(len(lines), 1)
+            record = json.loads(lines[0])
+            self.assertEqual(record["pid"], os.getpid())
+            self.assertEqual(record["counts"][name], {"missing": 1, "built": 1})
+            env = {k: v for k, v in os.environ.items() if k != fixtures._REPORT_VARIABLE}
+            with mock.patch.dict(os.environ, env, clear=True):
+                fixtures._write_snapshot_report()
+            self.assertEqual(len(target.read_text().splitlines()), 1)
+            self.assertEqual(sorted(p.name for p in Path(td).iterdir()), ["report.jsonl"])
+
+
 if __name__ == "__main__":
     unittest.main()

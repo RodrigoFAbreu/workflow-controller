@@ -405,7 +405,8 @@ class DraftDetectTests(unittest.TestCase):
     def test_a_missing_draft_key_and_a_non_draft_run_everything(self):
         self.merge(_state(old="MILESTONE_COMPLETE", new="PLANNING"), extra={"tools/x.py": "x = 2\n"})
         for payload in ({}, {"pull_request": {}}, {"pull_request": {"draft": False}}, "not json",
-                        {"pull_request": {"draft": "true"}}):
+                        {"pull_request": {"draft": "true"}}, {"pull_request": "draft"},
+                        {"pull_request": ["draft"]}, {"pull_request": None}):
             with self.subTest(payload=payload):
                 self.assertEqual(self.decide(payload)[0], "true")
 

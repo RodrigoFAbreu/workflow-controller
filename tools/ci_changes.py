@@ -304,7 +304,8 @@ def detect(env: dict[str, str] | None = None, cwd: Path | None = None,
         return _detect_push(env, cwd, git)
     if event != "pull_request":
         return "true", f"event {event or '(unset)'!r} is not a pull request or a push: everything runs"
-    draft = (read_event(env).get("pull_request") or {}).get("draft") is True
+    pull_request = read_event(env).get("pull_request")
+    draft = isinstance(pull_request, dict) and pull_request.get("draft") is True
     if draft:
         try:
             item = review_bound_item(cwd, git)

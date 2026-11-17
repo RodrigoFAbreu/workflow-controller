@@ -78,7 +78,7 @@
       "tests/test_protocol_job.py": "the deliverable: the snapshot helpers, their tests or the operator page this item edits",
       "tests/test_functional_codex_route.py": "the deliverable: the snapshot helpers, their tests or the operator page this item edits",
       "tests/test_review_job.py": "the deliverable: the snapshot helpers, their tests or the operator page this item edits",
-  "tests/test_review_same_provider.py": "the deliverable: the snapshot helpers, their tests or the operator page this item edits",
+      "tests/test_review_same_provider.py": "the deliverable: the snapshot helpers, their tests or the operator page this item edits",
       "docs/guide/development.md": "the deliverable: the snapshot helpers, their tests or the operator page this item edits"
     },
     "protected_prefixes": {

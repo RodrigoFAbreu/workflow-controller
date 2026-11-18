@@ -39,11 +39,10 @@ Subcommands:
     runner checkout is disposable, so nothing restores the files; run it
     only in a scratch clone.
 
-The documentation set below is a list of paths that **no test of the
-validation gate reads as input**. ``tests/test_ci_changes.py`` keeps it
-honest: it scans the repository for readers of these paths and fails when a
-module outside the gate reads one, so the set shrinks rather than the gate
-growing (D2).
+The documentation set below is a list of paths that no test the shards run
+needs as input. The ``hide`` step proves it by running (CI2e, #322): the
+shards run with the set absent, so a test that reads one fails there, and the
+path then leaves the set rather than the test leaving the shards (D3).
 """
 
 from __future__ import annotations
@@ -89,51 +88,6 @@ NOT_DOCUMENTATION: tuple[tuple[str, str], ...] = (
     ("docs/milestones/", "milestone narratives the Workflow scripts read"),
     ("README.md", "named by the documentation checks and the workflow tests"),
 )
-
-#: The two test modules of the documentation gate, each with its reason. They
-#: are the only test modules allowed to read a documentation-set path.
-GATE_MODULES: tuple[tuple[str, str], ...] = (
-    ("tests/test_docs.py", "the documentation gate: links, anchors, commands, the harness table"),
-    ("tests/test_backlog.py", "the documentation gate: backlog and roadmap checks on the real files"),
-)
-
-#: The tools the documentation gate itself runs, each with its reason. They
-#: have no candidate under the scan (their paths come from a loop), so they are
-#: named rather than discovered.
-GATE_TOOLS: tuple[tuple[str, str], ...] = (
-    ("tools/check_docs.py", "run by the docs job; reads the page lists of USER_PAGES/COMMAND_PAGES/LINK_GLOBS"),
-    ("scripts/workflow_backlog.py", "run through tests.test_backlog"),
-)
-
-#: Reads that are mentions: a module and a folded path it names without
-#: reading. Kept short; more than ten means the plan is amended (D2).
-MENTIONS: tuple[tuple[str, str, str], ...] = (
-    ("controller/identity.py", "**/*",
-     "hashes every file of a pinned snapshot or a temporary tree (compute_tree_digest); never the checkout's documentation"),
-    ("scripts/workflow_state_test.py", "**/*",
-     "lists a temporary repository's files; the scan reaches a parameter by name, so the name `root` is conflated"),
-    ("scripts/workflow_gate_policy_test.py", "**/*",
-     "lists a temporary repository's files; the scan reaches a parameter by name, so the name `root` is conflated"),
-)
-
-#: Roots that are temporary repositories a module builds itself: a module and
-#: a root expression, each with its reason. A fixture entry is refused when a
-#: repository-root value can reach the expression (the guard test checks it).
-FIXTURES: tuple[tuple[str, str, str], ...] = (
-    ("scripts/workflow_acceptance_matrix_test.py", "self.scratch.root", "a temporary repository the module builds itself"),
-    ("scripts/workflow_acceptance_matrix_test.py", "root", "a temporary repository the module builds itself"),
-    ("scripts/workflow_fingerprint_test.py", "self.root", "a temporary repository the module builds itself"),
-    ("scripts/workflow_fingerprint_test.py", "repo.root", "a temporary repository the module builds itself"),
-    ("scripts/workflow_gate_policy_test.py", "ev.root", "a temporary repository the module builds itself"),
-    ("scripts/workflow_state_completion_obligations_test.py", "root", "a temporary repository the module builds itself"),
-    ("scripts/workflow_state_completion_obligations_test.py", "self.root", "a temporary repository the module builds itself"),
-    ("scripts/workflow_state_completion_obligations_test.py", "d.root", "a temporary repository the module builds itself"),
-    ("scripts/workflow_test_harness.py", "self.root", "a temporary repository the module builds itself"),
-    ("tests/test_ci_changes.py", "self.repo", "a temporary repository the module builds itself"),
-    ("tests/test_evidence.py", "self.root", "a temporary repository the module builds itself"),
-    ("tests/test_identity.py", "checkout", "a temporary checkout the module builds itself"),
-)
-
 
 
 #: Work-item phases from which a Draft pull request runs the shards (D2): the

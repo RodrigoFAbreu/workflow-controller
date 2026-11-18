@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-ci2e",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -83026,6 +83026,304 @@
         },
         "evaluated_at": "2026-11-18T01:50:10Z",
         "workflow_release": "2.29.3"
+      }
+    },
+    "workflow-controller-ci2e": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-ci2e",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CI2E_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-ci2e-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci2e-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 3,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "509575d99860cb97cf020e15394b5dca7695cd32",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "3dc70fb560ae5a2bb959d21689c4e85c69e39e41882151fcb9620c98714f3f23",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "3dc70fb560ae5a2bb959d21689c4e85c69e39e41882151fcb9620c98714f3f23",
+        "approved_review_content_id": "a3b3b8fa7e746ace68ab77bf37abe9b4eced8eb9e91c243c4274a919ca049e88",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CI2E_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "4a062e15aa94ed175efb767c273efd44da7e14e1"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-ci2e-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e8c7a831699e322f40b3ba8f6fabeea063b977fb"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-ci2e-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f1c3d97703042c91245f56930a73e97c16b6f8d1"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-18T04:44:59Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "a3b3b8fa7e746ace68ab77bf37abe9b4eced8eb9e91c243c4274a919ca049e88",
+            "ledger": {
+              "local": {
+                "bundle_id": "3dc70fb560ae5a2bb959d21689c4e85c69e39e41882151fcb9620c98714f3f23",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "d8de7bdc33a348b26647eff24a68bb6f0933119bb9c3d872a56cf7cbeda00bc0",
+                "ledger_entry_sha256": "6a226e6eca44d6a9598cbe4704bea36df738e283c426b17dd112717082d9bc04",
+                "run_ref": "session:local .ai-review/workflow-controller-ci2e/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "3dc70fb560ae5a2bb959d21689c4e85c69e39e41882151fcb9620c98714f3f23",
+                "verdict": "APPROVE",
+                "round": 3,
+                "verdict_sha256": "000ec4bb03ffe1624afdae748c88c767a0c9646d39303e357ad53878442531a5",
+                "ledger_entry_sha256": "ab05849e15435e5b2eb2210060b002b870943e50339fee0e922f8e68130bb9b4",
+                "run_ref": "codex:20261118T044134Z-3dff453d",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-18T04:44:59Z",
+          "workflow_release": "2.29.3"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "a3b3b8fa7e746ace68ab77bf37abe9b4eced8eb9e91c243c4274a919ca049e88",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "3dc70fb560ae5a2bb959d21689c4e85c69e39e41882151fcb9620c98714f3f23",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-11-18T04:41:09Z",
+          "verdict_sha256": "d8de7bdc33a348b26647eff24a68bb6f0933119bb9c3d872a56cf7cbeda00bc0",
+          "run_ref": "session:local .ai-review/workflow-controller-ci2e/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "3dc70fb560ae5a2bb959d21689c4e85c69e39e41882151fcb9620c98714f3f23",
+          "verdict": "APPROVE",
+          "round": 3,
+          "completed_at": "2026-11-18T04:43:05Z",
+          "verdict_sha256": "000ec4bb03ffe1624afdae748c88c767a0c9646d39303e357ad53878442531a5",
+          "run_ref": "codex:20261118T044134Z-3dff453d",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 3,
+          "external": 2
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 13,
+      "last_transition": "2026-11-18T04:44:59Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-18T04:39:03Z",
+        "consumed": {
+          "review_content_id": "5af0e34c22665312b700403c28a9d549a62f76062a8bd17abd7ab1d19f800be1",
+          "plan_revision": 2,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "a3b3b8fa7e746ace68ab77bf37abe9b4eced8eb9e91c243c4274a919ca049e88",
+          "plan_revision": 3
+        },
+        "bound": {
+          "review_content_id": "a3b3b8fa7e746ace68ab77bf37abe9b4eced8eb9e91c243c4274a919ca049e88",
+          "bundle_id": "3dc70fb560ae5a2bb959d21689c4e85c69e39e41882151fcb9620c98714f3f23",
+          "plan_revision": 3
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "5af0e34c22665312b700403c28a9d549a62f76062a8bd17abd7ab1d19f800be1",
+        "e488dddb077c4ef0cb0bafb5470f55077e46c6c5334b745d1fde8dd7300f23de"
+      ],
+      "optional_findings": {
+        "F-f74dfeb64332": {
+          "digest": "f74dfeb6433263a37890aa36066ce7e3368e3e2ad921e07a941af9faca1b4e05",
+          "text": "**O1. The \"proof the check can fail\" test has no checkpoint and no declared file.** D4 lists \"a fixture test module that reads a set path fails when run after `hide`\". CP1 adds only the `hide` cases, and CP2 adds the workflow and placement cases. No `**Files:**` paragraph names a fixture module. If the module were a real file matching `test_*.py` under `tests/`, discovery would put it in a shard, and it would fail blind on every pull request. Name the checkpoint and say the module is written into a temporary repository, or kept outside discovery.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "e488dddb077c4ef0cb0bafb5470f55077e46c6c5334b745d1fde8dd7300f23de",
+              "verdict": "REVISE",
+              "at": "2026-11-18T04:32:18Z"
+            }
+          ]
+        },
+        "F-be32eed2f0d0": {
+          "digest": "be32eed2f0d04663498a717104bfde40e43d497c92d12968bf6a720e45af0b97",
+          "text": "**O2. CP3's \"No other file names the removed tables\" is not accurate.** `docs/guide/ci-and-releases.md:277` names `MENTIONS`, and so does `docs/items/workflow-controller-w2.md:28` (\"needed a `tools/ci_changes.py` `MENTIONS` entry; the repository's CI selection tests may need updating again\"). CP4 rewrites the guide section, but the W2 item page is not in CP4's files. Say \"no other code file\", and either add the W2 page to CP4 or note that it stays as written.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "e488dddb077c4ef0cb0bafb5470f55077e46c6c5334b745d1fde8dd7300f23de",
+              "verdict": "REVISE",
+              "at": "2026-11-18T04:32:18Z"
+            }
+          ]
+        },
+        "F-62c37990550a": {
+          "digest": "62c37990550a3c744f7f9bd365d72c1bf28b152a1feefff6a0d975133cbf5156",
+          "text": "**O3. Say that the `plan` job stays sighted while the shards run blind.** `exec-shard --expect-digest` then compares a plan discovered with the set present against an inventory discovered without it. Today they agree, because no test is generated from a set path, and a mismatch fails loudly. One sentence in D1 would make this explicit, so a future generated test is understood as a D3 reader and not a mysterious digest failure.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "e488dddb077c4ef0cb0bafb5470f55077e46c6c5334b745d1fde8dd7300f23de",
+              "verdict": "REVISE",
+              "at": "2026-11-18T04:32:18Z"
+            }
+          ]
+        },
+        "F-d8902fc6fd56": {
+          "digest": "d8902fc6fd56c2a21cea31bc2c7f5550832afa59db03b59345177341e30d0fe0",
+          "text": "**O1. D5 (1) counts `scripts/workflow_state_demo_test.py` as a Git-object reader the blind run could miss, but the shards never run it.** `scripts/*_test.py` reach CI only as conformance suites, and `CI_PLACEMENT` keeps those out of the shards. `.github/workflows/workflow-conformance.yml:4` also says the two `*_demo_test.py` suites are left out of conformance on purpose, so this module runs nowhere in CI. `CloneCase` is the only Git-object reader of `REPO_ROOT` in the shards. CP2 can note this rather than give a reason that module does not depend on the set. The plan stays correct either way.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "5af0e34c22665312b700403c28a9d549a62f76062a8bd17abd7ab1d19f800be1",
+              "verdict": "APPROVE",
+              "at": "2026-11-18T04:36:00Z"
+            }
+          ]
+        },
+        "F-35417cc3c7bf": {
+          "digest": "35417cc3c7bf646f6a964dfe5c24cfbadabfb77f50f442d0fa286c7710e2a2cb",
+          "text": "**O2. CP2's \"scratch clone\" lacks the checkpoint's own uncommitted edits.** A plain `git clone` of the working repository holds only committed content. Before the CP2 commit, the blind run of `tests.test_ci_workflows`, `tests.test_test_shards` and `tests.test_ci_changes` would test the base code, not CP2's. Say the run happens after the CP2 commit, or that the working tree is copied into the clone first, as `CloneCase` does.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "5af0e34c22665312b700403c28a9d549a62f76062a8bd17abd7ab1d19f800be1",
+              "verdict": "APPROVE",
+              "at": "2026-11-18T04:36:00Z"
+            }
+          ]
+        },
+        "F-0149249d50a7": {
+          "digest": "0149249d50a71cb485b7f734340b0282dd868d5656377cb7746c8e9b54dc96c8",
+          "text": "**O3. D3's remedy fits a test that reads named set paths, not a test that reads every tracked file.** Suppose a shard test lists `git ls-files` in `REPO_ROOT` and opens each file, for example to hash the checkout. Blind, it fails on every path of the set, and \"the path leaves the set\" would then empty the set. None exists in the shards today: the old `MENTIONS` entries are temporary trees, and `tools/run_scenarios.py:_tracked_paths` resolves paths without reading them. One sentence in D3 would cover it: a whole-tree reader is made to read only the paths it needs (or a temporary tree), and the set stays as it is.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "5af0e34c22665312b700403c28a9d549a62f76062a8bd17abd7ab1d19f800be1",
+              "verdict": "APPROVE",
+              "at": "2026-11-18T04:36:00Z"
+            }
+          ]
+        },
+        "F-3b1da8c7bb41": {
+          "digest": "3b1da8c7bb419773c19261b0c928994473d7e836d86818d570b5958a2cbe7840",
+          "text": "**O1. Clarify D3’s exception procedure.** Adding a path under `docs/items/` or `docs/releases/` to `NOT_DOCUMENTATION` does not remove it from classification: `is_documentation` never consults that table. If such a reader is found, the fix must change classification as well as document its reason.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "5af0e34c22665312b700403c28a9d549a62f76062a8bd17abd7ab1d19f800be1",
+              "verdict": "REVISE",
+              "at": "2026-11-18T04:38:10Z"
+            }
+          ]
+        },
+        "F-001d9fa9c565": {
+          "digest": "001d9fa9c5653e017d0b22552fc0fd09bcfd750713fa10d6889f2596e7eca965",
+          "text": "**O1. The plan's requirement-map table and the mapping file disagree on R2.** The table under \"Requirement map\" lists R2 against CP2 only. `docs/ai-workflow/requirements/workflow-controller-ci2e-mapping.json` lists CP1 and CP2, which is right, because the fail-blind proof test is a CP1 deliverable (D4). Make the table say CP1, CP2 at the next revision.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "a3b3b8fa7e746ace68ab77bf37abe9b4eced8eb9e91c243c4274a919ca049e88",
+              "verdict": "APPROVE",
+              "at": "2026-11-18T04:41:09Z"
+            }
+          ]
+        },
+        "F-37d17da2fc39": {
+          "digest": "37d17da2fc39051642bca888531e2b11149f149cfb6629517d52240b4feaa2ab",
+          "text": "**O2. CP3 lists only two of the pages that name the removed tables.** `docs/ACTIVE_MILESTONE.md`, `docs/ai-workflow/CONTROLLER_W1_PLAN.md` and `docs/milestones/completed/workflow-controller-w1.md` (and `workflow-controller-ci1a-findings.md`) also name `MENTIONS` or the tables. All of them are historical records that stay as written, so nothing changes, but the sentence \"Two pages do\" is incomplete.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "a3b3b8fa7e746ace68ab77bf37abe9b4eced8eb9e91c243c4274a919ca049e88",
+              "verdict": "APPROVE",
+              "at": "2026-11-18T04:41:09Z"
+            }
+          ]
+        }
       }
     }
   }

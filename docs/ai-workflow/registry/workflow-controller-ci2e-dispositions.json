@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ci2e",
+  "dispositions": {
+    "F-001d9fa9c565": {
+      "disposition": "dropped",
+      "reason": "The requirement-map table in the plan disagrees with the mapping file on R2 (CP1, CP2); the mapping file is the authority and is right. Wording or bookkeeping on the approved plan (revision 4); the implementation and pages follow the intended behaviour, and plans are historical records."
+    },
+    "F-0149249d50a7": {
+      "disposition": "dropped",
+      "reason": "A hypothetical whole-tree reader in a shard test; none exists today (the finding says so) and the guide's D3 section states the remedy for set readers. Wording or bookkeeping on the approved plan (revision 4); the implementation and pages follow the intended behaviour, and plans are historical records."
+    },
+    "F-0cfa5621fe38": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/380"
+    },
+    "F-35417cc3c7bf": {
+      "disposition": "dropped",
+      "reason": "The CP2 blind-run procedure wording; the run was done on the checkpoint's tree and CP2 is committed. Wording or bookkeeping on the approved plan (revision 4); the implementation and pages follow the intended behaviour, and plans are historical records."
+    },
+    "F-37d17da2fc39": {
+      "disposition": "dropped",
+      "reason": "The finding itself says all listed pages are historical records that stay as written; only a sentence in the plan is incomplete. Wording or bookkeeping on the approved plan (revision 4); the implementation and pages follow the intended behaviour, and plans are historical records."
+    },
+    "F-3b1da8c7bb41": {
+      "disposition": "dropped",
+      "reason": "Clarification of D3's exception procedure in the plan text. Wording or bookkeeping on the approved plan (revision 4); the implementation and pages follow the intended behaviour, and plans are historical records."
+    },
+    "F-4a380e0d892a": {
+      "disposition": "dropped",
+      "reason": "A clarifying clause suggested for D2 of the plan; the plan is approved and CP3's prune is documented in the item page. Wording or bookkeeping on the approved plan (revision 4); the implementation and pages follow the intended behaviour, and plans are historical records."
+    },
+    "F-62c37990550a": {
+      "disposition": "fixed",
+      "note": "docs/guide/ci-and-releases.md states that the plan job stays sighted while the shards run blind (line 273)."
+    },
+    "F-be32eed2f0d0": {
+      "disposition": "dropped",
+      "reason": "Plan wording ('No other file') and the W2 item page, a historical record that stays as written. Wording or bookkeeping on the approved plan (revision 4); the implementation and pages follow the intended behaviour, and plans are historical records."
+    },
+    "F-d8902fc6fd56": {
+      "disposition": "fixed",
+      "note": "docs/guide/ci-and-releases.md (line 291) records that scripts/workflow_state_demo_test.py was checked and names no path of the documentation set."
+    },
+    "F-e3d4e5d7a044": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/380"
+    },
+    "F-f74dfeb64332": {
+      "disposition": "dropped",
+      "reason": "The fail-blind proof test is a CP1 deliverable per the mapping file and is written into a temporary repository; plan wording only. Wording or bookkeeping on the approved plan (revision 4); the implementation and pages follow the intended behaviour, and plans are historical records."
+    }
+  }
+}

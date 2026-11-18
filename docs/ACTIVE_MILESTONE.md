@@ -1,5 +1,11 @@
 # Active Milestone
 
+## In progress (CI2e)
+
+**Implementing.** Plan `docs/ai-workflow/CONTROLLER_CI2E_PLAN.md` (revision 3), four checkpoints; it replaces the static repo-reach scan with a runtime check (the shards run with the documentation set removed).
+
+- **CP1 complete (verified state).** `tools/ci_changes.py hide` (D1) lists the tracked files `is_documentation` accepts (`hidden_paths`), marks each `skip-worktree`, deletes it (and any directory left empty), prints the count, takes `--dry-run`, and refuses outside a Git work tree (exit 1). `tests/test_ci_changes.py` adds `HideTests` on real temporary repositories: exactly the set removed with a clean `git status`, a dry run, a deleted-then-restored path, a subdirectory and a repeat run, an untracked set file kept, the refusal, and the proof the check can fail (a reader module written into the temporary repository fails after `hide`). The old scan still runs until CP3, so `FIXTURES` names `self.repo` of the test module and the scan's module count is 8. Verified with `tests.test_ci_changes`, `tests.test_package_structure` and `tests.test_write_containment` (131 tests, exact coverage, passing).
+
 ## Latest milestone (CI2d)
 
 **Complete: accepted by policy (`MILESTONE_COMPLETE`).** Accepted after the functional review passed (all eight flows passed at the approved content; PR #378, checks green at the approved head). Plan `docs/ai-workflow/CONTROLLER_CI2D_PLAN.md` (revision 4), five checkpoints; it sets the after-merge and trigger policy and automates the timings refresh.

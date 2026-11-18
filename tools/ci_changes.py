@@ -29,6 +29,16 @@ Subcommands:
     ``true`` or ``false``. An empty or unknown ``code`` (the ``changes`` job
     failed or was cancelled) fails.
 
+``hide``
+    Removes the documentation set from the working tree (CI2e, #322). It
+    lists the tracked files ``is_documentation`` accepts, deletes them and
+    marks each ``skip-worktree``, so ``git status`` stays clean. The ``tests``
+    job runs it before the shards: a shard that passes without those files
+    proves, by running, that no test it ran needs them. ``--dry-run`` lists
+    the paths and touches nothing. It refuses outside a Git work tree. The
+    runner checkout is disposable, so nothing restores the files; run it
+    only in a scratch clone.
+
 The documentation set below is a list of paths that **no test of the
 validation gate reads as input**. ``tests/test_ci_changes.py`` keeps it
 honest: it scans the repository for readers of these paths and fails when a
@@ -119,6 +129,7 @@ FIXTURES: tuple[tuple[str, str, str], ...] = (
     ("scripts/workflow_state_completion_obligations_test.py", "self.root", "a temporary repository the module builds itself"),
     ("scripts/workflow_state_completion_obligations_test.py", "d.root", "a temporary repository the module builds itself"),
     ("scripts/workflow_test_harness.py", "self.root", "a temporary repository the module builds itself"),
+    ("tests/test_ci_changes.py", "self.repo", "a temporary repository the module builds itself"),
     ("tests/test_evidence.py", "self.root", "a temporary repository the module builds itself"),
     ("tests/test_identity.py", "checkout", "a temporary checkout the module builds itself"),
 )
@@ -345,6 +356,51 @@ def cmd_detect(args: argparse.Namespace, env: dict[str, str] | None = None) -> i
 
 
 # ---------------------------------------------------------------------------
+# hide
+# ---------------------------------------------------------------------------
+
+#: Paths handed to one ``git update-index`` call, to stay under the argument limit.
+HIDE_CHUNK = 200
+
+
+def hidden_paths(cwd: Path | None = None, git: Callable[[list[str], Path | None], str] = _git) -> list[str]:
+    """The tracked files of the work tree at ``cwd`` that are documentation.
+    Raises :class:`DetectError` outside a Git work tree."""
+    if git(["rev-parse", "--is-inside-work-tree"], cwd).strip() != "true":
+        raise DetectError("not inside a Git work tree")
+    raw = git(["ls-files", "-z"], cwd)
+    return [name for name in raw.split("\0") if name and is_documentation(name)]
+
+
+def cmd_hide(args: argparse.Namespace, cwd: Path | None = None) -> int:
+    try:
+        top = Path(_git(["rev-parse", "--show-toplevel"], cwd).strip())
+        paths = hidden_paths(top)
+    except DetectError as error:
+        print(f"hide: {error}", file=sys.stderr)
+        return 1
+    if args.dry_run:
+        for name in paths:
+            print(name)
+        print(f"would hide {len(paths)} documentation paths")
+        return 0
+    for start in range(0, len(paths), HIDE_CHUNK):
+        _git(["update-index", "--skip-worktree", "--", *paths[start:start + HIDE_CHUNK]], top)
+    for name in paths:
+        target = top / name
+        target.unlink(missing_ok=True)
+        parent = target.parent
+        while parent != top:
+            try:
+                parent.rmdir()
+            except OSError:
+                break
+            parent = parent.parent
+    print(f"hid {len(paths)} documentation paths")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # require
 # ---------------------------------------------------------------------------
 
@@ -369,6 +425,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("detect", help="write the code output for this pull request").set_defaults(func=cmd_detect)
+    hide = sub.add_parser("hide", help="remove the documentation set from the work tree (scratch clones and CI only)")
+    hide.add_argument("--dry-run", action="store_true", help="list the paths and touch nothing")
+    hide.set_defaults(func=cmd_hide)
     req = sub.add_parser("require", help="fail unless the gate jobs succeeded and code is true or false")
     req.add_argument("--changes", default="", help="result of the changes job")
     req.add_argument("--docs", default="", help="result of the docs job")

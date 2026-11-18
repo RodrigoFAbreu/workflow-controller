@@ -450,6 +450,118 @@ class RequireTests(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# hide, on real temporary repositories (CI2e)
+# ---------------------------------------------------------------------------
+
+class HideTests(unittest.TestCase):
+    FILES = {"docs/run.md": "run\n", "docs/items/a.md": "a\n", "docs/items/sub/b.md": "b\n",
+             "docs/releases/1.0.0.md": "r\n", "docs/backlog.yaml": "items: []\n",
+             "docs/guide/g.md": "g\n", "docs/ACTIVE_MILESTONE.md": "m\n",
+             "tools/x.py": "x = 1\n", "README.md": "readme\n"}
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.repo = fixtures.git_init(Path(self._tmp.name) / "repo", "-b", "main")
+        _commit(self.repo, self.FILES, "base")
+
+    def hide(self, *argv, cwd=None):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = cc.main(["hide", *argv]) if cwd is None else self._in(cwd, argv)
+        return code, out.getvalue(), err.getvalue()
+
+    def _in(self, cwd, argv):
+        previous = os.getcwd()
+        os.chdir(cwd)
+        try:
+            return cc.main(["hide", *argv])
+        finally:
+            os.chdir(previous)
+
+    def present(self) -> set[str]:
+        return {p.relative_to(self.repo).as_posix() for p in self.repo.rglob("*")
+                if p.is_file() and ".git" not in p.relative_to(self.repo).parts}
+
+    def test_it_removes_exactly_the_set_and_keeps_git_status_clean(self):
+        code, out, _ = self.hide(cwd=self.repo)
+        self.assertEqual(code, 0)
+        self.assertIn("hid 5 documentation paths", out)
+        expected = {n for n in self.FILES if not cc.is_documentation(n)}
+        self.assertEqual(self.present(), expected)
+        self.assertEqual(_git(self.repo, "status", "--porcelain"), "")
+        self.assertFalse((self.repo / "docs" / "items").exists())
+        self.assertTrue((self.repo / "docs" / "guide").is_dir())
+
+    def test_a_dry_run_lists_and_touches_nothing(self):
+        before = self.present()
+        code, out, _ = self.hide("--dry-run", cwd=self.repo)
+        self.assertEqual(code, 0)
+        self.assertIn("docs/items/sub/b.md", out)
+        self.assertNotIn("docs/guide/g.md", out)
+        self.assertIn("would hide 5 documentation paths", out)
+        self.assertEqual(self.present(), before)
+
+    def test_a_path_already_deleted_is_hidden_and_a_restore_brings_it_back(self):
+        (self.repo / "docs" / "run.md").unlink()
+        code, out, _ = self.hide(cwd=self.repo)
+        self.assertEqual(code, 0)
+        self.assertEqual(_git(self.repo, "status", "--porcelain"), "")
+        _git(self.repo, "update-index", "--no-skip-worktree", "docs/run.md", "docs/items/a.md")
+        _git(self.repo, "checkout", "--", "docs/run.md", "docs/items/a.md")
+        self.assertEqual((self.repo / "docs" / "run.md").read_text(), "run\n")
+        self.assertEqual((self.repo / "docs" / "items" / "a.md").read_text(), "a\n")
+
+    def test_it_works_from_a_subdirectory_and_twice(self):
+        self.assertEqual(self.hide(cwd=self.repo / "tools")[0], 0)
+        self.assertEqual(self.hide(cwd=self.repo)[0], 0)
+        self.assertEqual(self.present(), {n for n in self.FILES if not cc.is_documentation(n)})
+
+    def test_it_never_deletes_an_untracked_documentation_file(self):
+        (self.repo / "docs" / "items").mkdir(exist_ok=True)
+        (self.repo / "docs" / "items" / "untracked.md").write_text("u\n")
+        self.assertEqual(self.hide(cwd=self.repo)[0], 0)
+        self.assertTrue((self.repo / "docs" / "items" / "untracked.md").is_file())
+
+    def test_it_refuses_outside_a_work_tree(self):
+        with tempfile.TemporaryDirectory() as bare:
+            env = {**os.environ, "GIT_CEILING_DIRECTORIES": str(Path(bare).parent)}
+            with unittest.mock.patch.dict(os.environ, env):
+                code, out, err = self.hide(cwd=bare)
+        self.assertEqual(code, 1)
+        self.assertIn("hide:", err)
+        self.assertEqual(out, "")
+
+    def test_hidden_paths_uses_the_injected_git(self):
+        calls = []
+
+        def fake(args, cwd):
+            calls.append(args)
+            return "true\n" if args[0] == "rev-parse" else "docs/run.md\0tools/x.py\0docs/items/a.md\0"
+
+        self.assertEqual(cc.hidden_paths(None, fake), ["docs/run.md", "docs/items/a.md"])
+        self.assertEqual([c[0] for c in calls], ["rev-parse", "ls-files"])
+        with self.assertRaises(cc.DetectError):
+            cc.hidden_paths(None, lambda args, cwd: "false\n")
+
+    def test_a_test_that_reads_a_set_path_fails_after_hide(self):
+        """The proof the check can fail: the reader lives only in the temporary
+        repository, never under ``tests/`` of this one."""
+        module = self.repo / "tests" / "test_reads_docs.py"
+        module.parent.mkdir(exist_ok=True)
+        module.write_text("import pathlib, unittest\n\n\nclass T(unittest.TestCase):\n"
+                          "    def test_reads(self):\n"
+                          "        self.assertEqual(pathlib.Path('docs/run.md').read_text(), 'run\\n')\n")
+        run = lambda: subprocess.run([sys.executable, "-m", "unittest", "tests.test_reads_docs"],
+                                     cwd=self.repo, capture_output=True, text=True)
+        self.assertEqual(run().returncode, 0)
+        self.assertEqual(self.hide(cwd=self.repo)[0], 0)
+        failed = run()
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertIn("FileNotFoundError", failed.stderr)
+
+
+# ---------------------------------------------------------------------------
 # The guard (D2): the scan
 # ---------------------------------------------------------------------------
 
@@ -1037,7 +1149,7 @@ class DocumentationSetGuardTests(unittest.TestCase):
         self.assertEqual(len(backlog), 5, [describe(s) for s in reads])
         self.assertEqual({(s["module"], s["path"]) for s in reads if s not in backlog},
                          {(m, p) for m, p, _ in cc.MENTIONS}, [describe(s) for s in reads])
-        self.assertEqual(len(by_module), 7, by_module)
+        self.assertEqual(len(by_module), 8, by_module)
         # An expectation check, not a ceiling: the plan expects roughly ten
         # to twelve entries (one per module and root expression, counted apart
         # from the mentions), and the table is bounded by the fixture sites it

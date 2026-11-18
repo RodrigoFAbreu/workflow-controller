@@ -24,6 +24,7 @@ import sys
 import tempfile
 import textwrap
 import unittest
+import unittest.mock
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -221,7 +222,13 @@ class DetectRepoTests(unittest.TestCase):
         for event, expected in (("pull_request", "false"), ("push", "true")):
             with self.subTest(event=event), tempfile.TemporaryDirectory() as out:
                 target = Path(out) / "github_output"
-                env = {**os.environ, "GITHUB_EVENT_NAME": event, "GITHUB_OUTPUT": str(target)}
+                # Stand in for a runner whose GITHUB_EVENT_PATH names a Draft pull request's
+                # payload: the command under test must not inherit it (CI2d PR check, tests (1)).
+                payload = Path(out) / "event.json"
+                payload.write_text(json.dumps({"pull_request": {"draft": True}}))
+                with unittest.mock.patch.dict(os.environ, {"GITHUB_EVENT_PATH": str(payload)}):
+                    env = {key: value for key, value in os.environ.items() if not key.startswith("GITHUB_")}
+                env.update(GITHUB_EVENT_NAME=event, GITHUB_OUTPUT=str(target))
                 done = fixtures.run([sys.executable, str(fixtures.REPO_ROOT / "tools" / "ci_changes.py"), "detect"],
                                     cwd=self.repo, env=env)
                 self.assertEqual(target.read_text(), f"code={expected}\n")

@@ -83037,7 +83037,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci2e-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci2e-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 4,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -83154,7 +83154,138 @@
           "workflow_release": "2.29.3"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "53837ecc499b06b64876ca97feea6454fb27ce8e27ce5a8d3b27b0cb5ddaac81",
+        "approved_review_content_id": "8878808e33df24fbb93cc507e250bab2501e5a2d278e700aff4b7ac377f51ac3",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-ci2e-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "75a6ac7d265de86c7f9354a8e4703d96da4d43b1"
+          },
+          {
+            "path": "docs/guide/ci-and-releases.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "06b4e1ef92ec22340fd5f3914ff8ea1a3c7de9b1"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9eb372b89d0e4964f2481024e4f0cdb7183f845c"
+          },
+          {
+            "path": "tests/test_ci_changes.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "244d156a367ac099c1217e5d1b1b5be3856aa23b"
+          },
+          {
+            "path": "tests/test_ci_workflows.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "43079670e11133cb01113e577817ff60f43ef795"
+          },
+          {
+            "path": "tests/test_test_shards.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "131232262d3241832b3116c32bb32c819f0fa52c"
+          },
+          {
+            "path": "tools/ci_changes.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "e4e7432b41a6b02367e721c47fb2e6f2afb33952"
+          },
+          {
+            "path": "tools/ci_workflows.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3dd6f862ce051d88f23ede0a729a490590aed173"
+          },
+          {
+            "path": "tools/test_shards.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b2c04dddcc562a19594e290e7d1038f8fdc2a933"
+          },
+          {
+            "path": "tools/test_timings.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b136201488116899133bed5c36c5fbd777017ae1"
+          }
+        ],
+        "reviewed_content_commit": "6ae864b81a4687dfc2d8ec77fc6b162773371a0a",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-18T21:36:16Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "8878808e33df24fbb93cc507e250bab2501e5a2d278e700aff4b7ac377f51ac3",
+            "ledger": {
+              "local": {
+                "bundle_id": "53837ecc499b06b64876ca97feea6454fb27ce8e27ce5a8d3b27b0cb5ddaac81",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "7a36c14f520e5280dcdc5a036a8b373a202a27e048c915ebd3479dd665503ce0",
+                "ledger_entry_sha256": "fb6de6b644f57063c52ba4a968b20c365513c5430ab4262cdceb67e71e85ec23",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-ci2e/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "53837ecc499b06b64876ca97feea6454fb27ce8e27ce5a8d3b27b0cb5ddaac81",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "7aa95c50365a0dd58da8e26e60cb7fafaf26fefe0b63182ed53e0065fbb552a3",
+                "ledger_entry_sha256": "a5a2d74b2e70228685eea459ebfbb49072ba625fcd46945ac99c2846e2955c6d",
+                "run_ref": "codex:20261118T213212Z-c63454ce",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-18T21:36:16Z",
+          "workflow_release": "2.29.3"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "a29e64ce3856456fd0b833c1099ac29f6b13a0a6246b80ddf4c5109641c2f5ba",
@@ -83185,12 +83316,12 @@
           "external": 3
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 36,
-      "last_transition": "2026-11-18T21:27:06Z",
+      "state_revision": 39,
+      "last_transition": "2026-11-18T21:36:16Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -83356,6 +83487,34 @@
               "at": "2026-11-18T21:00:18Z"
             }
           ]
+        },
+        "F-e3d4e5d7a044": {
+          "digest": "e3d4e5d7a04445aff39f86a329d4dc752dc5226c70faae8526fb11cad2f13b82",
+          "text": "**O1. `hide` fails with a traceback, not its `hide:` message, after it starts changing the tree.** In `cmd_hide` (`tools/ci_changes.py`), only `rev-parse` and `hidden_paths` sit inside the `try`. A `DetectError` from a later `git update-index` chunk, or an `IsADirectoryError` from `unlink` on a tracked gitlink (a submodule path under `docs/items/`; none exists today), escapes as a traceback. The exit code is still non-zero, so the CI step fails closed and correctness is not affected. Wrapping the mutation loop the same way would give the same one-line `hide: ...` refusal the docstring promises, and would tell the operator the tree may be partly hidden.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "8878808e33df24fbb93cc507e250bab2501e5a2d278e700aff4b7ac377f51ac3",
+              "verdict": "APPROVE",
+              "at": "2026-11-18T21:31:48Z"
+            }
+          ]
+        },
+        "F-0cfa5621fe38": {
+          "digest": "0cfa5621fe389e07cb758eb5843f8addd23a0245704892d0166d81fcb95b82a6",
+          "text": "**O2. The item page names the wrong plan revision.** `docs/items/workflow-controller-ci2e.md` says the plan is \"(revision 3)\". The approved plan is revision 4 (plan amendment 0, `eb00fa4`), which the implementation follows (the `tools/test_timings.json` prune). The page is outside the protected content, so this does not affect the approval. Fix it at acceptance or in the next edit of the page.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "8878808e33df24fbb93cc507e250bab2501e5a2d278e700aff4b7ac377f51ac3",
+              "verdict": "APPROVE",
+              "at": "2026-11-18T21:31:48Z"
+            }
+          ]
         }
       },
       "amendment_history": [
@@ -83484,7 +83643,28 @@
           "resolved_review_content_id": "a29e64ce3856456fd0b833c1099ac29f6b13a0a6246b80ddf4c5109641c2f5ba"
         }
       ],
-      "amendment_base_commit": "64a031879e52b40a28d56a0269f1d6543dc5ee3d"
+      "amendment_base_commit": "64a031879e52b40a28d56a0269f1d6543dc5ee3d",
+      "implementation_review_stages": {
+        "review_content_id": "8878808e33df24fbb93cc507e250bab2501e5a2d278e700aff4b7ac377f51ac3",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "53837ecc499b06b64876ca97feea6454fb27ce8e27ce5a8d3b27b0cb5ddaac81",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-18T21:31:48Z",
+          "verdict_sha256": "7a36c14f520e5280dcdc5a036a8b373a202a27e048c915ebd3479dd665503ce0",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-ci2e/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "53837ecc499b06b64876ca97feea6454fb27ce8e27ce5a8d3b27b0cb5ddaac81",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-18T21:34:22Z",
+          "verdict_sha256": "7aa95c50365a0dd58da8e26e60cb7fafaf26fefe0b63182ed53e0065fbb552a3",
+          "run_ref": "codex:20261118T213212Z-c63454ce",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      }
     }
   }
 }

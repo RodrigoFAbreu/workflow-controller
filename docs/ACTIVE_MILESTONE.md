@@ -724,10 +724,10 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-ci2d` (CI2d: after-merge and trigger policy, and the automated timings refresh), implementation revision 3 (technical approval by policy `a07deab`), plan
+Item `workflow-controller-ci2d` (CI2d: after-merge and trigger policy, and the automated timings refresh), implementation revision 4 (technical approval by policy `34fb6dc`), plan
 `docs/ai-workflow/CONTROLLER_CI2D_PLAN.md` (revision 4), base commit `a9a25a5`. Five checkpoints, all complete: CP1 (change detection classifies a push and a Draft head), CP2 (the trigger policy in the generated
-workflows), CP3 (the mutation check in three legs), CP4 (the automated timings refresh) and CP5 (the pages and the follow-up). Revisions 2 and 3 are review fixes: a documentation-only push never builds or
-publishes (I1), the refresh merges its runs oldest first (I1), and the runner-limit proof activates the release-target legs (O1). A `ci:` change that edits CI tooling, the generated workflows, tests and pages; it
+workflows), CP3 (the mutation check in three legs), CP4 (the automated timings refresh) and CP5 (the pages and the follow-up). Revisions 2 to 4 are review fixes: a documentation-only push never builds or
+publishes (I1), the refresh merges its runs oldest first (I1), and the runner-limit proof activates the release-target legs (O1), and the command-line detect test no longer inherits the runner's `GITHUB_*` variables (the PR check failure; Flow 1 covers it). A `ci:` change that edits CI tooling, the generated workflows, tests and pages; it
 publishes no release.
 Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the system directories, and no write inside the read-only
 product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write only to the scratch `TMPDIR`. No flow needs a pull request or a forge call, and none runs the full suite.

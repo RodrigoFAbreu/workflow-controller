@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ci2d",
+  "requirements": {
+    "R1": {
+      "description": "A push to main that changes only documentation skips the plan and the shards, with every doubt running them, and the managed conformance job still runs",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    },
+    "R2": {
+      "description": "A Draft pull request runs the shards from the first implementation-review head and a ready one always does, so the acceptance gate's ci_green at the anchor commit and the Controller's green-checks condition at A are met by real runs",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "The mutation check runs as three legs that together cover the module exactly once, fail closed, keep the job id and the release gate, and stay within six runners",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R4": {
+      "description": "The shard timings are refreshed on a schedule from pull-request runs, deduplicated and checked against the staleness ratchet, and proposed as a pull request",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    },
+    "R5": {
+      "description": "The pages and item records state the policy, the estimates, the unproven point and the follow-up, and the determinism split is its own backlog item",
+      "checkpoint_ids": [
+        "CP5"
+      ]
+    }
+  }
+}

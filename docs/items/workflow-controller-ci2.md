@@ -4,7 +4,7 @@ Item id: `workflow-controller-ci2`.
 
 Status: implemented on the milestone branch (three checkpoints); plan: [CONTROLLER_CI2_PLAN.md](../ai-workflow/CONTROLLER_CI2_PLAN.md) (revision 12). Complexity: medium. Sources: [#317](https://github.com/RodrigoFAbreu/workflow-controller/issues/317) (the 20-minute target, stays open until the last slice merges) and [#324](https://github.com/RodrigoFAbreu/workflow-controller/issues/324) (done here). A `ci:` change that edits the committed timings, tests and pages only; it publishes no release.
 
-CI2 was large and said "split at planning". By the sizing rule (at most one new mechanism per releasable item) the owner's fourteen scope items (below) are split into five slices, and the third (ci2c) was split again at its planning into ci2c, ci2f and ci2g:
+CI2 was large and said "split at planning". By the sizing rule (at most one new mechanism per releasable item) the owner's fourteen scope items (below) are split into five slices, the third (ci2c) was split again at its planning into ci2c, ci2f and ci2g, and ci2d's determinism half became ci2h:
 
 | slice | scope items | mechanism |
 | --- | --- | --- |
@@ -15,6 +15,7 @@ CI2 was large and said "split at planning". By the sizing rule (at most one new 
 | [`workflow-controller-ci2g`](workflow-controller-ci2g.md) | 10 | shard affinity for tests that share a snapshot (split out of ci2c) |
 | [`workflow-controller-ci2d`](workflow-controller-ci2d.md) | 11, 12, 13 and the automation of the timings refresh | after-merge and trigger policy |
 | [`workflow-controller-ci2e`](workflow-controller-ci2e.md) | [#322](https://github.com/RodrigoFAbreu/workflow-controller/issues/322) | a runtime check replacing the static repo-reach heuristic |
+| [`workflow-controller-ci2h`](workflow-controller-ci2h.md) | [#317](https://github.com/RodrigoFAbreu/workflow-controller/issues/317) (the release wait) | split the after-merge determinism check (split out of ci2d at its planning) |
 
 Scope item 1 is split on purpose: this slice refreshes the timings once by hand (a one-off measurement) and ci2d automates the refresh. Item 14 ("not worth doing") needs no work. Each later slice depends on this one and is planned after it.
 

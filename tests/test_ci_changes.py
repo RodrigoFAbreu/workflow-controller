@@ -17,12 +17,14 @@ import fnmatch
 import importlib.util
 import io
 import itertools
+import json
 import os
 import subprocess
 import sys
 import tempfile
 import textwrap
 import unittest
+import unittest.mock
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -220,11 +222,204 @@ class DetectRepoTests(unittest.TestCase):
         for event, expected in (("pull_request", "false"), ("push", "true")):
             with self.subTest(event=event), tempfile.TemporaryDirectory() as out:
                 target = Path(out) / "github_output"
-                env = {**os.environ, "GITHUB_EVENT_NAME": event, "GITHUB_OUTPUT": str(target)}
+                # Stand in for a runner whose GITHUB_EVENT_PATH names a Draft pull request's
+                # payload: the command under test must not inherit it (CI2d PR check, tests (1)).
+                payload = Path(out) / "event.json"
+                payload.write_text(json.dumps({"pull_request": {"draft": True}}))
+                with unittest.mock.patch.dict(os.environ, {"GITHUB_EVENT_PATH": str(payload)}):
+                    env = {key: value for key, value in os.environ.items() if not key.startswith("GITHUB_")}
+                env.update(GITHUB_EVENT_NAME=event, GITHUB_OUTPUT=str(target))
                 done = fixtures.run([sys.executable, str(fixtures.REPO_ROOT / "tools" / "ci_changes.py"), "detect"],
                                     cwd=self.repo, env=env)
                 self.assertEqual(target.read_text(), f"code={expected}\n")
                 self.assertIn(f"code={expected}", done.stdout)
+
+
+# ---------------------------------------------------------------------------
+# detect: a push and a Draft pull request (CI2d, D1, D2)
+# ---------------------------------------------------------------------------
+
+def _state(**phases: str) -> str:
+    return json.dumps({"work_items": {key: {"work_item_id": key, "phase": phase}
+                                      for key, phase in phases.items()}})
+
+
+class PushDetectTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp = Path(self._tmp.name)
+        self.repo = fixtures.git_init(self.tmp / "repo", "-b", "main")
+        _commit(self.repo, {"docs/run.md": "run\n", "tools/x.py": "x = 1\n"}, "base")
+        self.before = _git(self.repo, "rev-parse", "HEAD").strip()
+
+    def head(self) -> str:
+        return _git(self.repo, "rev-parse", "HEAD").strip()
+
+    def decide(self, payload="default", *, git=None, event="push") -> tuple[str, str]:
+        if payload == "default":
+            payload = {"before": self.before, "after": self.head()}
+        env = {"GITHUB_EVENT_NAME": event}
+        if payload is not None:
+            path = self.tmp / "event.json"
+            path.write_text(payload if isinstance(payload, str) else json.dumps(payload))
+            env["GITHUB_EVENT_PATH"] = str(path)
+        return cc.detect(env, cwd=self.repo, **({"git": git} if git else {}))
+
+    def test_a_push_of_documentation_only_is_false(self):
+        _commit(self.repo, {"docs/run.md": "new\n", "docs/items/c.md": "c\n"})
+        self.assertEqual(self.decide()[0], "false")
+
+    def test_a_push_range_of_two_documentation_commits_is_false(self):
+        _commit(self.repo, {"docs/run.md": "one\n"})
+        _commit(self.repo, {"docs/items/c.md": "c\n"})
+        self.assertEqual(self.decide()[0], "false")
+
+    def test_a_push_range_with_one_code_commit_is_true(self):
+        _commit(self.repo, {"docs/run.md": "one\n"})
+        _commit(self.repo, {"tools/x.py": "x = 2\n"})
+        self.assertEqual(self.decide()[0], "true")
+
+    def test_a_push_with_one_code_path_is_true(self):
+        _commit(self.repo, {"docs/run.md": "new\n", "tools/x.py": "x = 2\n"})
+        self.assertEqual(self.decide()[0], "true")
+
+    def test_an_all_zero_before_is_true(self):
+        _commit(self.repo, {"docs/run.md": "new\n"})
+        self.assertEqual(self.decide({"before": "0" * 40, "after": self.head()})[0], "true")
+
+    def test_an_after_that_is_not_head_is_true(self):
+        _commit(self.repo, {"docs/run.md": "new\n"})
+        self.assertEqual(self.decide({"before": self.before, "after": self.before})[0], "true")
+
+    def test_an_unresolvable_before_is_true(self):
+        _commit(self.repo, {"docs/run.md": "new\n"})
+        self.assertEqual(self.decide({"before": "1" * 40, "after": self.head()})[0], "true")
+
+    def test_an_empty_diff_is_true(self):
+        _commit(self.repo, {})
+        self.assertEqual(self.decide()[0], "true")
+
+    def test_an_unreadable_or_odd_payload_is_true(self):
+        _commit(self.repo, {"docs/run.md": "new\n"})
+        for payload in (None, "not json", "[]", {}, {"before": 1, "after": 2}, {"before": "", "after": ""}):
+            with self.subTest(payload=payload):
+                self.assertEqual(self.decide(payload)[0], "true")
+
+    def test_a_failing_git_is_true(self):
+        _commit(self.repo, {"docs/run.md": "new\n"})
+
+        def broken(args, cwd):
+            raise cc.DetectError("boom")
+
+        self.assertEqual(self.decide(git=broken)[0], "true")
+        self.assertEqual(self.decide(git=lambda a, c: 1 / 0)[0], "true")
+
+    def test_the_reason_names_the_rule(self):
+        _commit(self.repo, {"docs/run.md": "new\n"})
+        self.assertIn("push", self.decide()[1])
+
+    def test_a_manual_dispatch_is_true(self):
+        _commit(self.repo, {"docs/run.md": "new\n"})
+        self.assertEqual(self.decide(event="workflow_dispatch")[0], "true")
+
+
+class DraftDetectTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp = Path(self._tmp.name)
+        self.repo = fixtures.git_init(self.tmp / "repo", "-b", "main")
+        self.state = "docs/ai-workflow/WORKFLOW_STATE.json"
+
+    def merge(self, head_state: str | None, base_state: str | None = "default", *, extra=None) -> None:
+        base = _state(old="MILESTONE_COMPLETE") if base_state == "default" else base_state
+        _commit(self.repo, {"tools/x.py": "x = 1\n", self.state: base}, "base")
+        _git(self.repo, "checkout", "-q", "-b", "pr")
+        _commit(self.repo, {self.state: head_state, **(extra or {})}, "pr")
+        _git(self.repo, "checkout", "-q", "main")
+        _git(self.repo, "merge", "-q", "--no-ff", "-m", "merge ref", "pr")
+
+    def decide(self, draft="default", *, event="pull_request") -> tuple[str, str]:
+        payload = {"pull_request": {"draft": True}} if draft == "default" else draft
+        path = self.tmp / "event.json"
+        path.write_text(payload if isinstance(payload, str) else json.dumps(payload))
+        return cc.detect({"GITHUB_EVENT_NAME": event, "GITHUB_EVENT_PATH": str(path)}, cwd=self.repo)
+
+    def test_the_partition_covers_every_known_phase_exactly_once(self):
+        sys.path.insert(0, str(fixtures.REPO_ROOT / "scripts"))
+        try:
+            import workflow_state
+        finally:
+            sys.path.pop(0)
+        bound, excluded = set(cc.REVIEW_BOUND_PHASES), set(cc.EXCLUDED_PHASES)
+        self.assertFalse(bound & excluded)
+        self.assertEqual(bound | excluded, set(workflow_state.KNOWN_PHASES))
+
+    def test_a_draft_with_no_review_bound_item_is_false_even_for_code(self):
+        self.merge(_state(old="MILESTONE_COMPLETE", new="IMPLEMENTING"), extra={"tools/x.py": "x = 2\n"})
+        self.assertEqual(self.decide()[0], "false")
+
+    def test_every_review_bound_phase_new_at_the_head_is_true(self):
+        for phase in sorted(cc.REVIEW_BOUND_PHASES):
+            with self.subTest(phase=phase):
+                self.setUp()
+                self.merge(_state(old="MILESTONE_COMPLETE", new=phase))
+                self.assertEqual(self.decide()[0], "true")
+
+    def test_the_usual_anchor_phases_run_the_shards_and_the_head_at_a_and_later_do(self):
+        for phase in ("APPLYING_REVIEW_FEEDBACK", "SELF_REVIEWING_IMPLEMENTATION", "MILESTONE_COMPLETE"):
+            with self.subTest(phase=phase):
+                self.setUp()
+                self.merge(_state(old="MILESTONE_COMPLETE", new=phase))
+                self.assertEqual(self.decide()[0], "true")
+                # a later head: the base (main) still lacks the item
+                _git(self.repo, "checkout", "-q", "pr")
+                _commit(self.repo, {"tools/y.py": "y\n"})
+                _git(self.repo, "checkout", "-q", "main")
+                _git(self.repo, "reset", "-q", "--hard", "HEAD^1")
+                _git(self.repo, "merge", "-q", "--no-ff", "-m", "merge ref", "pr")
+                self.assertEqual(self.decide()[0], "true")
+
+    def test_an_item_in_a_plan_stage_phase_or_implementing_is_false(self):
+        for phase in sorted(cc.EXCLUDED_PHASES):
+            with self.subTest(phase=phase):
+                self.setUp()
+                self.merge(_state(old="MILESTONE_COMPLETE", new=phase))
+                self.assertEqual(self.decide()[0], "false")
+
+    def test_an_item_already_review_bound_at_the_base_is_false(self):
+        self.merge(_state(old="MILESTONE_COMPLETE", new="AWAITING_FUNCTIONAL_REVIEW"),
+                   _state(old="MILESTONE_COMPLETE", new="AWAITING_FUNCTIONAL_REVIEW"))
+        self.assertEqual(self.decide()[0], "false")
+
+    def test_an_item_the_base_holds_at_an_excluded_phase_is_true(self):
+        self.merge(_state(new="APPLYING_REVIEW_FEEDBACK"), _state(new="IMPLEMENTING"))
+        self.assertEqual(self.decide()[0], "true")
+
+    def test_an_unreadable_state_file_is_true(self):
+        for head, base in (("not json", "default"), ("{}", "default"), (_state(new="PLANNING"), "not json"),
+                           ('{"work_items": 3}', "default")):
+            with self.subTest(head=head, base=base):
+                self.setUp()
+                self.merge(head, base)
+                self.assertEqual(self.decide()[0], "true")
+
+    def test_a_missing_state_file_at_the_head_is_true(self):
+        self.merge(None)
+        self.assertEqual(self.decide()[0], "true")
+
+    def test_a_missing_draft_key_and_a_non_draft_run_everything(self):
+        self.merge(_state(old="MILESTONE_COMPLETE", new="PLANNING"), extra={"tools/x.py": "x = 2\n"})
+        for payload in ({}, {"pull_request": {}}, {"pull_request": {"draft": False}}, "not json",
+                        {"pull_request": {"draft": "true"}}, {"pull_request": "draft"},
+                        {"pull_request": ["draft"]}, {"pull_request": None}):
+            with self.subTest(payload=payload):
+                self.assertEqual(self.decide(payload)[0], "true")
+
+    def test_a_non_draft_documentation_pull_request_is_still_false(self):
+        self.merge(_state(old="MILESTONE_COMPLETE"), extra={"docs/items/a.md": "a\n"})
+        self.assertEqual(self.decide({"pull_request": {"draft": False}})[0], "false")
 
 
 # ---------------------------------------------------------------------------

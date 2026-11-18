@@ -163,6 +163,15 @@ assert set(MAIN_TEST_MODULES.values()) == {module for module, (where, _) in
                                            test_shards.CI_PLACEMENT.items()
                                            if where == test_shards.MAIN}
 
+#: How many legs each after-merge check runs in (CI2d D4/D5): ``main-check``
+#: plans the module into that many shards and each leg runs one, so a matrix of
+#: legs is one job id (``needs.<id>.result`` is ``success`` only when every leg
+#: succeeded) and the release gate and ``build-publish.yml``'s inputs are
+#: unchanged. The determinism check compares two runs inside one test and is
+#: not split here.
+MAIN_CHECK_LEGS = {"determinism": 1, "mutations": 3}
+assert set(MAIN_CHECK_LEGS) == set(MAIN_TEST_MODULES)
+
 #: The ``tests`` jobs' planning inputs. ``plan`` and every shard job pass
 #: exactly these, so a digest match proves they computed the same plan.
 PLANNING_ARGS = "--profile ci --ci-placement"
@@ -211,7 +220,8 @@ REUSE_RESULTS = f"inputs.{REUSE_INPUT} != ''"
 #: The ``changes`` job's one output: ``true`` unless the pull request changes
 #: only documentation (``tools/ci_changes.py``). Every job and step the
 #: documentation-only mode skips carries this condition.
-CHANGES_CODE_OUTPUT = "needs.changes.outputs.code"
+CODE_OUTPUT = "code"
+CHANGES_CODE_OUTPUT = f"needs.changes.outputs.{CODE_OUTPUT}"
 IS_CODE = f"{CHANGES_CODE_OUTPUT} == 'true'"
 #: The recorded tree, written next to the plan and the shard records.
 TREE_FILE = "tree.txt"
@@ -402,7 +412,13 @@ def tests_workflow() -> dict:
         # compares equal to '' (GitHub coerces both to 0), so the shards run.
         "on": {"workflow_call": {"inputs": {REUSE_INPUT: {
             "description": "Id of a pull request run to reuse the results of; empty runs the shards.",
-            "type": "string", "required": False, "default": ""}}},
+            "type": "string", "required": False, "default": ""}},
+                         # What ``changes`` decided, for a caller that must know whether
+                         # the shards ran (ci.yml hands it to build-publish.yml).
+                         "outputs": {CODE_OUTPUT: {
+                             "description": "true unless the run was documentation-only: "
+                                            "the shards ran (or were reused).",
+                             "value": f"${{{{ jobs.changes.outputs.{CODE_OUTPUT} }}}}"}}},
                "workflow_dispatch": None},
         "jobs": {
             # Detection is a job, never a workflow-level paths filter: the
@@ -411,7 +427,7 @@ def tests_workflow() -> dict:
             "changes": {
                 "runs-on": RUNNER,
                 "permissions": read,
-                "outputs": {"code": "${{ steps.detect.outputs.code }}"},
+                "outputs": {CODE_OUTPUT: f"${{{{ steps.detect.outputs.{CODE_OUTPUT} }}}}"},
                 "steps": [
                     _checkout(pinned=False, fetch_depth=0),
                     _setup_python(pinned=False),
@@ -604,9 +620,19 @@ VALIDATE_RESULT_INPUT = "validate-result"
 #: The caller validated the revision. Every job that builds or publishes
 #: requires exactly this, as a conjunct, so no input combination (null and
 #: empty included) reaches them without the caller's result (CI3 D2).
-VALIDATED = f"inputs.{VALIDATE_RESULT_INPUT} == 'success'"
+VALIDATE_SUCCEEDED = f"inputs.{VALIDATE_RESULT_INPUT} == 'success'"
+#: Whether the caller's validation ran the shards (``tests.yml``'s ``code``
+#: output). A documentation-only push passes ``validate`` without them, so it
+#: must never build or publish a release range that holds unreleased code
+#: (CI2d I1): ``RELEASE_DUE`` and ``RESUME`` wait for a code push or a
+#: dispatch of ``CI`` on ``main``, which is always ``code=true``.
+CODE_INPUT = "code"
+SHARDS_RAN = f"inputs.{CODE_INPUT} == 'true'"
+VALIDATED = f"{VALIDATE_SUCCEEDED} && {SHARDS_RAN}"
 #: Nothing was handed in: a direct dispatch of ``build-publish.yml``.
 NO_RESULTS = f"inputs.{VALIDATE_RESULT_INPUT} != 'success'"
+#: ``validate`` succeeded but ran no shard (a documentation-only push).
+NO_SHARDS = f"{VALIDATE_SUCCEEDED} && inputs.{CODE_INPUT} != 'true'"
 
 
 def _after_merge_ok(check: str) -> str:
@@ -650,8 +676,12 @@ def _main_check_job(check: str, *, release_target: bool, condition: str | None =
     (the commit ``release-plan`` selected, only when that is an ancestor and
     the run publishes). Both run ``run_tests.py main-check``, which fails when
     the module's selection is empty or short, or any test was skipped. The
-    steps are the ``tests`` job's, ``ALLOW_USERNS`` included."""
+    steps are the ``tests`` job's, ``ALLOW_USERNS`` included. A check with
+    more than one leg (``MAIN_CHECK_LEGS``) is a matrix of ``--shard I --of N``
+    runs under the same job id; a leg that fails fails the job."""
     module = MAIN_TEST_MODULES[check]
+    legs = MAIN_CHECK_LEGS[check]
+    command = f"python3 tools/run_tests.py main-check {module}"
     job: dict = {}
     if condition is not None:
         job["needs"] = ["validate"]
@@ -662,6 +692,12 @@ def _main_check_job(check: str, *, release_target: bool, condition: str | None =
             "if": f"{_after('release-plan')} && {VALIDATED} && {_publishing_condition()} "
                   f"&& {TARGET_IS_ANCESTOR}",
         })
+    if legs > 1:
+        prefix = "release-target" if release_target else "after-merge"
+        job["name"] = f"{prefix}-{check} (${{{{ matrix.shard }}}})"
+        job["strategy"] = {"fail-fast": False,
+                           "matrix": {"shard": list(range(legs))}}
+        command += f" --shard ${{{{ matrix.shard }}}} --of {legs}"
     job.update({
         "runs-on": RUNNER,
         "permissions": {"contents": "read"},
@@ -672,7 +708,7 @@ def _main_check_job(check: str, *, release_target: bool, condition: str | None =
             _setup_python(pinned=True),
             _install_editable(),
             {"name": "allow unprivileged user namespaces", "run": ALLOW_USERNS},
-            {"name": check, "run": f"python3 tools/run_tests.py main-check {module}"},
+            {"name": check, "run": command},
         ],
     })
     return job
@@ -774,6 +810,10 @@ def build_publish_workflow() -> dict:
     notice = ("echo '::notice::Build and publish was handed no test results, so it builds "
               "nothing. To publish, dispatch the CI workflow on main: it runs the tests and "
               "calls this workflow with their results.'")
+    notice_docs = ("echo '::notice::The pushed range touches documentation only, so the shards did "
+                   "not run on this commit and nothing is built or published. A release that is "
+                   "due or resumable waits for the next push that alters code, or for a "
+                   "dispatch of the CI workflow on main.'")
     caller_result = {"type": "string", "required": False, "default": ""}
     read = {"contents": "read"}
     return {
@@ -782,6 +822,9 @@ def build_publish_workflow() -> dict:
             "workflow_call": {"inputs": {
                 VALIDATE_RESULT_INPUT: {
                     "description": "The caller's tests.yml result for github.sha.",
+                    **caller_result},
+                CODE_INPUT: {
+                    "description": "The caller's tests.yml code output: true when the shards ran.",
                     **caller_result},
                 **{f"after-merge-{check}": {
                     "description": f"The caller's after-merge-{check} result for github.sha.",
@@ -807,6 +850,7 @@ def build_publish_workflow() -> dict:
                     _setup_python(pinned=True),
                     {"name": "classify", "id": "classify", "env": dict(GIT_CREDENTIAL_ENV), "run": classify},
                     {"name": "no test results", "if": NO_RESULTS, "run": notice},
+                    {"name": "no shards ran", "if": NO_SHARDS, "run": notice_docs},
                 ],
             },
             "release-target-determinism": _main_check_job("determinism", release_target=True),
@@ -862,10 +906,17 @@ CI_CONCURRENCY_GROUP = ("${{ github.event_name == 'pull_request' && "
                         "format('{0}-{1}', github.workflow, github.run_id) }}")
 
 
+#: ``ci.yml``'s ``pull_request`` activity types: the three defaults plus
+#: ``ready_for_review``, so a person who marks a Draft pull request ready gets
+#: the full suite on that head at once (CI2d D3).
+PR_CI_TYPES = ("opened", "synchronize", "reopened", "ready_for_review")
+
+
 def ci_workflow() -> dict:
     return {
         "name": "CI",
-        "on": {"pull_request": None, "push": {"branches": ["main"]}, "workflow_dispatch": None},
+        "on": {"pull_request": {"types": list(PR_CI_TYPES)}, "push": {"branches": ["main"]},
+               "workflow_dispatch": None},
         "concurrency": {"group": CI_CONCURRENCY_GROUP,
                         "cancel-in-progress": "${{ github.event_name == 'pull_request' }}"},
         "permissions": {"contents": "read"},
@@ -902,6 +953,7 @@ def ci_workflow() -> dict:
                 "permissions": {"contents": "write"},
                 "uses": BUILD_PUBLISH_WORKFLOW,
                 "with": {VALIDATE_RESULT_INPUT: "${{ needs.validate.result }}",
+                         CODE_INPUT: f"${{{{ needs.validate.outputs.{CODE_OUTPUT} }}}}",
                          **{f"after-merge-{check}": f"${{{{ needs.after-merge-{check}.result }}}}"
                             for check in MAIN_TEST_MODULES}},
             },
@@ -952,6 +1004,59 @@ def reuse_report_workflow() -> dict:
     }
 
 
+#: The scheduled refresh (CI2d D6): Monday 05:17 UTC, an off-peak minute.
+TIMINGS_REFRESH_CRON = "17 5 * * 1"
+#: The repository secret the push and the pull request use. A pull request opened with
+#: ``github.token`` starts no ``pull_request`` workflow, so the required checks would
+#: never run (``tools/timings_refresh.py``).
+TIMINGS_REFRESH_SECRET = "TIMINGS_REFRESH_TOKEN"
+TIMINGS_REFRESH_DIR = "timings-refresh"
+TIMINGS_REFRESH_PERMISSIONS = {"contents": "read", "actions": "read"}
+
+
+def timings_refresh_workflow() -> dict:
+    """A workflow of its own, so that it can never hold ``ci.yml``'s ``main-release``
+    slot. Schedule and dispatch only: no ``pull_request`` trigger, so a fork cannot
+    reach it. Listing runs and downloading their artifacts use ``github.token`` (which
+    holds ``actions: read``); the secret reaches only the step that pushes and opens the
+    pull request."""
+    tool = "python3 tools/timings_refresh.py"
+    changed = "steps.change.outputs.changed == 'true'"
+    return {
+        "name": "Timings refresh",
+        "on": {"schedule": [{"cron": TIMINGS_REFRESH_CRON}], "workflow_dispatch": {}},
+        "concurrency": {"group": "timings-refresh", "cancel-in-progress": False},
+        "permissions": dict(TIMINGS_REFRESH_PERMISSIONS),
+        "jobs": {
+            "refresh": {
+                "name": "refresh the shard timings",
+                "runs-on": RUNNER,
+                "steps": [
+                    _checkout(pinned=True),
+                    _setup_python(pinned=True),
+                    _install_editable(),
+                    {"name": "collect the shard records of recent pull-request runs",
+                     "id": "collect",
+                     "env": {"GH_TOKEN": "${{ github.token }}"},
+                     "run": f'{tool} collect --repo "$GITHUB_REPOSITORY" --output-dir {TIMINGS_REFRESH_DIR}'},
+                    {"name": "merge them into the committed timings",
+                     "id": "change",
+                     "if": "steps.collect.outputs.count != '0'",
+                     "run": f"{tool} plan-change --dirs-file {TIMINGS_REFRESH_DIR}/dirs.txt "
+                            "--output tools/test_timings.json"},
+                    {"name": "check the merged timings against the staleness ratchet",
+                     "if": changed,
+                     "run": "python3 tools/run_tests.py tests.test_test_shards"},
+                    {"name": "push the branch and open or update the pull request",
+                     "if": changed,
+                     "env": {TIMINGS_REFRESH_SECRET: "${{ secrets." + TIMINGS_REFRESH_SECRET + " }}"},
+                     "run": f'{tool} propose --repo "$GITHUB_REPOSITORY"'},
+                ],
+            },
+        },
+    }
+
+
 _GENERATED = ("Generated by tools/ci_workflows.py -- do not edit by hand.\n"
               "Change the model there and run: python3 tools/ci_workflows.py --write")
 
@@ -963,6 +1068,11 @@ WORKFLOWS = {
                "build-publish.yml with those results, so the revision is validated once before a\n"
                "release. A pull request's newer push cancels its older run; main's runs never cancel\n"
                "one another (main-release). Milestone branches are validated through their Draft PR.\n\n"
+               "Two trigger rules (tools/ci_changes.py): a push to main that changes only documentation\n"
+               "skips the plan and the shards (the managed conformance job, the docs gate and the\n"
+               "after-merge checks still run); a Draft pull request's shards run from the first\n"
+               "review-bound head, so the acceptance gate's ci_green at the anchor commit is a real\n"
+               "run, and ready_for_review starts a full run at once.\n\n"
                "reuse (read-only, never on a pull request) is switched by the repository variable\n"
                "CI_MAIN_REUSE. on: reuse runs first and validate skips the shards when the recorded\n"
                "tree and plan digest match. Any other value: reuse does not run and validate starts\n"
@@ -976,8 +1086,9 @@ WORKFLOWS = {
                      "The required validation, called by ci.yml, or dispatched by hand. Its input\n"
                      "tests-from-run is empty except when ci.yml reuses a pull request run on main\n"
                      "(CI_MAIN_REUSE=on); then the shards are skipped and tests-result re-verifies that\n"
-                     "run's recorded results. A pull request that changes only documentation\n"
-                     "(tools/ci_changes.py) skips plan and tests; the docs-tests and docs jobs run on every\n"
+                     "run's recorded results. A pull request or a push to main that changes only\n"
+                     "documentation, and a Draft pull request before its first review-bound head\n"
+                     "(tools/ci_changes.py), skips plan and tests; the docs-tests and docs jobs run on every\n"
                      "event and tests-result requires docs, which needs docs-tests. docs-tests is the\n"
                      "shared python-tests.yml of RodrigoFAbreu/action-workflows."),
     "build-publish.yml": (build_publish_workflow,
@@ -1001,6 +1112,17 @@ WORKFLOWS = {
                               "for main's shards. A workflow apart from ci.yml: nothing waits for it, it does\n"
                               "not share main-release's concurrency group, and it cannot fail CI. Read-only;\n"
                               "the logic is tools/ci_reuse.py, shared with ci.yml's reuse job."),
+    "timings-refresh.yml": (timings_refresh_workflow,
+                            "Weekly (and by hand) refresh of tools/test_timings.json from the shard records\n"
+                            "of recent pull-request runs (tools/timings_refresh.py): collect, merge, run the\n"
+                            "staleness ratchet on the merged file, then push the branch ci/timings-refresh\n"
+                            "and open or update the one pull request. A workflow apart from ci.yml, so it\n"
+                            "can never hold main-release's slot; schedule and dispatch only, so a fork\n"
+                            "cannot reach it. The run listing and artifact download use github.token with\n"
+                            "actions: read; the push and the pull request use the repository secret\n"
+                            "TIMINGS_REFRESH_TOKEN, because a pull request opened with github.token starts\n"
+                            "no pull_request workflow and its required checks would never run. Without the\n"
+                            "secret the job fails with a message naming it."),
     "pr-title.yml": (pr_title_workflow,
                      "Checks every pull request's title against the policy committed on its merge ref\n"
                      "(tools/release.py check-title). The title becomes the squash commit's subject,\n"

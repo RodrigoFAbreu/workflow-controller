@@ -223,7 +223,11 @@ push to `main` where its condition holds). The mechanisms:
   and `package` needs `docs` and runs on `!cancelled()`, so an upstream result
   never skips the required `validate / package` check;
 - the two `after-merge-*` jobs wait for `validate`, so they no longer run beside the
-  shards.
+  shards;
+- on a push to `main` after `validate` the runners are the determinism job, the
+  three legs of the mutation job (see "Checks that run after the merge"), the
+  managed `workflow-conformance` job and `reuse-report`: six, the limit exactly.
+  A fourth mutation leg would fail the test, not the run.
 
 The count of `docs-tests` as one runner is an assumption: it calls
 `RodrigoFAbreu/action-workflows/.github/workflows/python-tests.yml@main`, a
@@ -271,18 +275,67 @@ required check pending forever.
   module), whatever the root is called; the reach is by name within a module, so a temporary directory
   that shares a name with a reached one is flagged and needs an entry in
   `MENTIONS`, and a value passed in from another module is not followed.
-- **Fail closed.** `code` is `false` only for a `pull_request` event whose
-  merge ref differs from its first parent by documentation paths alone. A
-  push to `main`, a manual dispatch, a `HEAD` that is not a merge commit, an
-  empty diff, a failed `git` call or a path outside the set (a rename out of
-  the set counts both ends) all give `true`.
+- **Fail closed.** `code` is `false` only for the three cases below. A
+  manual dispatch, a `HEAD` that is not a merge commit (for a pull request),
+  an empty diff, a failed `git` call, an unreadable event payload or a path
+  outside the set (a rename out of the set counts both ends) all give
+  `true`.
+- **A push to `main`** (CI2d). `detect` reads the event payload
+  (`GITHUB_EVENT_PATH`) and judges the pushed range `before..HEAD`: `code` is
+  `false` only when `before` is a real commit, `after` equals `HEAD` and every
+  path of the range is documentation. A range of several documentation-only
+  commits is `false` too. A new branch (an all-zero `before`), a force-push (a
+  `before` that does not resolve) and any doubt are `true`. The skipped push
+  runs no `plan` and no shards, but the `after-merge-*` jobs and the release
+  gate still run, because they need only `validate` to succeed: about 30
+  runner-minutes remain, on purpose, so a documentation-only commit passes
+  `validate`. It does not release, though: `tests.yml` exposes the `changes`
+  job's `code` as an output, `ci.yml` hands it to `build-publish.yml`, and
+  `build` and `publish` (and the `release-target-*` checks) also require
+  `code` to be `true`. A documentation-only push could otherwise publish a
+  release range that holds unreleased code no shard has run on `main`, for
+  instance after a `feat:` push whose shards failed, so that `RELEASE_DUE` or
+  `RESUME` waits for the next push that changes code or for a manual `CI`
+  dispatch on `main` (always `code=true`). The `release-plan` job says so in a
+  notice. The managed `workflow-conformance` job runs as before.
+- **A Draft pull request** (CI2d). A pull request whose payload says `draft`
+  runs the shards only from the first head the acceptance gate can read: its
+  head commit holds a work item whose `phase` is in the review-bound set
+  (`REVIEW_BOUND_PHASES` in `tools/ci_changes.py`: from
+  `SELF_REVIEWING_IMPLEMENTATION` through the implementation reviews,
+  `APPLYING_REVIEW_FEEDBACK`, the functional review, the acceptance and
+  technical-approval phases and `MILESTONE_COMPLETE`) and the base commit does
+  not hold it at a phase in that set. Until then (`PLANNING`, `IMPLEMENTING`
+  and the plan-stage phases, `EXCLUDED_PHASES`) an intermediate push skips the
+  shards, which is the waste the item removes (101 cancelled runs since 12
+  November cost about 5,500 runner-minutes). A test asserts that the two sets
+  partition `workflow_state.KNOWN_PHASES`, so a new phase cannot be skipped
+  silently. A missing `draft` key is treated as not a draft (the ordinary
+  documentation-path rule applies, so a documentation-only diff is still
+  `code=false`); an unreadable state file at either parent runs the shards,
+  and so does a pull request that is not a draft and changes code. The reason is the
+  Controller's order: it needs green checks at the acceptance commit before it
+  marks a pull request ready (`ready_requires_green_checks`), and the
+  acceptance gate's `ci_green` reads the checks at the anchor commit, which is
+  a draft head. Both need a real run of the shards, so waiting for a
+  `ready_for_review` run would deadlock the Controller.
+- **`ready_for_review` starts a run.** `ci.yml`'s `pull_request` types are the
+  three defaults and `ready_for_review`, so a person who marks a draft ready
+  gets the full suite on that head at once. A skipped draft run is a green
+  `tests-result` with the reason in the job summary; making it red would turn
+  every intermediate push into a defect for the pull-request defect loop. The
+  residual: between a person marking a draft ready and the new run registering
+  its checks, the draft run's green checks on the same commit are visible for
+  a few seconds, so a merge in that window is possible. The Controller never
+  does it, and the required checks leave only that window.
 - **The aggregate.** In the skipped mode `tests-result` uploads no timings
   and the reuse path is not taken. Its last step, `python3
   tools/ci_changes.py require`, always runs and passes only when `changes`
   and `docs` succeeded and `code` is exactly `true` or `false`; a failed or
   cancelled `changes` job fails the required check.
-- **`main` runs everything.** `CI` calls the same workflow on a push,
-  where `code` is always `true`. The saving applies to a pull request only.
+- **`main` runs everything it cannot prove is documentation.** `CI` calls
+  the same workflow on a push and judges the pushed range as above; a
+  `workflow_dispatch` is always `true`.
 - **Measurement.** On the last 60 first-parent commits of `main` 19 were
   documentation-only under this set, about a third. The live duration of
   the first documentation-only pull request is not recorded yet.
@@ -323,8 +376,14 @@ under `CI_MAIN_REUSE=on`) and then the `after-merge-*` jobs, which since CI3 run
 (measured on the first run with them, at 37c80b6, when the two passes ran one after
 the other: determinism 32.1 minutes, mutations 17.3; since the passes run at the same
 time, the first `main` run after that change, at cbb8d11, measured determinism 17.4 minutes and mutations 14.9), plus
-setup and the release jobs. So a release waits about
-as long as the mutations job after the merge. Locally on four CPUs the module took a
+setup and the release jobs. Before CI2d a release therefore waited about
+as long as the mutations job after the merge (11.3 to 17.2 minutes measured).
+Since CI2d the mutation check is split in three legs (below), so the wait is
+bounded by the determinism job (12.6 to 15.7 minutes measured), not by the
+mutations; the determinism job is not split here, and a backlog item
+([`workflow-controller-ci2h`](../items/workflow-controller-ci2h.md)) holds that
+split, so the release wait does not reach the 6 to 9 minutes the CI2 page
+hoped for until it lands. Locally on four CPUs the module took a
 median of 11.5 minutes before and 6.1 after (three runs each). The two passes use two
 clones and never share a checkout; a failed or hung pass fails the test within a
 bounded time and leaves no process behind. A `RESUME` of an ancestor adds the target checks
@@ -333,6 +392,81 @@ run waits behind the `main-release` slot as before. A target that predates the
 moved module blocks the release (fail-closed) for the owner to decide. A
 non-deterministic scenario or a flow that stops failing under its mutation is
 therefore found on `main`, before the release but after the merge.
+
+**The mutation check in three legs** (CI2d). `python3 tools/run_tests.py
+main-check MODULE --shard I --of N` (both flags or neither; `N` at least 1,
+`I` from `0` to `N-1`; anything else exits 2) plans the module for `N` shards
+with the committed timings, runs shard `I`, and applies the same fail-closed
+rule to that leg's own planned tests: an empty leg, a short or different set,
+a skip or a failure fails the leg. `after-merge-mutations` (in `ci.yml`) and
+`release-target-mutations` (in `build-publish.yml`) are a `fail-fast: false`
+matrix of `shard: [0, 1, 2]` (`MAIN_CHECK_LEGS` in `tools/ci_workflows.py`),
+named `<prefix>-mutations (<shard>)`; the job ids, the `needs.<id>.result` the
+release gate reads and `build-publish.yml`'s inputs are unchanged, because a
+matrix job's result is `success` only when every leg succeeded. A test proves
+offline that the legs are disjoint and together equal the module's
+inventory. The planner's estimate for `tests.test_scenarios_negative` (the
+committed timings, `ci` profile) is 959.7 s for one shard and 319.8, 320.1 and
+319.8 s for the three legs (13, 17 and 16 tests; longest over mean 1.0006). That
+is an estimate and not a measurement: the real job time is read from the first
+`main` run after the merge. Three legs make a push to `main` use six runners
+(see "The six-runner limit"). A release target that predates `--shard` refuses
+the flags, so a `RESUME` of such an ancestor fails closed at the target
+mutation check, as it already does for a target that lacks `main-check`.
+
+A `workflow_dispatch` of `ci.yml` on a branch still runs the `after-merge-*`
+jobs, because they run on any event that is not a pull request once `validate`
+succeeded; that is as before and is intended. The automated timings refresh
+below starts no such run.
+
+### The automated timings refresh
+
+`tools/test_timings.json` holds the measured seconds per test the planner
+balances shards with, and `MAX_UNTIMED_TEST_SHARE` (the staleness ratchet) fails
+a pull request when too many placed tests have no timing. CI2 refreshed the file
+by hand; since CI2d the scheduled workflow `timings-refresh.yml` does it (Monday
+05:17 UTC, and by hand with `workflow_dispatch`). It is a workflow of its own,
+with no `pull_request` trigger, so it can never hold `ci.yml`'s `main-release`
+slot. `tools/timings_refresh.py` (standard library only) has three steps:
+
+- `collect` lists the newest successful `ci.yml` runs of this repository whose
+  event is `pull_request` (never `main`, whose reused runs would duplicate the
+  records), downloads the `timings-ci-attempt-*` artifact of at most `--runs`
+  of them (default 3) and drops a shard record whose `(plan_digest, shard)` was
+  already taken (newest run first, so the newest record is kept). It lists the
+  runs in `dirs.txt` oldest first, because the merger's moving average weighs
+  a later observation more, so a growing test's estimate ends on its newest
+  run;
+- `plan-change` runs `run_tests.py timings merge` into a copy, prints the
+  untimed share before and after, and writes the merged file only when its
+  bytes differ (`changed=true|false`);
+- `propose` commits the file on the branch `ci/timings-refresh`, pushes it with
+  `--force-with-lease` and updates the one open pull request titled
+  `ci: refresh the shard timings (automated)` or opens it; a closed or merged
+  earlier pull request is not reused.
+
+Between `plan-change` and `propose` the workflow runs
+`python3 tools/run_tests.py tests.test_test_shards` on the merged file, so a
+refresh the staleness ratchet would refuse is never opened.
+
+**The token (the owner creates it).** The pull request must start the required
+checks (`validate / plan`, `validate / tests-result`, `validate / package`,
+`workflow-conformance` and `PR title`), and a pull request opened with
+`GITHUB_TOKEN` starts no `pull_request` workflow. So the push and the pull
+request use the repository secret `TIMINGS_REFRESH_TOKEN` (a personal access
+token or GitHub App token with `contents` and `pull_requests` write), and only
+those steps see it. Listing runs and downloading artifacts use
+`github.token` with `contents: read` and `actions: read`. Without the secret
+the workflow fails the job with a message naming the secret and runs no push
+(a refresh that could never merge is worse than none). The repository setting
+"Allow GitHub Actions to create and approve pull requests" is not needed.
+
+**Unproven until the first run.** That a pull request opened with the secret
+collects all five required checks is GitHub behaviour and cannot be shown
+offline; the tests prove the order (collect, merge, ratchet, propose), the
+permissions, the idempotence and the missing-token refusal with a fake `gh`.
+The first scheduled run is the proof, and this page is corrected by the next
+slice that edits it if it is not.
 
 ### How a shard runs
 

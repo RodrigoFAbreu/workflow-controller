@@ -166,7 +166,7 @@ class CommittedFilesTest(unittest.TestCase):
 
     def test_the_generated_files(self) -> None:
         self.assertEqual(sorted(ci.WORKFLOWS), ["build-publish.yml", "ci.yml", "main-reuse-report.yml",
-                                                "pr-title.yml", "tests.yml"])
+                                                "pr-title.yml", "tests.yml", "timings-refresh.yml"])
         self.assertEqual(sorted(ci.render()), sorted(ci.WORKFLOWS))
         self.assertTrue((WORKFLOWS / "pr-title.yml").is_file())
 
@@ -701,13 +701,19 @@ class AllJobsTest(unittest.TestCase):
                     self.assertNotIn("write", job["permissions"].values())
         for name, workflow in _models().items():
             with self.subTest(workflow=name):
-                self.assertEqual(workflow.get("permissions", {"contents": "read"}), {"contents": "read"})
+                # The refresh alone also reads other runs' artifacts (actions: read, CI2d D6).
+                expected = {"contents": "read", "actions": "read"} if name == "timings-refresh.yml" \
+                    else {"contents": "read"}
+                self.assertEqual(workflow.get("permissions", {"contents": "read"}), expected)
 
     def test_no_cache_no_secret_no_live_worker(self) -> None:
         for name, text in ci.render().items():
             with self.subTest(workflow=name):
                 self.assertNotIn("actions/cache", text)
-                self.assertNotIn("secrets", text)
+                # The refresh's one secret (CI2d D6) is the only one any workflow names.
+                self.assertEqual(re.findall(r"secrets\.\w+", text),
+                                 ["secrets.TIMINGS_REFRESH_TOKEN"] if name == "timings-refresh.yml" else [])
+                self.assertNotIn("secrets:", text)
                 self.assertNotIn("CONTROLLER_LIVE_WORKER", text)
                 self.assertNotRegex(text, r"(?m)^\s*(run: .*)?\bclaude\b")
 
@@ -797,8 +803,8 @@ class AllJobsTest(unittest.TestCase):
                     self.assertIs(persist, False)
         # tests.yml's six step jobs; ci.yml's reuse and two after-merge jobs;
         # build-publish.yml's release-plan, two release-target, build and
-        # publish; reuse-report; title.
-        self.assertEqual(checkouts, 6 + 3 + 5 + 1 + 1)
+        # publish; reuse-report; title; the timings refresh.
+        self.assertEqual(checkouts, 6 + 3 + 5 + 1 + 1 + 1)
 
     def test_the_two_reusable_workflows_are_also_dispatchable_without_inputs(self) -> None:
         # A manual run hands nothing in: tests.yml never reuses, and
@@ -851,8 +857,10 @@ class CiWorkflowTest(unittest.TestCase):
         self.jobs = _jobs(self.workflow)
 
     def test_triggers(self) -> None:
-        self.assertEqual(self.workflow["on"], {"pull_request": None, "push": {"branches": ["main"]},
-                                               "workflow_dispatch": None})
+        self.assertEqual(self.workflow["on"],
+                         {"pull_request": {"types": ["opened", "synchronize", "reopened", "ready_for_review"]},
+                          "push": {"branches": ["main"]}, "workflow_dispatch": None})
+        self.assertEqual(ci.PR_CI_TYPES, ("opened", "synchronize", "reopened", "ready_for_review"))
         self.assertNotIn("tags", self.workflow["on"]["push"])
         self.assertNotIn("inputs", ci.render()["ci.yml"])
 
@@ -889,6 +897,7 @@ class CiWorkflowTest(unittest.TestCase):
             "permissions": {"contents": "write"},
             "uses": "./.github/workflows/build-publish.yml",
             "with": {"validate-result": "${{ needs.validate.result }}",
+                     "code": "${{ needs.validate.outputs.code }}",
                      "after-merge-determinism": "${{ needs.after-merge-determinism.result }}",
                      "after-merge-mutations": "${{ needs.after-merge-mutations.result }}"}})
         # The inputs it passes are exactly the ones build-publish.yml declares.
@@ -950,7 +959,11 @@ class CiWorkflowTest(unittest.TestCase):
         on = ci.tests_workflow()["on"]
         self.assertEqual(list(on), ["workflow_call", "workflow_dispatch"])
         self.assertIsNone(on["workflow_dispatch"])
-        self.assertEqual(list(on["workflow_call"]), ["inputs"])
+        self.assertEqual(list(on["workflow_call"]), ["inputs", "outputs"])
+        # The one output a caller needs: did the shards run (CI2d I1).
+        self.assertEqual(list(on["workflow_call"]["outputs"]), ["code"])
+        self.assertEqual(on["workflow_call"]["outputs"]["code"]["value"],
+                         "${{ jobs.changes.outputs.code }}")
         inputs = on["workflow_call"]["inputs"]
         self.assertEqual(list(inputs), ["tests-from-run"])
         self.assertEqual((inputs["tests-from-run"]["type"], inputs["tests-from-run"]["default"],
@@ -1008,7 +1021,8 @@ class BuildPublishWorkflowTest(unittest.TestCase):
         self.assertEqual(list(on), ["workflow_call", "workflow_dispatch"])
         self.assertIsNone(on["workflow_dispatch"])
         inputs = on["workflow_call"]["inputs"]
-        self.assertEqual(list(inputs), ["validate-result", "after-merge-determinism", "after-merge-mutations"])
+        self.assertEqual(list(inputs), ["validate-result", "code", "after-merge-determinism",
+                                       "after-merge-mutations"])
         for name, spec in inputs.items():
             with self.subTest(input=name):
                 self.assertEqual((spec["type"], spec["required"], spec["default"]), ("string", False, ""))
@@ -1036,7 +1050,7 @@ class BuildPublishWorkflowTest(unittest.TestCase):
 
     def test_conditions(self) -> None:
         on_trunk = "github.ref == 'refs/heads/main'"
-        validated = "inputs.validate-result == 'success'"
+        validated = "inputs.validate-result == 'success' && inputs.code == 'true'"
         publishing = (f"{on_trunk} && (needs.release-plan.outputs.state == 'RELEASE_DUE' || "
                       "needs.release-plan.outputs.state == 'RESUME')")
         self.assertEqual(self.jobs["release-plan"]["if"], f"!cancelled() && {on_trunk}")
@@ -1078,11 +1092,12 @@ class BuildPublishWorkflowTest(unittest.TestCase):
             with self.subTest(job=name):
                 expression = self.jobs[name]["if"]
                 self.assertIn("inputs.validate-result == 'success'", self._conjuncts(expression))
+                self.assertIn("inputs.code == 'true'", self._conjuncts(expression))
                 self.assertNotIn("always()", expression)
                 self.assertIn("!cancelled()", self._conjuncts(expression))
                 # Only the inputs, release-plan, the targets and the build are read.
                 for reference in re.findall(r"\b(?:inputs|needs|github)\.[A-Za-z0-9_.-]*[A-Za-z0-9_]", expression):
-                    self.assertRegex(reference, r"^(inputs\.(validate-result|after-merge-[a-z]+)|"
+                    self.assertRegex(reference, r"^(inputs\.(validate-result|code|after-merge-[a-z]+)|"
                                                 r"needs\.(release-plan|build|release-target-[a-z]+)\.[a-z.]+|"
                                                 r"github\.(ref|sha))$")
         self.assertNotIn("inputs.validate-result", self.jobs["release-plan"]["if"])
@@ -1105,7 +1120,7 @@ class BuildPublishWorkflowTest(unittest.TestCase):
         return bool(_gh_eval(job["if"], context))
 
     #: ``ci.yml``'s call: its validate and after-merge results for the pushed commit.
-    CALLED = {"validate-result": "success", "after-merge-determinism": "success",
+    CALLED = {"validate-result": "success", "code": "true", "after-merge-determinism": "success",
               "after-merge-mutations": "success"}
     STATES = ("RELEASE_DUE", "RESUME", "NO_CHANGE", "NOT_DUE")
 
@@ -1134,7 +1149,34 @@ class BuildPublishWorkflowTest(unittest.TestCase):
                 inputs = {**self.CALLED, "validate-result": result}
                 self.assertEqual(self._chain(inputs=inputs), (True, False, False, False))
         # A caller that hands in no after-merge results publishes nothing for the pushed commit.
-        self.assertEqual(self._chain(inputs={"validate-result": "success"}), (True, False, False, False))
+        self.assertEqual(self._chain(inputs={"validate-result": "success", "code": "true"}),
+                         (True, False, False, False))
+
+    def test_a_documentation_only_push_never_builds_or_publishes_a_release(self) -> None:
+        """CI2d I1: validate passes without the shards when the pushed range is
+        documentation only, but the release range may hold unreleased code that
+        no shard has run on main. RELEASE_DUE and RESUME then wait for a code
+        push or a CI dispatch (always code=true)."""
+        for state in ("RELEASE_DUE", "RESUME"):
+            for code in ("false", "", "TRUE"):
+                for pushed in (True, False):
+                    with self.subTest(state=state, code=code, pushed=pushed):
+                        inputs = {**self.CALLED, "code": code}
+                        plan, target, build, publish = self._chain(
+                            state, inputs=inputs, target_is_pushed=pushed, targets="success")
+                        self.assertEqual((plan, target, build, publish), (True, False, False, False))
+            # ... and with the shards run, the same state does publish.
+            self.assertEqual(self._chain(state, target_is_pushed=True)[3], True)
+        # The release-plan job says why it published nothing.
+        notice = [step for step in _steps(self.jobs["release-plan"]) if step.get("name") == "no shards ran"]
+        self.assertEqual(len(notice), 1)
+        self.assertEqual(notice[0]["if"], "inputs.validate-result == 'success' && inputs.code != 'true'")
+        self.assertTrue(_gh_eval(notice[0]["if"], {"inputs.validate-result": "success", "inputs.code": "false"}))
+        self.assertFalse(_gh_eval(notice[0]["if"], {"inputs.validate-result": "success", "inputs.code": "true"}))
+        self.assertIn("dispatch of the CI workflow on main", notice[0]["run"])
+        # ci.yml hands the output of validate over.
+        self.assertEqual(_jobs(ci.ci_workflow())["build-publish"]["with"]["code"],
+                         "${{ needs.validate.outputs.code }}")
 
     def test_a_direct_dispatch_runs_no_test_and_publishes_nothing(self) -> None:
         # Every input a dispatch can produce: absent (null) or empty or any other string.
@@ -1206,7 +1248,7 @@ class BuildPublishWorkflowTest(unittest.TestCase):
 
     def test_every_action_outside_validate_is_pinned_to_a_commit(self) -> None:
         for name, count in (("build-publish.yml", 12), ("ci.yml", 7), ("main-reuse-report.yml", 3),
-                            ("pr-title.yml", 2)):
+                            ("pr-title.yml", 2), ("timings-refresh.yml", 2)):
             uses = re.findall(r"(?m)^\s*(?:- )?uses: (\S+)(.*)$", ci.render()[name])
             actions = [(ref, comment) for ref, comment in uses if not ref.startswith('"./')]
             with self.subTest(workflow=name):
@@ -1335,8 +1377,27 @@ class AfterMergeChecksTest(unittest.TestCase):
                     self.assertEqual(_run(steps[2]), "pip install -e .")
                     self.assertEqual(_run(steps[3]), ci.ALLOW_USERNS)
                     self.assertEqual(steps[3], shard[3])
-                    self.assertEqual(_run(steps[4]), f"python3 tools/run_tests.py main-check {module}")
+                    legs = ci.MAIN_CHECK_LEGS[check]
+                    flags = f" --shard ${{{{ matrix.shard }}}} --of {legs}" if legs > 1 else ""
+                    self.assertEqual(_run(steps[4]), f"python3 tools/run_tests.py main-check {module}{flags}")
                     self.assertEqual(len(steps), 5)
+
+    def test_the_mutation_check_runs_in_three_legs_under_the_same_job_id(self) -> None:
+        # CI2d D4: a matrix of legs is one job id, so the release gate's inputs, the
+        # needs and the conditions read the job's result exactly as before; the
+        # determinism check is not split (D5).
+        self.assertEqual(ci.MAIN_CHECK_LEGS, {"determinism": 1, "mutations": 3})
+        for kind, jobs in (("after-merge", self.ci_jobs), ("release-target", self.jobs)):
+            job = jobs[f"{kind}-mutations"]
+            with self.subTest(job=f"{kind}-mutations"):
+                self.assertEqual(job["strategy"], {"fail-fast": False, "matrix": {"shard": [0, 1, 2]}})
+                self.assertNotIn("max-parallel", job["strategy"])
+                self.assertEqual(job["name"], f"{kind}-mutations (${{{{ matrix.shard }}}})")
+            plain = jobs[f"{kind}-determinism"]
+            self.assertNotIn("strategy", plain)
+            self.assertNotIn("name", plain)
+        self.assertEqual(list(self.jobs), ["release-plan", *self.TARGETS, "build", "publish"])
+
 
     def test_the_target_jobs_check_out_the_publication_target(self) -> None:
         for check in self.CHECKS:
@@ -1671,7 +1732,9 @@ def _runner_nodes(model: dict, context: _WorstCase) -> dict:
     """``model``'s jobs, the called local workflows flattened in, as
     ``{node: (weight, active, direct_dependencies)}``. A static job is one
     runner, a call to a shared workflow is one (assumed, see CI3 D4), a matrix
-    counts its ``max-parallel`` and fails without one."""
+    counts its ``max-parallel``, or, with none, its literal list of legs (CI2d
+    D4: every leg may run at once), and fails for a computed matrix with no
+    ``max-parallel``."""
     nodes: dict = {}
     groups: dict = {}
     for name, job in _jobs(model).items():
@@ -1680,15 +1743,23 @@ def _runner_nodes(model: dict, context: _WorstCase) -> dict:
         child = _called_model(job)
         if child is None:
             matrix = job.get("strategy", {}).get("matrix")
-            if matrix is not None and "max-parallel" not in job["strategy"]:
-                raise AssertionError(f"{name}: a matrix without max-parallel is unbounded")
-            weight = job["strategy"]["max-parallel"] if matrix is not None else 1
+            weight = 1
+            if matrix is not None:
+                legs = matrix.get("shard")
+                if "max-parallel" in job["strategy"]:
+                    weight = job["strategy"]["max-parallel"]
+                elif isinstance(legs, list):
+                    weight = len(legs)
+                else:
+                    raise AssertionError(f"{name}: a computed matrix without max-parallel is unbounded")
             nodes[name] = (weight, active, set(outer))
             groups[name] = [name]
             continue
         declared = child["on"]["workflow_call"].get("inputs", {})
         inner = _WorstCase(context)
-        inner.update({f"inputs.{key}": "" if key == ci.REUSE_INPUT else "success" for key in declared})
+        # ``code`` is "true" or "" (the release-target legs run only for code), never a result.
+        inner.update({f"inputs.{key}": ("" if key == ci.REUSE_INPUT else "true" if key == "code"
+                                        else "success") for key in declared})
         grandchildren = _runner_nodes(child, inner)
         groups[name] = []
         for key, (weight, child_active, deps) in grandchildren.items():
@@ -1792,6 +1863,29 @@ class RunnerLimitTest(unittest.TestCase):
         # A direct build-publish run classifies and nothing else.
         self.assertEqual(self._peak("build-publish.yml", "workflow_dispatch", "refs/heads/main", None), 1)
 
+    def test_a_literal_list_of_legs_counts_every_leg(self) -> None:
+        model = {"jobs": {"legs": {"runs-on": "ubuntu-latest",
+                                   "strategy": {"matrix": {"shard": [0, 1, 2]}}}}}
+        self.assertEqual(_runner_nodes(model, _WorstCase())["legs"][0], 3)
+        # The generated mutation legs are counted at three each, so the peak for a
+        # push to main (six, above) and for a publication of an ancestor (checked
+        # for every event by test_no_event_and_no_reuse_mode_holds_more_than_the_limit)
+        # includes them.
+        nodes = _runner_nodes(self.models["ci.yml"], _WorstCase({"github.event_name": "push"}))
+        self.assertEqual(nodes["after-merge-mutations"][0], 3)
+        # The ancestor publication (CI2d O1): called from ci.yml with code changed, every
+        # release-target leg is active, so the peak tests above count them.
+        ancestor = _runner_nodes(self.models["ci.yml"], _WorstCase(
+            {"github.event_name": "push", "github.ref": "refs/heads/main"}))
+        called = [name for name in ancestor if "release-target-" in name]
+        self.assertTrue(called)
+        for name in called:
+            with self.subTest(job=name):
+                self.assertTrue(ancestor[name][1])
+        target = _runner_nodes(self.models["build-publish.yml"], _WorstCase(
+            {"github.event_name": "workflow_dispatch", "github.ref": "refs/heads/main"}))
+        self.assertEqual(target["release-target-mutations"][0], 3)
+
     def test_a_matrix_without_max_parallel_fails(self) -> None:
         model = {"jobs": {"tests": {"runs-on": "ubuntu-latest", "strategy": {"matrix": {"shard": "x"}}}}}
         with self.assertRaises(AssertionError):
@@ -1799,13 +1893,20 @@ class RunnerLimitTest(unittest.TestCase):
 
     def test_every_shard_matrix_is_bounded_and_tied_to_the_planner_ceiling(self) -> None:
         count = 0
+        legs_seen = []
         for name, model in self.models.items():
             for job_name, job in _jobs(model).items():
                 if "matrix" in job.get("strategy", {}):
+                    if job_name.endswith("-mutations"):
+                        # CI2d D4: a literal list of legs, all allowed at once and counted
+                        # as such by _runner_nodes; the peak test proves the limit.
+                        legs_seen.append(job["strategy"]["matrix"]["shard"])
+                        continue
                     count += 1
                     with self.subTest(workflow=name, job=job_name):
                         self.assertEqual(job["strategy"]["max-parallel"], ci.TEST_MAX_PARALLEL)
         self.assertEqual(count, 1)
+        self.assertEqual(legs_seen, [[0, 1, 2]] * 2)
         # The model does not import the planner: this test ties the two numbers.
         self.assertLessEqual(ci.TEST_MAX_PARALLEL, shards.CI_MAX_SHARDS)
         # Option B (CI3 O1): the planner plans no more shards than may run.
@@ -1852,6 +1953,73 @@ class RunnerLimitTest(unittest.TestCase):
             self.assertNotIn("name", _jobs(self.models["tests.yml"])[job])
         self.assertIn("validate", _jobs(self.models["ci.yml"]))
         self.assertEqual(_jobs(self.models["pr-title.yml"])["title"]["name"], "PR title")
+
+
+class TimingsRefreshWorkflowTest(unittest.TestCase):
+    """CI2d D6: the scheduled refresh is a workflow of its own whose collection runs on the
+    read-only default token and whose push and pull request alone see the secret."""
+
+    def setUp(self) -> None:
+        self.workflow = ci.timings_refresh_workflow()
+        self.steps = _steps(_jobs(self.workflow)["refresh"])
+        self.text = ci.render()["timings-refresh.yml"]
+
+    def _step(self, fragment: str) -> dict:
+        return self.steps[_index(self.steps, lambda s: fragment in _run(s))]
+
+    def test_schedule_and_dispatch_only_with_no_pull_request_trigger(self) -> None:
+        self.assertEqual(set(self.workflow["on"]), {"schedule", "workflow_dispatch"})
+        self.assertEqual(self.workflow["on"]["schedule"], [{"cron": ci.TIMINGS_REFRESH_CRON}])
+        self.assertEqual(list(_jobs(self.workflow)), ["refresh"])
+
+    def test_permissions_are_exactly_contents_and_actions_read(self) -> None:
+        self.assertEqual(self.workflow["permissions"], {"contents": "read", "actions": "read"})
+        self.assertNotIn("permissions", _jobs(self.workflow)["refresh"])
+
+    def test_collect_runs_on_the_default_token_so_listing_and_download_hold_actions_read(self) -> None:
+        collect = self._step("timings_refresh.py collect")
+        self.assertEqual(collect["env"], {"GH_TOKEN": "${{ github.token }}"})
+        self.assertNotIn(ci.TIMINGS_REFRESH_SECRET, json.dumps(collect, default=str))
+
+    def test_the_secret_reaches_only_the_push_and_pull_request_step(self) -> None:
+        holders = [step for step in self.steps if ci.TIMINGS_REFRESH_SECRET in json.dumps(step, default=str)]
+        self.assertEqual(holders, [self._step("timings_refresh.py propose")])
+        self.assertEqual(holders[0]["env"],
+                         {"TIMINGS_REFRESH_TOKEN": "${{ secrets.TIMINGS_REFRESH_TOKEN }}"})
+        self.assertEqual(re.findall(r"secrets\.\w+", self.text), ["secrets.TIMINGS_REFRESH_TOKEN"])
+
+    def test_no_step_dispatches_a_workflow(self) -> None:
+        for step in self.steps:
+            with self.subTest(step=step.get("name")):
+                self.assertNotIn("workflow run", _run(step))
+                self.assertNotIn("dispatches", _run(step))
+        self.assertNotIn("workflow run", self.text)
+
+    def test_merge_then_the_ratchet_then_the_commit_and_only_a_change_proceeds(self) -> None:
+        order = [_index(self.steps, lambda s, f=f: f in _run(s)) for f in (
+            "timings_refresh.py collect", "timings_refresh.py plan-change",
+            "tools/run_tests.py tests.test_test_shards", "timings_refresh.py propose")]
+        self.assertEqual(order, sorted(order))
+        changed = "steps.change.outputs.changed == 'true'"
+        self.assertEqual(self._step("tests.test_test_shards")["if"], changed)
+        self.assertEqual(self._step("timings_refresh.py propose")["if"], changed)
+        for step in self.steps:
+            self.assertNotIn("continue-on-error", step)  # a refused file must stop the job
+            self.assertNotIn("always()", str(step.get("if", "")))
+        self.assertIn("--output tools/test_timings.json", _run(self._step("plan-change")))
+
+    def test_checkout_keeps_no_credential_and_the_actions_are_pinned(self) -> None:
+        checkout = self.steps[_index(self.steps, lambda s: _uses(s).startswith("actions/checkout@"))]
+        self.assertIs(checkout["with"]["persist-credentials"], False)
+        for step in self.steps:
+            if "uses" in step:
+                self.assertRegex(_uses(step), r"@[0-9a-f]{40}$")
+
+    def test_it_is_not_in_the_runner_graph_because_it_runs_alone_on_a_schedule(self) -> None:
+        scenario_entries = {entry for entry, _, _ in RunnerLimitTest()._scenarios()}
+        self.assertNotIn("timings-refresh.yml", scenario_entries)
+        self.assertNotIn("pull_request", self.workflow["on"])
+        self.assertEqual(self.workflow["concurrency"]["group"], "timings-refresh")
 
 
 #: ``tests.yml``'s and 1.3.0's ``main.yml``'s pipx smoke test (``build-publish.yml``'s with

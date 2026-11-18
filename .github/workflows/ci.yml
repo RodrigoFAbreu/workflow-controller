@@ -8,6 +8,12 @@
 # release. A pull request's newer push cancels its older run; main's runs never cancel
 # one another (main-release). Milestone branches are validated through their Draft PR.
 #
+# Two trigger rules (tools/ci_changes.py): a push to main that changes only documentation
+# skips the plan and the shards (the managed conformance job, the docs gate and the
+# after-merge checks still run); a Draft pull request's shards run from the first
+# review-bound head, so the acceptance gate's ci_green at the anchor commit is a real
+# run, and ready_for_review starts a full run at once.
+#
 # reuse (read-only, never on a pull request) is switched by the repository variable
 # CI_MAIN_REUSE. on: reuse runs first and validate skips the shards when the recorded
 # tree and plan digest match. Any other value: reuse does not run and validate starts
@@ -21,6 +27,11 @@
 name: CI
 "on":
   pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
   push:
     branches:
       - main
@@ -107,6 +118,14 @@ jobs:
     needs:
       - validate
     if: "!cancelled() && needs.validate.result == 'success' && github.event_name != 'pull_request'"
+    name: "after-merge-mutations (${{ matrix.shard }})"
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - 0
+          - 1
+          - 2
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -122,7 +141,7 @@ jobs:
       - name: "allow unprivileged user namespaces"
         run: "if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0; fi"
       - name: mutations
-        run: "python3 tools/run_tests.py main-check tests.test_scenarios_negative"
+        run: "python3 tools/run_tests.py main-check tests.test_scenarios_negative --shard ${{ matrix.shard }} --of 3"
   build-publish:
     needs:
       - validate
@@ -134,5 +153,6 @@ jobs:
     uses: "./.github/workflows/build-publish.yml"
     with:
       validate-result: "${{ needs.validate.result }}"
+      code: "${{ needs.validate.outputs.code }}"
       after-merge-determinism: "${{ needs.after-merge-determinism.result }}"
       after-merge-mutations: "${{ needs.after-merge-mutations.result }}"

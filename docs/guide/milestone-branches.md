@@ -78,6 +78,18 @@ merge commit", and every text below that names "Squash and merge" names
   the milestone's only if its number, head, base and repository match and
   it is not from a fork; zero matches create, exactly one open match is
   adopted, anything else refuses.
+  **What a Draft PR's checks run.** The shard matrix of a Draft PR's pull
+  request run is skipped for an intermediate head (the plan and implementation
+  phases) and runs from the first review-bound head (CI2d): the first head whose
+  committed `WORKFLOW_STATE.json` holds the work item at a review-bound phase,
+  for example `APPLYING_REVIEW_FEEDBACK` or `SELF_REVIEWING_IMPLEMENTATION`.
+  That is why `ci_green` of the acceptance gate, read at the anchor commit (a
+  draft head before the acceptance commit), and the green-checks condition at
+  the acceptance commit `A` rest on a real run of the shards, and why the
+  Controller does not wait for a `ready_for_review` run, which it could never
+  reach (it marks the pull request ready only after green checks). A person who
+  marks a draft ready gets the full suite on that head at once. See
+  [Documentation-only pull requests](ci-and-releases.md#documentation-only-pull-requests).
 - **Drift.** Each step records whether `origin/main` is still an
   ancestor of the branch and how far behind the branch is. Before
   acceptance this is informational (`inspect`, `explain` and `status`

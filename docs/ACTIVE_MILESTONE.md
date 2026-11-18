@@ -1,6 +1,23 @@
 # Active Milestone
 
-## Latest milestone (CI2c)
+## Latest milestone (CI2d)
+
+**Complete: accepted by policy (`MILESTONE_COMPLETE`).** Accepted after the functional review passed (all eight flows passed at the approved content; PR #378, checks green at the approved head). Plan `docs/ai-workflow/CONTROLLER_CI2D_PLAN.md` (revision 4), five checkpoints; it sets the after-merge and trigger policy and automates the timings refresh.
+
+- **CP1 complete (verified state).** `tools/ci_changes.py detect` now decides three events (D1, D2): a `push` whose pushed range `before..HEAD` changes documentation only is `code=false` (`before` a real commit, `after` equal to `HEAD`; a new branch, a force-push, an unreadable payload, an empty diff and any `git` failure are `true`); a Draft `pull_request` is `code=false` unless its head holds a work item at a review-bound phase (`REVIEW_BOUND_PHASES`) that the base lacks or holds outside that set (`EXCLUDED_PHASES` is the other half of an explicit partition of `workflow_state.KNOWN_PHASES`, asserted by a test); a missing `draft` key, an unreadable state file at either parent and a non-draft pull request behave as before. `read_event` reads `GITHUB_EVENT_PATH`; `changed_paths` takes a `base` for the push range. `tests/test_ci_changes.py` adds `PushDetectTests` and `DraftDetectTests`. Verified with `tests.test_ci_changes`, `tests.test_package_structure` and `tests.test_write_containment` (123 tests, exact coverage, passing).
+
+- **CP2 complete (verified state).** `tools/ci_workflows.py` adds `PR_CI_TYPES` (`opened`, `synchronize`, `reopened`, `ready_for_review`) as `ci.yml`'s `pull_request` types (D3), so a person who marks a Draft ready gets the full suite on that head at once; the header comments of `ci.yml` and `tests.yml` state the push and Draft rules; both files are regenerated. `tests/test_ci_workflows.py` pins the trigger types; the existing tests already pin `fetch-depth: 0` on `changes`, the `code` condition on `plan` and `tests`, and the `tests-result` needs. Verified with `tests.test_ci_workflows`, `tests.test_ci_changes`, `tests.test_package_structure` (238 tests, exact coverage, passing) and `python3 tools/ci_workflows.py --check`.
+
+- **CP3 complete (verified state).** The mutation check runs in three legs (D4, D5, D7). `tools/run_tests.py main-check MODULE` takes `--shard I --of N` (both or neither; `N` at least 1, `I` in `0..N-1`, each refused with exit 2): it plans the module with `shards=N`, runs leg `I`, and `executed_problems` is applied to that leg's own planned ids (a plan that holds fewer than `N` shards is refused, so an empty leg fails closed); the printed line names the leg; without the flags the run is today's. `tools/ci_workflows.py` adds `MAIN_CHECK_LEGS` (`mutations` 3, `determinism` 1, tied to `MAIN_TEST_MODULES` by an assert) and `_main_check_job` makes `after-merge-mutations` (`ci.yml`) and `release-target-mutations` (`build-publish.yml`) a `fail-fast: false` matrix of `shard: [0, 1, 2]` named `<prefix>-mutations (<shard>)`, running `main-check ... --shard ${{ matrix.shard }} --of 3`; the job ids, the `needs.<id>.result` the release gate reads and `build-publish.yml`'s inputs are unchanged, `max-parallel` is unset, and the determinism jobs are generated as before. Both workflows are regenerated. `tests/test_run_tests.py` (`MainCheckTest`) adds: legs disjoint with a union equal to the module's inventory, each leg running only its own tests, a failing or skipped test failing its own leg only, more legs than the module can fill refused, one flag without the other and an out-of-range index refused, and a single leg of one equal to the plain run. `tests/test_ci_workflows.py` pins the matrix, the flags, the unchanged job ids and gate, and teaches `_runner_nodes` to count a literal list of legs (a computed matrix without `max-parallel` still fails); the existing peak tests still report six runners for a push to `main` and no more for any event. Planner estimate (committed timings, `ci` profile, `tests.test_scenarios_negative`): one shard 959.7 s; three legs 319.8 s, 320.1 s and 319.8 s (13, 17 and 16 tests), longest over mean 1.0006. Not measured: the real job time, which the first `main` run after the merge shows. Verified with `tests.test_run_tests`, `tests.test_ci_workflows`, `tests.test_test_shards`, `tests.test_package_structure`, `tests.test_write_containment` (426 tests, exact coverage, passing) and `python3 tools/ci_workflows.py --check`.
+
+- **CP4 complete (verified state).** The timings refresh is a tool and a scheduled workflow (D6). `tools/timings_refresh.py` (stdlib only; `gh` and `git` reached through a `runner` argument) has `collect` (the newest successful `ci.yml` `pull_request` runs of this repository, never `main`; the highest live `timings-ci-attempt-*` artifact of at most `--runs` of them, default 3; a shard record whose `(plan_digest, shard)` was already taken is dropped, and a run left with none is not kept), `plan-change` (`run_tests.py timings merge` into a copy, the untimed share of the CI-placed tests printed before and after, the merged file written to `--output` only when its bytes differ, `changed=true|false` to `GITHUB_OUTPUT`) and `propose` (the commit on the bot branch `ci/timings-refresh`, `git push --force-with-lease`, and `gh pr edit` of the open refresh pull request or `gh pr create`, never both; without `TIMINGS_REFRESH_TOKEN` it exits 1 with a message naming the secret and runs no command; the token reaches git only through `GIT_CONFIG_*` and `gh` only through `GH_TOKEN`, in the environment of the network commands). `tools/ci_workflows.py` models `timings_refresh_workflow()` (`timings-refresh.yml`: `schedule` Monday 05:17 UTC and `workflow_dispatch`, no `pull_request` trigger, permissions exactly `contents: read` and `actions: read`, `collect` on `github.token`, then merge, then `run_tests.py tests.test_test_shards` as the staleness ratchet, then `propose` as the only step that names the secret; no dispatch step). `tests/test_timings_refresh.py` (new) covers the run and artifact selection, the deduplication, the `--runs` bound, the unchanged merge, the branch and pull-request idempotence, the missing token and the share lines with a fake runner; `tests/test_ci_workflows.py` pins the workflow (`TimingsRefreshWorkflowTest`) and extends the every-file, secret, permission, checkout and pin counts. The residual is the one the plan names (O2): that a pull request opened with the repository secret collects all five required checks is GitHub behaviour and not provable offline; the first scheduled run is the proof. Verified with `tests.test_timings_refresh`, `tests.test_ci_workflows`, `tests.test_test_shards`, `tests.test_package_structure`, `tests.test_write_containment` and `tests.test_docs` (all PASS) and `python3 tools/ci_workflows.py --check` and `python3 tools/check_docs.py` (clean).
+
+- **CP5 complete (verified state).** The pages state the policy. `docs/guide/ci-and-releases.md`: "The six-runner limit" names the six runners of a push to `main`; "Documentation-only pull requests" gains the push rule, the Draft rule with its review-bound set, the `ready_for_review` trigger and the D3 residual; "Checks that run after the merge" gains the three legs, the planner estimate (959.7 s one shard; 319.8, 320.1 and 319.8 s three legs), the corrected release-wait sentence (bounded by determinism, not mutations), the old-target caveat and the branch-dispatch note (O4); a new "The automated timings refresh" subsection states the tool, the schedule, the `TIMINGS_REFRESH_TOKEN` secret and the unproven first run (O2). `docs/guide/milestone-branches.md` says why a Draft PR's shards run from the first review-bound head (`ci_green` at the anchor, green checks at `A`); `docs/guide/development.md` names `main-check --shard/--of` and `tools/timings_refresh.py`. `docs/items/workflow-controller-ci2d.md` has status, the plan link, the estimates, the measured times and O1 to O3; the backlog item `workflow-controller-ci2h` (determinism split, depends on this item) is added with its page, `docs/items/workflow-controller-ci2.md` records the slice and `docs/ROADMAP.md` is regenerated. Verified with `tests.test_docs`, `tests.test_plan_document_consistency`, `python3 tools/check_docs.py`, `workflow_backlog.py check` and `preflight-accept workflow-controller-ci2d`.
+- **Self-review.** One defect fixed: `detect` read a Draft flag through `(payload.get("pull_request") or {}).get("draft")`, so a payload whose `pull_request` is a string or a list raised outside the fail-closed `try` and failed the `changes` job instead of running everything; it now treats a `pull_request` that is not an object as not a draft (`code=true` for a code change), and `DraftDetectTests` adds three such payloads. No other finding: the push and Draft rules, the three-leg `main-check`, the generated workflows and the refresh tool and workflow match D1 to D6. The single full run (`python3 tools/run_tests.py`, 6835 tests in 8 shards, exact coverage, 822 s) failed 4 tests, none in a module this item touches: three in `tests.test_fake_codex_contract` are the known `~/.codex/config.toml` leak (the module passes in a worktree under `/tmp`, 20 tests), and `tests.test_job_codex_apply.RecoveryTest.test_a_drifted_release_ends_each_stage_without_carrying_out` (the shards ran without a PID namespace) passes when its module is rerun alone (88 tests, exact coverage). `tests.test_ci_changes` passes after the fix (100 tests, exact coverage); `tools/ci_workflows.py --check`, `tools/check_docs.py`, `workflow_backlog.py check` and `preflight-accept workflow-controller-ci2d` pass.
+
+Next action: `/milestone-plan` for `workflow-controller-ci2e` (CI: a runtime check replacing the static repo-reach heuristic (#322)), the item `python3 scripts/workflow_backlog.py next` returns.
+
+## Previous milestone (CI2c)
 
 **Complete: accepted by policy (`MILESTONE_COMPLETE`).** Accepted after the functional review passed (PR #376, checks green at the approved head). Plan `docs/ai-workflow/CONTROLLER_CI2C_PLAN.md` (revision 2), four checkpoints; it shares fixture snapshots across the tests that reach the same row.
 
@@ -709,53 +726,51 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-ci2c` (CI2c: fixture snapshot reuse), implementation revision 3 (technical approval by policy `e744898`), plan
-`docs/ai-workflow/CONTROLLER_CI2C_PLAN.md` (revision 3), base commit `04ad545`. Revision 3 follows the red pull request: `AdoptedPolicyLoopTest` is now `SHARE_SNAPSHOT = False` (flow 7). Four checkpoints, all complete: CP1 (snapshot outcome counters and
-`WFC_SNAPSHOT_REPORT`), CP2 (a snapshot key holds what the drive reads: `late` parts and the `life.late` guard), CP3 (the review case reaches
-`to_manual_plan_review` once per process) and CP4 (the figures, the pages and the CI2f/CI2g split). A `ci:` change that edits tests, test helpers and pages
-only; it publishes no release.
-Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the
-system directories, and no write inside the read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write only
-to the scratch `TMPDIR`. No flow needs a pull request or a forge call, and none runs the full suite.
+Item `workflow-controller-ci2d` (CI2d: after-merge and trigger policy, and the automated timings refresh), implementation revision 4 (technical approval by policy `34fb6dc`), plan
+`docs/ai-workflow/CONTROLLER_CI2D_PLAN.md` (revision 4), base commit `a9a25a5`. Five checkpoints, all complete: CP1 (change detection classifies a push and a Draft head), CP2 (the trigger policy in the generated
+workflows), CP3 (the mutation check in three legs), CP4 (the automated timings refresh) and CP5 (the pages and the follow-up). Revisions 2 to 4 are review fixes: a documentation-only push never builds or
+publishes (I1), the refresh merges its runs oldest first (I1), and the runner-limit proof activates the release-target legs (O1), and the command-line detect test no longer inherits the runner's `GITHUB_*` variables (the PR check failure; Flow 1 covers it). A `ci:` change that edits CI tooling, the generated workflows, tests and pages; it
+publishes no release.
+Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the system directories, and no write inside the read-only
+product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write only to the scratch `TMPDIR`. No flow needs a pull request or a forge call, and none runs the full suite.
 
-Setup: `export TMPDIR=$(mktemp -d)`. No data to seed.
+Setup: `export TMPDIR=$(mktemp -d); P=$PWD` (the product clone). No data to seed.
 
-**Flow 1: the snapshot mechanism tests.**
-Run `python3 -B tools/run_tests.py tests.test_shared_snapshot tests.test_review_job; echo rc=$?`.
-Expected: `# Test run: PASS`, exact coverage, `rc=0` (a `namespace: none` line is expected in this sandbox).
+**Flow 1: change detection tests.**
+Run `python3 -B tools/run_tests.py tests.test_ci_changes; echo rc=$?`.
+Expected: `# Test run: PASS`, `rc=0` (a `namespace: none` line is expected in this sandbox).
 
-**Flow 2: the lifecycle modules that use the keyed rows.**
-Run `python3 -B tools/run_tests.py tests.test_protocol_lifecycle tests.test_protocol_job tests.test_functional_codex_route; echo rc=$?`.
-Expected: `PASS`, `rc=0`; the `life.late` guard does not trip in any of the three modules.
+**Flow 2: a push is classified over the pushed range (scratch repo).**
+Run `git clone -q $P $TMPDIR/s && cd $TMPDIR/s`; make a base commit (`git -c user.name=t -c user.email=t@t commit -q --allow-empty -m base; B=$(git rev-parse HEAD)`); append a line to `docs/README.md` and commit; write `{"before":"<B>","after":"<HEAD>"}` to `$TMPDIR/ev.json`;
+run `GITHUB_EVENT_NAME=push GITHUB_EVENT_PATH=$TMPDIR/ev.json python3 -B $P/tools/ci_changes.py detect`. Repeat after one more commit that edits `tools/ci_changes.py` (payload `before` still `B`), and with a `before` of forty zeros.
+Expected: `code=false (push: 1 changed path(s), all documentation)`; then `code=true (tools/ci_changes.py is not documentation: everything runs)`; then `code=true (the push has no previous commit (a new branch): everything runs)`. Also try a payload that is not JSON or has no `before`: `code=true`.
 
-**Flow 3: the counters.**
-Run `WFC_SNAPSHOT_REPORT=$TMPDIR/snap.jsonl python3 -B tools/run_tests.py tests.test_review_job; echo rc=$?; cat $TMPDIR/snap.jsonl`.
-Expected: `rc=0`; one JSON line per process; `to_manual_plan_review` built once per shard process and restored by the rest (summed: about 6 built, 74 restored over
-84 tests). Without `WFC_SNAPSHOT_REPORT` no file is written.
+**Flow 3: the Draft pull request rule.**
+Read the review-bound set in `tools/ci_changes.py` (`REVIEW_BOUND_PHASES`, `review_bound_item`) and the Draft cases in `tests/test_ci_changes.py`.
+Expected: a Draft head skips the shards until a work item reaches a review-bound phase (base lacks it or holds it outside the set); any unreadable state, a non-merge HEAD, or a non-object `pull_request` payload runs everything; a non-draft pull request is classified by its diff.
 
-**Flow 4: the late-part guard.**
-Read `tests/test_shared_snapshot.py` for the new cases and `grep -n "late" tests/fixtures.py tests/test_protocol_lifecycle.py`.
-Expected: `reach(name, drive, *, late=())` leaves the `late` parts out of the key; `checks` is late for `to_plan_gate` and `to_acceptance`, `refused` for
-`to_plan_gate`; `life.late(name)` raises while a drive that declared the part late runs; `LoopLifecycle`'s `world` stays in the key.
+**Flow 4: the generated workflows match the model and carry the policy.**
+Run `python3 -B tools/ci_workflows.py --check; echo rc=$?` and `python3 -B tools/run_tests.py tests.test_ci_workflows; echo rc=$?`; then `grep -n "ready_for_review\|code ==" .github/workflows/ci.yml .github/workflows/tests.yml .github/workflows/build-publish.yml`.
+Expected: both `rc=0`, `PASS`; `ci.yml` also triggers on `ready_for_review`; `build`, `publish` and the `release-target-*` checks require `code == 'true'`; the `after-merge-*` jobs and the managed `workflow-conformance` job are not gated by `code`.
 
-**Flow 5: the item page and the measured figures.**
-Read `docs/items/workflow-controller-ci2c.md`, `docs/items/workflow-controller-ci2f.md` and `docs/items/workflow-controller-ci2g.md`.
-Expected: the baseline and after-CP2 table (for example `to_acceptance` 11/1 then 10/2, `to_38e` 14/24); the review case 54.6 s then 37.0 s; the "path in use"
-limit stated as inherent; the figures declared local and single-run; scope items 8 and 9 on CI2f and item 10 on CI2g; `#317` stays open.
+**Flow 5: the mutation check in three legs.**
+Run `python3 -B tools/run_tests.py tests.test_run_tests tests.test_test_shards; echo rc=$?`; then `python3 -B tools/run_tests.py main-check tests.test_scenarios_negative --shard 3 --of 3; echo rc=$?` and `... main-check tests.test_scenarios_negative --shard 0; echo rc=$?`; then `grep -n -A6 "after-merge-mutations\|release-target-mutations" .github/workflows/ci.yml .github/workflows/build-publish.yml | head -60`.
+Expected: the tests `PASS`; the two `main-check` calls refuse at once (`--shard must be in 0..2, not 3`; `--shard and --of go together`) with a non-zero `rc`, without running any test; the two mutation jobs are a matrix of three legs, with the job ids unchanged. (Do not run a real leg: it takes about 5 minutes.)
 
-**Flow 6: the guide and docs checks.**
-Read the snapshot part of `docs/guide/development.md`, then run `python3 -B tools/check_docs.py; echo rc=$?`,
-`python3 -B tools/run_tests.py tests.test_docs tests.test_plan_document_consistency; echo rc=$?`, `python3 -B scripts/workflow_backlog.py check; echo rc=$?` and
-`python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-ci2c; echo rc=$?`.
-Expected: the guide describes the counters, the `late` keying and the review case; every `rc=0`; `# Test run: PASS`; `preflight-accept` `"ok": true`.
+**Flow 6: the automated timings refresh.**
+Run `python3 -B tools/run_tests.py tests.test_timings_refresh; echo rc=$?`; read `.github/workflows/timings-refresh.yml` and `python3 -B tools/timings_refresh.py --help`.
+Expected: `PASS`, `rc=0`; a weekly cron (`17 5 * * 1`); the job takes `TIMINGS_REFRESH_TOKEN` and fails naming it when it is missing; `collect`, `plan-change` and `propose` exist; runs merge oldest first; a change that fails the staleness ratchet is not proposed. Do not run `collect` or `propose` (they need the network and `gh`).
 
-**Flow 7: the lowered-policy class stays out of the shared snapshot (revision 3).**
-Run `grep -n "SHARE_SNAPSHOT" tests/test_review_same_provider.py`, then `python3 -B tools/run_tests.py tests.test_review_same_provider; echo rc=$?`, and read the CP3 bullet of `docs/items/workflow-controller-ci2c.md`.
-Expected: `AdoptedPolicyLoopTest` sets `SHARE_SNAPSHOT = False` with the comment naming the policy the key does not carry; `# Test run: PASS`, `rc=0` (including `DefaultPolicyRefusalTest`); the page names the class, the cause and that CI found it.
+**Flow 7: the guide and the item pages.**
+Read `docs/guide/ci-and-releases.md` sections "Documentation-only pull requests" and "The automated timings refresh", `docs/items/workflow-controller-ci2d.md` and `docs/items/workflow-controller-ci2h.md`.
+Expected: the push rule, the Draft rule and the three legs are described as the code does; the mutation estimate (959.7 s one shard, about 320 s per leg) is labelled an estimate; O1 (determinism split, now `ci2h`), O2 (the token, unproven until the first run) and O3 (the draft rule) are stated; `#317` stays open.
 
-**Known limitations / out of scope.** The gain of CP2 is small, because each shard process builds a row once whatever the key: the saving needs the tests that
-share a row on one shard (CI2g). Process starts per lifecycle step are CI2f. The figures are from this machine, one run each; the saving on a pull request is
-read from the first pull request run after the merge, which the sandbox cannot do. The full suite is CI's. `#317` (the 20-minute target) stays open.
+**Flow 8: the docs checks and the backlog.**
+Run `python3 -B tools/check_docs.py; echo rc=$?`, `python3 -B tools/run_tests.py tests.test_docs tests.test_plan_document_consistency tests.test_write_containment tests.test_package_structure; echo rc=$?`, `python3 -B scripts/workflow_backlog.py check; echo rc=$?` and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-ci2d; echo rc=$?`.
+Expected: every `rc=0`; `# Test run: PASS`; `preflight-accept` `"ok": true`.
+
+**Known limitations / out of scope.** The sandbox cannot run a pull request, a real workflow, the weekly refresh or its token: that the refresh pull request collects all five required checks (O2), the real mutation-leg times and the saving on a
+documentation-only merge are read from the first runs after the merge. A Draft pull request runs the shards from its first review-bound head, not "only when ready" (O3). The determinism split is `ci2h`. The full suite is CI's. `#317` stays open.
 
 ## Next action
 

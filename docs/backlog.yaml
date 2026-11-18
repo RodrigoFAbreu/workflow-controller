@@ -572,7 +572,7 @@ items:
     detail: docs/items/workflow-controller-ci2c.md
   - id: workflow-controller-ci2d
     title: "CI: after-merge and trigger policy, and the automated timings refresh (#317)"
-    status: next
+    status: done
     order: 98
     depends_on: [workflow-controller-ci2]
     detail: docs/items/workflow-controller-ci2d.md

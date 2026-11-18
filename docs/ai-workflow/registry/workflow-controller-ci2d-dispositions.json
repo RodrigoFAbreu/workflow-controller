@@ -1,0 +1,18 @@
+{
+  "dispositions": {
+    "F-15f574f84be4": {"disposition": "dropped", "reason": "plan-stage wording on how the staleness ratchet reads the merged copy; the implemented tool validates the merged copy before opening the pull request and the plan stage is closed"},
+    "F-4ce00321c277": {"disposition": "follow-up", "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/317"},
+    "F-4ef1014e9d74": {"disposition": "fixed"},
+    "F-4fa298332e9c": {"disposition": "fixed"},
+    "F-57c6fd84eafd": {"disposition": "fixed"},
+    "F-611d49787ab1": {"disposition": "fixed"},
+    "F-64f3f98ebe58": {"disposition": "fixed"},
+    "F-8b0e6f85faa5": {"disposition": "fixed"},
+    "F-8d1c3208df3b": {"disposition": "dropped", "reason": "wording only; the plan's exact-permissions assertion is the binding rule and the plan is a historical record"},
+    "F-98de1838981c": {"disposition": "dropped", "reason": "either rule is safe, as the reviewer said; the implemented detect is conservative and tested"},
+    "F-d093519f08ec": {"disposition": "dropped", "reason": "plan wording about which open points the item page lists; the plan is a historical record and the page carries O4"},
+    "F-f286cb069af7": {"disposition": "follow-up", "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/317"}
+  },
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ci2d"
+}

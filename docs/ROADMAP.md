@@ -101,7 +101,7 @@
 | 95 | [CI: fresh shard timings, a measured contention estimate and the CI1b review follow-ups (#317, #324)](items/workflow-controller-ci2.md) `workflow-controller-ci2` | Done | - | - |
 | 96 | [CI: run each test once, the duplicate-run removal (#317)](items/workflow-controller-ci2b.md) `workflow-controller-ci2b` | Done | - | workflow-controller-ci2 |
 | 97 | [CI: fixture snapshot reuse (#317)](items/workflow-controller-ci2c.md) `workflow-controller-ci2c` | Done | - | workflow-controller-ci2 |
-| 98 | [CI: after-merge and trigger policy, and the automated timings refresh (#317)](items/workflow-controller-ci2d.md) `workflow-controller-ci2d` | Next | - | workflow-controller-ci2 |
+| 98 | [CI: after-merge and trigger policy, and the automated timings refresh (#317)](items/workflow-controller-ci2d.md) `workflow-controller-ci2d` | Done | - | workflow-controller-ci2 |
 | 99 | [CI: a runtime check replacing the static repo-reach heuristic (#322)](items/workflow-controller-ci2e.md) `workflow-controller-ci2e` | Next | - | workflow-controller-ci2 |
 | 100 | [CI: process starts per lifecycle step (#317)](items/workflow-controller-ci2f.md) `workflow-controller-ci2f` | Next | - | workflow-controller-ci2 |
 | 101 | [CI: shard affinity for tests that share a snapshot (#317)](items/workflow-controller-ci2g.md) `workflow-controller-ci2g` | Next | - | workflow-controller-ci2c |

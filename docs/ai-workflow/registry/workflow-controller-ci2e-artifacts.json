@@ -41,7 +41,8 @@
       "tests/test_ci_workflows.py": "the deliverable of this item, implementation content and never plan-stage design content",
       "tests/test_test_shards.py": "the deliverable of this item, implementation content and never plan-stage design content",
       "docs/guide/ci-and-releases.md": "the deliverable of this item, implementation content and never plan-stage design content",
-      "docs/guide/development.md": "the deliverable of this item, implementation content and never plan-stage design content"
+      "docs/guide/development.md": "the deliverable of this item, implementation content and never plan-stage design content",
+      "tools/test_timings.json": "the deliverable of this item, implementation content and never plan-stage design content"
     },
     "excluded_prefixes": {
       ".claude/commands/": "workflow command files this milestone creates (the bootstrap command, /approve-review, /accept-milestone) or modifies (the eight existing v1 commands, per D-States/D-Self-Governance) -- implementation of the approved design, not the design itself",
@@ -80,7 +81,8 @@
       "tests/test_ci_workflows.py": "the deliverable: the CI tooling, its tests or the operator page this item edits",
       "tests/test_test_shards.py": "the deliverable: the CI tooling, its tests or the operator page this item edits",
       "docs/guide/ci-and-releases.md": "the deliverable: the CI tooling, its tests or the operator page this item edits",
-      "docs/guide/development.md": "the deliverable: the CI tooling, its tests or the operator page this item edits"
+      "docs/guide/development.md": "the deliverable: the CI tooling, its tests or the operator page this item edits",
+      "tools/test_timings.json": "the deliverable: the CI tooling, its tests or the operator page this item edits"
     },
     "protected_prefixes": {
       "app/": "application source and its own tests -- product deliverable",

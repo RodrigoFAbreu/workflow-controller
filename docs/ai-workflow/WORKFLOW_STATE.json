@@ -83037,8 +83037,8 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci2e-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci2e-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AMENDING_PLAN",
-      "plan_revision": 3,
+      "phase": "IMPLEMENTING",
+      "plan_revision": 4,
       "implementation_revision": null,
       "functional_review_round": null,
       "base_commit": "509575d99860cb97cf020e15394b5dca7695cd32",
@@ -83055,32 +83055,32 @@
           "start_commit": "e0b83dca6abde540b15475a55e7605286b7ac362"
         },
         "CP3": {
-          "status": "COMPLETE",
+          "status": "NEEDS_REVALIDATION",
           "start_commit": "8e011f09641a2a8ba167084cc5d06a1b92d5e9e3"
         },
         "CP4": {
-          "status": "COMPLETE",
+          "status": "NEEDS_REVALIDATION",
           "start_commit": "8b09a0f06e81f433effb58ebf70bcf5b38152969"
         }
       },
-      "current_bundle_id": "3dc70fb560ae5a2bb959d21689c4e85c69e39e41882151fcb9620c98714f3f23",
+      "current_bundle_id": "103dec6c57b6dfb1f8ebb624d112f1a7f1f15cea0b9fb11b71a9bdb8ac961da7",
       "plan_approval": {
-        "status": "SUPERSEDED",
+        "status": "CURRENT",
         "basis": "POLICY_SATISFIED",
-        "reviewed_bundle_id": "3dc70fb560ae5a2bb959d21689c4e85c69e39e41882151fcb9620c98714f3f23",
-        "approved_review_content_id": "a3b3b8fa7e746ace68ab77bf37abe9b4eced8eb9e91c243c4274a919ca049e88",
+        "reviewed_bundle_id": "103dec6c57b6dfb1f8ebb624d112f1a7f1f15cea0b9fb11b71a9bdb8ac961da7",
+        "approved_review_content_id": "a29e64ce3856456fd0b833c1099ac29f6b13a0a6246b80ddf4c5109641c2f5ba",
         "review_content_manifest": [
           {
             "path": "docs/ai-workflow/CONTROLLER_CI2E_PLAN.md",
             "exists": true,
             "mode": "100644",
-            "blob": "4a062e15aa94ed175efb767c273efd44da7e14e1"
+            "blob": "814a96db3975f685906f695bae6403c2b1e0f8bb"
           },
           {
             "path": "docs/ai-workflow/registry/workflow-controller-ci2e-registry.json",
             "exists": true,
             "mode": "100644",
-            "blob": "e8c7a831699e322f40b3ba8f6fabeea063b977fb"
+            "blob": "935b0e82081a7244ac42c48fb87126b9a69cd16e"
           },
           {
             "path": "docs/ai-workflow/requirements/workflow-controller-ci2e-mapping.json",
@@ -83093,7 +83093,7 @@
         "legacy_evidence": null,
         "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
         "waived_guarantees": [],
-        "recorded_at": "2026-11-18T04:44:59Z",
+        "recorded_at": "2026-11-18T21:07:48Z",
         "policy_evidence": {
           "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
           "policy_source": "default",
@@ -83123,24 +83123,24 @@
             }
           ],
           "inputs": {
-            "review_content_id": "a3b3b8fa7e746ace68ab77bf37abe9b4eced8eb9e91c243c4274a919ca049e88",
+            "review_content_id": "a29e64ce3856456fd0b833c1099ac29f6b13a0a6246b80ddf4c5109641c2f5ba",
             "ledger": {
               "local": {
-                "bundle_id": "3dc70fb560ae5a2bb959d21689c4e85c69e39e41882151fcb9620c98714f3f23",
+                "bundle_id": "103dec6c57b6dfb1f8ebb624d112f1a7f1f15cea0b9fb11b71a9bdb8ac961da7",
                 "verdict": "APPROVE",
-                "round": 3,
-                "verdict_sha256": "d8de7bdc33a348b26647eff24a68bb6f0933119bb9c3d872a56cf7cbeda00bc0",
-                "ledger_entry_sha256": "6a226e6eca44d6a9598cbe4704bea36df738e283c426b17dd112717082d9bc04",
+                "round": 5,
+                "verdict_sha256": "092419de8ddd980ae68da9904b82e83e2c497befa25c62b2432df0771d9f7f1b",
+                "ledger_entry_sha256": "1c6dfcfe79d9a886d465eb6aaa713a87d5319ce1e4d9aa9dcaa63c2a324d8251",
                 "run_ref": "session:local .ai-review/workflow-controller-ci2e/feedback/REVIEW_FEEDBACK.md",
                 "reviewer_model": "anthropic/claude-opus-5-5"
               },
               "manual": {
-                "bundle_id": "3dc70fb560ae5a2bb959d21689c4e85c69e39e41882151fcb9620c98714f3f23",
+                "bundle_id": "103dec6c57b6dfb1f8ebb624d112f1a7f1f15cea0b9fb11b71a9bdb8ac961da7",
                 "verdict": "APPROVE",
-                "round": 3,
-                "verdict_sha256": "000ec4bb03ffe1624afdae748c88c767a0c9646d39303e357ad53878442531a5",
-                "ledger_entry_sha256": "ab05849e15435e5b2eb2210060b002b870943e50339fee0e922f8e68130bb9b4",
-                "run_ref": "codex:20261118T044134Z-3dff453d",
+                "round": 5,
+                "verdict_sha256": "2c0c7c6a4cff919bb70a378a0fa3ca5d5134813db6642aeaa1cbb384f991f7ba",
+                "ledger_entry_sha256": "edd3aa0c8956fc3125662f723403c77f7e8e063aa0d3f6333f989be1b8127351",
+                "run_ref": "codex:20261118T210253Z-89d7ac7f",
                 "reviewer_model": "openai/gpt-6.1-sol"
               }
             },
@@ -83150,30 +83150,30 @@
           "trust": {
             "review_verdicts": "orchestrator"
           },
-          "evaluated_at": "2026-11-18T04:44:59Z",
+          "evaluated_at": "2026-11-18T21:07:48Z",
           "workflow_release": "2.29.3"
         }
       },
       "technical_approval": null,
       "technical_review_block_pins": [],
       "plan_review_stages": {
-        "review_content_id": "a3b3b8fa7e746ace68ab77bf37abe9b4eced8eb9e91c243c4274a919ca049e88",
+        "review_content_id": "a29e64ce3856456fd0b833c1099ac29f6b13a0a6246b80ddf4c5109641c2f5ba",
         "LOCAL_MODEL_PLAN_REVIEW": {
-          "bundle_id": "3dc70fb560ae5a2bb959d21689c4e85c69e39e41882151fcb9620c98714f3f23",
+          "bundle_id": "103dec6c57b6dfb1f8ebb624d112f1a7f1f15cea0b9fb11b71a9bdb8ac961da7",
           "verdict": "APPROVE",
-          "round": 3,
-          "completed_at": "2026-11-18T04:41:09Z",
-          "verdict_sha256": "d8de7bdc33a348b26647eff24a68bb6f0933119bb9c3d872a56cf7cbeda00bc0",
+          "round": 5,
+          "completed_at": "2026-11-18T21:02:18Z",
+          "verdict_sha256": "092419de8ddd980ae68da9904b82e83e2c497befa25c62b2432df0771d9f7f1b",
           "run_ref": "session:local .ai-review/workflow-controller-ci2e/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
         "MANUAL_EXTERNAL_PLAN_REVIEW": {
-          "bundle_id": "3dc70fb560ae5a2bb959d21689c4e85c69e39e41882151fcb9620c98714f3f23",
+          "bundle_id": "103dec6c57b6dfb1f8ebb624d112f1a7f1f15cea0b9fb11b71a9bdb8ac961da7",
           "verdict": "APPROVE",
-          "round": 3,
-          "completed_at": "2026-11-18T04:43:05Z",
-          "verdict_sha256": "000ec4bb03ffe1624afdae748c88c767a0c9646d39303e357ad53878442531a5",
-          "run_ref": "codex:20261118T044134Z-3dff453d",
+          "round": 5,
+          "completed_at": "2026-11-18T21:05:40Z",
+          "verdict_sha256": "2c0c7c6a4cff919bb70a378a0fa3ca5d5134813db6642aeaa1cbb384f991f7ba",
+          "run_ref": "codex:20261118T210253Z-89d7ac7f",
           "reviewer_model": "openai/gpt-6.1-sol"
         }
       },
@@ -83181,30 +83181,38 @@
       "blocking_decisions": [],
       "review_round_counts": {
         "plan": {
-          "local": 3,
-          "external": 2
+          "local": 5,
+          "external": 3
         },
         "implementation": {
           "local": 0,
           "external": 0
         }
       },
-      "state_revision": 22,
-      "last_transition": "2026-11-18T20:57:23Z",
+      "state_revision": 31,
+      "last_transition": "2026-11-18T21:07:48Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
-        "status": "CONSUMED",
-        "at": "2026-11-18T20:57:23Z",
+        "status": "BOUND",
+        "at": "2026-11-18T21:01:16Z",
         "consumed": {
-          "review_content_id": "a3b3b8fa7e746ace68ab77bf37abe9b4eced8eb9e91c243c4274a919ca049e88",
-          "plan_revision": 3,
+          "review_content_id": "92893767d01ae9a1a3a02a19fa0254257341cbb3bd410d2f01c71f4fc8012042",
+          "plan_revision": 4,
           "legacy": false
         },
-        "published": null,
-        "bound": null
+        "published": {
+          "review_content_id": "a29e64ce3856456fd0b833c1099ac29f6b13a0a6246b80ddf4c5109641c2f5ba",
+          "plan_revision": 4
+        },
+        "bound": {
+          "review_content_id": "a29e64ce3856456fd0b833c1099ac29f6b13a0a6246b80ddf4c5109641c2f5ba",
+          "bundle_id": "103dec6c57b6dfb1f8ebb624d112f1a7f1f15cea0b9fb11b71a9bdb8ac961da7",
+          "plan_revision": 4
+        }
       },
       "consumed_plan_review_content_ids": [
         "5af0e34c22665312b700403c28a9d549a62f76062a8bd17abd7ab1d19f800be1",
+        "92893767d01ae9a1a3a02a19fa0254257341cbb3bd410d2f01c71f4fc8012042",
         "a3b3b8fa7e746ace68ab77bf37abe9b4eced8eb9e91c243c4274a919ca049e88",
         "e488dddb077c4ef0cb0bafb5470f55077e46c6c5334b745d1fde8dd7300f23de"
       ],
@@ -83334,6 +83342,20 @@
               "at": "2026-11-18T04:41:09Z"
             }
           ]
+        },
+        "F-4a380e0d892a": {
+          "digest": "4a380e0d892aebefedde4964aa18236886c74b30c0ab94c7bd10b41f35bd2f53",
+          "text": "**O1. D2's sentence about the timings file now reads against CP3.** D2 says \"The planner's committed timings keep their entries ... the timings file is not regenerated by hand\". That sentence concerns the two gate modules' entries, which still name existing atoms. CP3 now hand-prunes other entries. A clause in D2 such as \"(entries of deleted classes are pruned, CP3)\" would stop a reader from reading the two as conflicting.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "92893767d01ae9a1a3a02a19fa0254257341cbb3bd410d2f01c71f4fc8012042",
+              "verdict": "REVISE",
+              "at": "2026-11-18T21:00:18Z"
+            }
+          ]
         }
       },
       "amendment_history": [
@@ -83452,7 +83474,14 @@
             }
           },
           "pre_amendment_approval_commit": "d5d4581ffc818e58d1583c3b32449f8ee99e6ed0",
-          "resolved_at_plan_revision": null
+          "resolved_at_plan_revision": 4,
+          "reconciliation_outcome": {
+            "CP1": "retained",
+            "CP2": "retained",
+            "CP3": "needs_revalidation",
+            "CP4": "needs_revalidation_dependency"
+          },
+          "resolved_review_content_id": "a29e64ce3856456fd0b833c1099ac29f6b13a0a6246b80ddf4c5109641c2f5ba"
         }
       ],
       "amendment_base_commit": "64a031879e52b40a28d56a0269f1d6543dc5ee3d"

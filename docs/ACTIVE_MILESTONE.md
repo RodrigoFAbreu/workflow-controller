@@ -739,51 +739,51 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-ci2d` (CI2d: after-merge and trigger policy, and the automated timings refresh), implementation revision 4 (technical approval by policy `34fb6dc`), plan
-`docs/ai-workflow/CONTROLLER_CI2D_PLAN.md` (revision 4), base commit `a9a25a5`. Five checkpoints, all complete: CP1 (change detection classifies a push and a Draft head), CP2 (the trigger policy in the generated
-workflows), CP3 (the mutation check in three legs), CP4 (the automated timings refresh) and CP5 (the pages and the follow-up). Revisions 2 to 4 are review fixes: a documentation-only push never builds or
-publishes (I1), the refresh merges its runs oldest first (I1), and the runner-limit proof activates the release-target legs (O1), and the command-line detect test no longer inherits the runner's `GITHUB_*` variables (the PR check failure; Flow 1 covers it). A `ci:` change that edits CI tooling, the generated workflows, tests and pages; it
-publishes no release.
+Item `workflow-controller-ci2e` (CI2e: a runtime check replacing the static repo-reach heuristic), implementation revision 1 (revisions 1 to 4 of the plan's amendment history are folded in: plan revision 3 plus amendment 0, which pruned the seven deleted scanner classes from `tools/test_timings.json`), plan
+`docs/ai-workflow/CONTROLLER_CI2E_PLAN.md`, base commit `509575d`. Four checkpoints, all complete: CP1 (`tools/ci_changes.py hide`), CP2 (the generated `tests` job runs `hide`; `tests.test_docs` and `tests.test_backlog` are `excluded`),
+CP3 (the static scanner and its tests are deleted; the seven scanner classes leave the committed timings) and CP4 (the pages). A `ci:` change; it publishes no release.
 Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the system directories, and no write inside the read-only
 product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write only to the scratch `TMPDIR`. No flow needs a pull request or a forge call, and none runs the full suite.
+**Never run `hide` in the product clone itself: it deletes tracked files.** Only run it in the scratch clone of Flow 2.
 
 Setup: `export TMPDIR=$(mktemp -d); P=$PWD` (the product clone). No data to seed.
 
-**Flow 1: change detection tests.**
-Run `python3 -B tools/run_tests.py tests.test_ci_changes; echo rc=$?`.
-Expected: `# Test run: PASS`, `rc=0` (a `namespace: none` line is expected in this sandbox).
+**Flow 1: the tool's tests.**
+Run `python3 -B tools/run_tests.py tests.test_ci_changes tests.test_test_shards; echo rc=$?`.
+Expected: `# Test run: PASS`, `rc=0` (a `namespace: none` line is expected in this sandbox). `HideTests` is among the tests run; the scanner classes (`ScannerFlagsTests` and the others) no longer exist.
 
-**Flow 2: a push is classified over the pushed range (scratch repo).**
-Run `git clone -q $P $TMPDIR/s && cd $TMPDIR/s`; make a base commit (`git -c user.name=t -c user.email=t@t commit -q --allow-empty -m base; B=$(git rev-parse HEAD)`); append a line to `docs/README.md` and commit; write `{"before":"<B>","after":"<HEAD>"}` to `$TMPDIR/ev.json`;
-run `GITHUB_EVENT_NAME=push GITHUB_EVENT_PATH=$TMPDIR/ev.json python3 -B $P/tools/ci_changes.py detect`. Repeat after one more commit that edits `tools/ci_changes.py` (payload `before` still `B`), and with a `before` of forty zeros.
-Expected: `code=false (push: 1 changed path(s), all documentation)`; then `code=true (tools/ci_changes.py is not documentation: everything runs)`; then `code=true (the push has no previous commit (a new branch): everything runs)`. Also try a payload that is not JSON or has no `before`: `code=true`.
+**Flow 2: `hide` on a scratch clone, dry run first.**
+Run `git clone -q $P $TMPDIR/s && cd $TMPDIR/s`; `python3 -B tools/ci_changes.py hide --dry-run; echo rc=$?`; `git status --short | wc -l`.
+Expected: the paths listed, then `would hide 189 documentation paths`, `rc=0`, nothing changed (`git status` count 0, `docs/README.md` still present).
+Then `python3 -B tools/ci_changes.py hide; echo rc=$?; git status --short | wc -l; ls docs 2>&1 | head -3; ls tools/ci_changes.py`.
+Expected: `hid 189 documentation paths`, `rc=0`, `git status` still empty (skip-worktree), `docs/README.md` and the other set files gone (`docs/ACTIVE_MILESTONE.md` is not in the set and stays), code files such as `tools/ci_changes.py` present. Run `hide` again: it prints `hid 189 documentation paths` and `rc=0` (repeatable).
 
-**Flow 3: the Draft pull request rule.**
-Read the review-bound set in `tools/ci_changes.py` (`REVIEW_BOUND_PHASES`, `review_bound_item`) and the Draft cases in `tests/test_ci_changes.py`.
-Expected: a Draft head skips the shards until a work item reaches a review-bound phase (base lacks it or holds it outside the set); any unreadable state, a non-merge HEAD, or a non-object `pull_request` payload runs everything; a non-draft pull request is classified by its diff.
+**Flow 3: the refusal outside a Git work tree.**
+Run `mkdir $TMPDIR/n && cd $TMPDIR/n && python3 -B $P/tools/ci_changes.py hide; echo rc=$?`.
+Expected: a `hide: ...` message on stderr and `rc=1`; nothing is deleted.
 
-**Flow 4: the generated workflows match the model and carry the policy.**
-Run `python3 -B tools/ci_workflows.py --check; echo rc=$?` and `python3 -B tools/run_tests.py tests.test_ci_workflows; echo rc=$?`; then `grep -n "ready_for_review\|code ==" .github/workflows/ci.yml .github/workflows/tests.yml .github/workflows/build-publish.yml`.
-Expected: both `rc=0`, `PASS`; `ci.yml` also triggers on `ready_for_review`; `build`, `publish` and the `release-target-*` checks require `code == 'true'`; the `after-merge-*` jobs and the managed `workflow-conformance` job are not gated by `code`.
+**Flow 4: the blind run catches a reader (the check can fail).**
+In `$TMPDIR/s` (already hidden), run `python3 -B tools/run_tests.py tests.test_ci_changes tests.test_package_structure tests.test_write_containment; echo rc=$?`.
+Expected: `PASS`, `rc=0` (these modules do not read the set). Then run `python3 -B tools/run_tests.py tests.test_docs; echo rc=$?`.
+Expected: failure (for example `README.md: link 'docs/install.md' points at a missing file`), because `tests.test_docs` reads the pages that `hide` removed; this is why it is `excluded` from the shards and run by `docs-tests` on the real checkout.
 
-**Flow 5: the mutation check in three legs.**
-Run `python3 -B tools/run_tests.py tests.test_run_tests tests.test_test_shards; echo rc=$?`; then `python3 -B tools/run_tests.py main-check tests.test_scenarios_negative --shard 3 --of 3; echo rc=$?` and `... main-check tests.test_scenarios_negative --shard 0; echo rc=$?`; then `grep -n -A6 "after-merge-mutations\|release-target-mutations" .github/workflows/ci.yml .github/workflows/build-publish.yml | head -60`.
-Expected: the tests `PASS`; the two `main-check` calls refuse at once (`--shard must be in 0..2, not 3`; `--shard and --of go together`) with a non-zero `rc`, without running any test; the two mutation jobs are a matrix of three legs, with the job ids unchanged. (Do not run a real leg: it takes about 5 minutes.)
+**Flow 5: the generated workflow and the placement.**
+Run `python3 -B tools/ci_workflows.py --check; echo rc=$?`; `python3 -B tools/run_tests.py tests.test_ci_workflows; echo rc=$?`; `grep -n -B3 -A3 "ci_changes.py hide" .github/workflows/tests.yml`; `grep -n "DOCS_TEST_MODULES" tools/test_shards.py tools/ci_workflows.py`.
+Expected: both `rc=0`; the `hide the documentation set` step is in the `tests` job after the install and before `exec-shard`, and not in the `plan` job; `tests.test_docs` and `tests.test_backlog` are placed `excluded` with a reason naming `DOCS_TEST_MODULES`.
 
-**Flow 6: the automated timings refresh.**
-Run `python3 -B tools/run_tests.py tests.test_timings_refresh; echo rc=$?`; read `.github/workflows/timings-refresh.yml` and `python3 -B tools/timings_refresh.py --help`.
-Expected: `PASS`, `rc=0`; a weekly cron (`17 5 * * 1`); the job takes `TIMINGS_REFRESH_TOKEN` and fails naming it when it is missing; `collect`, `plan-change` and `propose` exist; runs merge oldest first; a change that fails the staleness ratchet is not proposed. Do not run `collect` or `propose` (they need the network and `gh`).
+**Flow 6: the committed timings and the scanner's removal.**
+Run `python3 -B -c "import json;d=json.load(open('tools/test_timings.json'));print([k for k in json.dumps(d).split('\"') if 'ScannerFlagsTests' in k or 'TouchesSetTests' in k or 'DocumentationSetGuardTests' in k])"`; `grep -n "GATE_MODULES\|GATE_TOOLS\|MENTIONS\|FIXTURES" tools/ci_changes.py tests/test_ci_changes.py; echo rc=$?`.
+Expected: an empty list; `grep` finds nothing (`rc=1`); `python3 -B tools/run_tests.py tests.test_test_shards` (Flow 1) already shows the timings profile valid.
 
 **Flow 7: the guide and the item pages.**
-Read `docs/guide/ci-and-releases.md` sections "Documentation-only pull requests" and "The automated timings refresh", `docs/items/workflow-controller-ci2d.md` and `docs/items/workflow-controller-ci2h.md`.
-Expected: the push rule, the Draft rule and the three legs are described as the code does; the mutation estimate (959.7 s one shard, about 320 s per leg) is labelled an estimate; O1 (determinism split, now `ci2h`), O2 (the token, unproven until the first run) and O3 (the draft rule) are stated; `#317` stays open.
+Read `docs/guide/ci-and-releases.md` ("Documentation-only pull requests"), `docs/guide/development.md` (the `hide` mention), `docs/items/workflow-controller-ci2e.md` and `docs/items/workflow-controller-ci2.md`.
+Expected: the blind run is described as the code does (`hide`, the `plan` job staying sighted, the gate modules `excluded` and run by `docs-tests`); what it does not prove (Git-object reads, tolerant readers, invisible passing subtests, modules outside the shards), the scratch-clone reproduction, and how a path leaves the set (D3) are stated; O1 (also blind in the `main` and package jobs) is an open owner decision; `#317` stays open.
 
 **Flow 8: the docs checks and the backlog.**
-Run `python3 -B tools/check_docs.py; echo rc=$?`, `python3 -B tools/run_tests.py tests.test_docs tests.test_plan_document_consistency tests.test_write_containment tests.test_package_structure; echo rc=$?`, `python3 -B scripts/workflow_backlog.py check; echo rc=$?` and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-ci2d; echo rc=$?`.
-Expected: every `rc=0`; `# Test run: PASS`; `preflight-accept` `"ok": true`.
+Run `python3 -B tools/check_docs.py; echo rc=$?`, `python3 -B tools/run_tests.py tests.test_docs tests.test_plan_document_consistency tests.test_write_containment tests.test_package_structure; echo rc=$?`, `python3 -B scripts/workflow_backlog.py check; echo rc=$?` and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-ci2e; echo rc=$?`.
+Expected: every `rc=0`; `# Test run: PASS`; `preflight-accept` `"ok": true`. (Run these in the product clone, not the hidden scratch clone.)
 
-**Known limitations / out of scope.** The sandbox cannot run a pull request, a real workflow, the weekly refresh or its token: that the refresh pull request collects all five required checks (O2), the real mutation-leg times and the saving on a
-documentation-only merge are read from the first runs after the merge. A Draft pull request runs the shards from its first review-bound head, not "only when ready" (O3). The determinism split is `ci2h`. The full suite is CI's. `#317` stays open.
+**Known limitations / out of scope.** The full shard set runs blind for the first time on the pull request's CI, and a reader it finds moves its path out of the set (plan D3); the sandbox cannot run it. The `main`, package and conformance jobs do not run blind (O1, a possible follow-up). Git-object readers, tolerant readers and passing subtests are not caught. The full suite is CI's. The self-review full run (6793 tests) had one timing flake outside this diff, `tests.test_job_codex_apply.RecoveryTest.test_a_drifted_release_ends_each_stage_without_carrying_out`, which passes alone. `#317` stays open.
 
 ## Next action
 

@@ -544,7 +544,7 @@ class HideTests(unittest.TestCase):
                           "    def test_reads(self):\n"
                           "        self.assertEqual(pathlib.Path('docs/run.md').read_text(), 'run\\n')\n")
         run = lambda: subprocess.run([sys.executable, "-m", "unittest", "tests.test_reads_docs"],
-                                     cwd=self.repo, capture_output=True, text=True)
+                                     cwd=self.repo, capture_output=True, text=True, timeout=120)
         self.assertEqual(run().returncode, 0)
         self.assertEqual(self.hide(cwd=self.repo)[0], 0)
         failed = run()

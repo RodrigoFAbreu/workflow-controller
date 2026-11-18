@@ -328,7 +328,8 @@ class CoverageTest(unittest.TestCase):
                                                   "tests.test_scenarios_negative"],
                                     shards.EXCLUDED: ["tests.test_integration_disposable_repo",
                                                       shards.CONFORMANCE,
-                                                      "tests.test_functional_lifecycle"]})
+                                                      "tests.test_functional_lifecycle",
+                                                      "tests.test_docs", "tests.test_backlog"]})
         self.assertIn("claude", shards.CI_PLACEMENT["tests.test_integration_disposable_repo"][1])
         self.assertIn("workflow-conformance", shards.CI_PLACEMENT[shards.CONFORMANCE][1])
 
@@ -846,6 +847,38 @@ def _gh_eval(expression: str, context: dict) -> object:
     assert "!" not in text, text
     return eval(text, {"__builtins__": {}},  # noqa: S307 - a fixed, model-derived expression
                 {**names, "eq": eq, "True": True, "fmt": lambda f, *a: f.format(*a)})
+
+
+class BlindShardsTest(unittest.TestCase):
+    """CI2e: the shards run with the documentation set absent, which is what lets a
+    documentation-only change skip them."""
+
+    HIDE = "python3 tools/ci_changes.py hide"
+
+    def test_only_the_tests_job_hides_the_set_and_before_it_runs_a_shard(self) -> None:
+        hiding = [(name, job_name) for name, job_name, _, step in _all_steps() if self.HIDE in _run(step)]
+        self.assertEqual(hiding, [("tests.yml", "tests")])
+        steps = _steps(_jobs(ci.tests_workflow())["tests"])
+        hide = _index(steps, lambda step: self.HIDE in _run(step))
+        shard = _index(steps, lambda step: "exec-shard" in _run(step))
+        install = _index(steps, lambda step: step.get("run") == "pip install -e .")
+        self.assertLess(install, hide)
+        self.assertLess(hide, shard)
+
+    def test_the_plan_stays_sighted(self) -> None:
+        plan = _jobs(ci.tests_workflow())["plan"]
+        self.assertFalse(any("hide" in _run(step) for step in _steps(plan)))
+
+    def test_the_header_says_the_shards_run_without_the_set(self) -> None:
+        self.assertIn("tools/ci_changes.py hide", ci.render()["tests.yml"])
+
+    def test_the_gate_modules_are_placed_out_of_the_shards_and_run_by_docs_tests(self) -> None:
+        for module in ci.DOCS_TEST_MODULES:
+            with self.subTest(module=module):
+                self.assertEqual(shards.CI_PLACEMENT[module][0], shards.EXCLUDED)
+        placed = sorted(m for m, (where, reason) in shards.CI_PLACEMENT.items()
+                        if "DOCS_TEST_MODULES" in reason)
+        self.assertEqual(placed, sorted(ci.DOCS_TEST_MODULES))
 
 
 class CiWorkflowTest(unittest.TestCase):

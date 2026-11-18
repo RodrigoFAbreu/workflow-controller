@@ -152,6 +152,12 @@ CI_PLACEMENT = {
                   "scenario-functional-* scenarios of tests.test_scenarios, which call the same "
                   "flow_* functions in the kit's sandbox; a local full run keeps both copies "
                   "(workflow-controller-ci2b D3)"),
+    "tests.test_docs": (
+        EXCLUDED, "reads the documentation set by design, which the shards run without; run by "
+                  "docs-tests on the real checkout (DOCS_TEST_MODULES, workflow-controller-ci2e D2)"),
+    "tests.test_backlog": (
+        EXCLUDED, "reads the documentation set by design, which the shards run without; run by "
+                  "docs-tests on the real checkout (DOCS_TEST_MODULES, workflow-controller-ci2e D2)"),
     "tests.test_catalogue_determinism": (
         MAIN, "runs every catalogue scenario twice, a property of the whole catalogue and "
               "not of one flow; runs in main.yml after the merge and gates the release, while "

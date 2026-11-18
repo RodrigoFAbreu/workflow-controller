@@ -8,7 +8,9 @@
 # documentation, and a Draft pull request before its first review-bound head
 # (tools/ci_changes.py), skips plan and tests; the docs-tests and docs jobs run on every
 # event and tests-result requires docs, which needs docs-tests. docs-tests is the
-# shared python-tests.yml of RodrigoFAbreu/action-workflows.
+# shared python-tests.yml of RodrigoFAbreu/action-workflows. The tests job removes the
+# documentation set from its checkout (tools/ci_changes.py hide) before it runs a shard,
+# so a shard that passes proves no test it ran needs those files.
 name: Tests
 "on":
   workflow_call:
@@ -119,6 +121,8 @@ jobs:
         run: "pip install -e ."
       - name: "allow unprivileged user namespaces"
         run: "if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0; fi"
+      - name: "hide the documentation set"
+        run: "python3 tools/ci_changes.py hide"
       - name: shard
         run: "python3 tools/run_tests.py exec-shard --profile ci --ci-placement --shard ${{ matrix.shard }} --expect-digest ${{ needs.plan.outputs.digest }} --results-dir results --run-attempt ${{ github.run_attempt }}"
       - if: "always()"

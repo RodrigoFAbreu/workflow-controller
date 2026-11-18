@@ -410,7 +410,8 @@ class CiPlacementTest(unittest.TestCase):
         self.assertEqual(modules["package"], {"tests.test_packaged_runtime"})
         self.assertEqual(modules["excluded"], {"tests.test_integration_disposable_repo",
                                                "conformance",
-                                               "tests.test_functional_lifecycle"})
+                                               "tests.test_functional_lifecycle",
+                                               "tests.test_docs", "tests.test_backlog"})
         self.assertEqual(modules["main"], {"tests.test_catalogue_determinism",
                                            "tests.test_scenarios_negative"})
         self.assertNotIn("conformance", modules["shards"])
@@ -428,6 +429,20 @@ class CiPlacementTest(unittest.TestCase):
                 self.assertEqual(self.inventory.select([module], ci_placement=True).test_ids, ())
                 self.assertFalse(set(local) & set(shards.ci_partition(self.inventory)["shards"]))
                 self.assertFalse(set(local) & set(shards.ci_partition(self.inventory)["excluded"]))
+
+    def test_the_documentation_gate_leaves_the_shards_and_runs_in_docs_tests(self) -> None:
+        # CI2e D2: the shards run without the documentation set, so the two modules that read it
+        # by design are placed out of them; docs-tests (DOCS_TEST_MODULES) still runs them.
+        docs_gate = {"tests.test_docs", "tests.test_backlog"}
+        for module in sorted(docs_gate):
+            with self.subTest(module=module):
+                self.assertEqual(shards.CI_PLACEMENT[module][0], "excluded")
+                self.assertIn("DOCS_TEST_MODULES", shards.CI_PLACEMENT[module][1])
+                self.assertTrue(self.inventory.select([module]).test_ids)
+                self.assertEqual(self.inventory.select([module], ci_placement=True).test_ids, ())
+        in_shards = {a.module for a in self.inventory.atoms
+                     if set(a.test_ids) & set(shards.ci_partition(self.inventory)["shards"])}
+        self.assertFalse(docs_gate & in_shards)
 
     def test_the_functional_flows_run_once_as_scenarios(self) -> None:
         # D3/D4: the unittest copy is excluded from the shards, the scenario copy stays, and a

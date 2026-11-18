@@ -82319,7 +82319,7 @@
         }
       },
       "technical_approval": {
-        "status": "CURRENT",
+        "status": "STALE",
         "basis": "POLICY_SATISFIED",
         "reviewed_bundle_id": "7e1a705a9ea1863d47396ac581b43ae40db111d42532c7818eb15086bd7081b3",
         "approved_review_content_id": "ff512a08e79331505a47e87a7afec14d57cbfc0016346016eb5a71541d5c1fcb",
@@ -82496,8 +82496,8 @@
           "external": 2
         }
       },
-      "state_revision": 35,
-      "last_transition": "2026-11-17T22:56:53Z",
+      "state_revision": 37,
+      "last_transition": "2026-11-18T00:06:00Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -82712,7 +82712,220 @@
           "run_ref": "codex:20261117T225256Z-bc03a314",
           "reviewer_model": "openai/gpt-6.1-sol"
         }
-      }
+      },
+      "gate_evidence": {
+        "functional": {
+          "flow-1": {
+            "flow_id": "flow-1",
+            "status": "passed",
+            "head": "a5ff667be53c56c4994bd79656ab9a68b38d7e93",
+            "ran_at": "2026-11-17T23:01:02Z",
+            "summary": {
+              "checklist_blob": "ef3ae21f15d865706f75aee6362c1a224239a8e9",
+              "text": "tests.test_ci_changes: Test run PASS, rc=0 (100 tests, namespace none as expected)."
+            },
+            "log_digest": "02e3cb0168ed4647fc4c8cef6533a597b052a830747dd82edc7d8c312c27e8d5",
+            "run_ref": "controller:20261117T225852Z-aa8798cb",
+            "reporter": "workflow-controller 1.31.1",
+            "identity": "ff512a08e79331505a47e87a7afec14d57cbfc0016346016eb5a71541d5c1fcb",
+            "recorded_at": "2026-11-17T23:01:02Z"
+          },
+          "flow-2": {
+            "flow_id": "flow-2",
+            "status": "passed",
+            "head": "a5ff667be53c56c4994bd79656ab9a68b38d7e93",
+            "ran_at": "2026-11-17T23:01:02Z",
+            "summary": {
+              "checklist_blob": "ef3ae21f15d865706f75aee6362c1a224239a8e9",
+              "text": "Scratch repo push cases gave exactly the expected three messages (docs-only false; tools/ci_changes.py true; zero before true); non-JSON and no-before payloads gave code=true."
+            },
+            "log_digest": "61acff7437d2a34871cba937ab11e47562ced24dab645b7c79766193a8b84b8c",
+            "run_ref": "controller:20261117T225852Z-aa8798cb",
+            "reporter": "workflow-controller 1.31.1",
+            "identity": "ff512a08e79331505a47e87a7afec14d57cbfc0016346016eb5a71541d5c1fcb",
+            "recorded_at": "2026-11-17T23:01:02Z"
+          },
+          "flow-3": {
+            "flow_id": "flow-3",
+            "status": "passed",
+            "head": "a5ff667be53c56c4994bd79656ab9a68b38d7e93",
+            "ran_at": "2026-11-17T23:01:02Z",
+            "summary": {
+              "checklist_blob": "ef3ae21f15d865706f75aee6362c1a224239a8e9",
+              "text": "REVIEW_BOUND_PHASES and review_bound_item read: draft runs only when head has an item review-bound and base lacks it/holds it outside the set; unreadable state and non-merge HEAD raise DetectError, which runs everything; Draft tests present (partition, unreadable, missing state, malformed payloads). Note: a non-object pull_request is treated as non-draft and classified by diff, so with a docs-only diff it would be false rather than true; the test covers it only with a code diff. This matches the guide's wording and is safe, so not judged a defect."
+            },
+            "log_digest": "bfcb943c3d4d49d5994e90506b553c63c77245c379d26540d5ea18d17a5e4ae2",
+            "run_ref": "controller:20261117T225852Z-aa8798cb",
+            "reporter": "workflow-controller 1.31.1",
+            "identity": "ff512a08e79331505a47e87a7afec14d57cbfc0016346016eb5a71541d5c1fcb",
+            "recorded_at": "2026-11-17T23:01:02Z"
+          },
+          "flow-4": {
+            "flow_id": "flow-4",
+            "status": "passed",
+            "head": "a5ff667be53c56c4994bd79656ab9a68b38d7e93",
+            "ran_at": "2026-11-17T23:01:02Z",
+            "summary": {
+              "checklist_blob": "ef3ae21f15d865706f75aee6362c1a224239a8e9",
+              "text": "ci_workflows --check rc=0; tests.test_ci_workflows PASS rc=0; ci.yml has ready_for_review; build, publish, release-target-determinism/mutations require inputs.code == 'true'; after-merge-* jobs in ci.yml carry no code gate; tests.yml gates only plan/shard steps."
+            },
+            "log_digest": "b16071c27fb0dc84d66e6dab3a3be10cfe5f3d798456f9600098a75f68d26ef6",
+            "run_ref": "controller:20261117T225852Z-aa8798cb",
+            "reporter": "workflow-controller 1.31.1",
+            "identity": "ff512a08e79331505a47e87a7afec14d57cbfc0016346016eb5a71541d5c1fcb",
+            "recorded_at": "2026-11-17T23:01:02Z"
+          },
+          "flow-5": {
+            "flow_id": "flow-5",
+            "status": "passed",
+            "head": "a5ff667be53c56c4994bd79656ab9a68b38d7e93",
+            "ran_at": "2026-11-17T23:01:03Z",
+            "summary": {
+              "checklist_blob": "ef3ae21f15d865706f75aee6362c1a224239a8e9",
+              "text": "test_run_tests/test_test_shards PASS rc=0; main-check --shard 3 --of 3 refused ('--shard must be in 0..2, not 3', rc=2); --shard 0 alone refused ('--shard and --of go together', rc=2); both mutation jobs are a matrix of shards 0,1,2 with unchanged ids."
+            },
+            "log_digest": "45269fd3eac2b44855d46f5c2469c64e4c0d23fbd0c1b4edacb70d6bfd4c07b7",
+            "run_ref": "controller:20261117T225852Z-aa8798cb",
+            "reporter": "workflow-controller 1.31.1",
+            "identity": "ff512a08e79331505a47e87a7afec14d57cbfc0016346016eb5a71541d5c1fcb",
+            "recorded_at": "2026-11-17T23:01:03Z"
+          },
+          "flow-6": {
+            "flow_id": "flow-6",
+            "status": "passed",
+            "head": "a5ff667be53c56c4994bd79656ab9a68b38d7e93",
+            "ran_at": "2026-11-17T23:01:03Z",
+            "summary": {
+              "checklist_blob": "ef3ae21f15d865706f75aee6362c1a224239a8e9",
+              "text": "test_timings_refresh PASS rc=0; workflow has cron '17 5 * * 1', TIMINGS_REFRESH_TOKEN only on propose step; collect/plan-change/propose exist; runs listed oldest first; ratchet test step (tests.test_test_shards) precedes propose so a failing change is not proposed. Missing-token refusal is covered by the passing tests; collect/propose not run."
+            },
+            "log_digest": "5f0fc0222392cd20f33ddb4c6d4e43081d07300aebb2abf9d513faf3a4edbdb9",
+            "run_ref": "controller:20261117T225852Z-aa8798cb",
+            "reporter": "workflow-controller 1.31.1",
+            "identity": "ff512a08e79331505a47e87a7afec14d57cbfc0016346016eb5a71541d5c1fcb",
+            "recorded_at": "2026-11-17T23:01:03Z"
+          },
+          "flow-7": {
+            "flow_id": "flow-7",
+            "status": "passed",
+            "head": "a5ff667be53c56c4994bd79656ab9a68b38d7e93",
+            "ran_at": "2026-11-17T23:01:03Z",
+            "summary": {
+              "checklist_blob": "ef3ae21f15d865706f75aee6362c1a224239a8e9",
+              "text": "Guide describes push rule, Draft rule, three legs and the timings refresh as the code does; 959.7 s / ~320 s labelled an estimate not a measurement; O1 (ci2h), O2, O3 stated in ci2d page; token marked unproven until first run; #317 referenced as open in item pages."
+            },
+            "log_digest": "a5eb40914a5e395843f0c42b94dc7d7a46405295c83cfbba19603c188565c96b",
+            "run_ref": "controller:20261117T225852Z-aa8798cb",
+            "reporter": "workflow-controller 1.31.1",
+            "identity": "ff512a08e79331505a47e87a7afec14d57cbfc0016346016eb5a71541d5c1fcb",
+            "recorded_at": "2026-11-17T23:01:03Z"
+          },
+          "flow-8": {
+            "flow_id": "flow-8",
+            "status": "passed",
+            "head": "a5ff667be53c56c4994bd79656ab9a68b38d7e93",
+            "ran_at": "2026-11-17T23:01:03Z",
+            "summary": {
+              "checklist_blob": "ef3ae21f15d865706f75aee6362c1a224239a8e9",
+              "text": "check_docs rc=0; docs/plan/write-containment/package tests PASS rc=0; workflow_backlog check rc=0 (fresh); preflight-accept ci2d ok:true rc=0."
+            },
+            "log_digest": "0d7c66c4b4c5ecd840f61b8927b0510fd5be80bd704462b8c7bfea56354ebaf2",
+            "run_ref": "controller:20261117T225852Z-aa8798cb",
+            "reporter": "workflow-controller 1.31.1",
+            "identity": "ff512a08e79331505a47e87a7afec14d57cbfc0016346016eb5a71541d5c1fcb",
+            "recorded_at": "2026-11-17T23:01:03Z"
+          }
+        },
+        "pr": {
+          "pr": {
+            "number": 378,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/378"
+          },
+          "state": "open",
+          "head": "a5ff667be53c56c4994bd79656ab9a68b38d7e93",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "failure",
+            "failing": [
+              "validate / tests (1)"
+            ]
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "ff512a08e79331505a47e87a7afec14d57cbfc0016346016eb5a71541d5c1fcb",
+          "observed_at": "2026-11-17T23:51:45Z",
+          "ingest_seq": 3,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "f97bff12e29144fec13b0d3adf84c5cd870f8472",
+          "provenance": {
+            "source": "workflow_gh",
+            "fetched_by": {
+              "name": "workflow-gh",
+              "version": "pr-list-v1"
+            },
+            "fetched_at": "2026-11-17T23:51:45Z",
+            "raw_sha256": "99a1969bd15809a57e3e85164392d29056c54fc8dfa157a853b79f97a32b8f65",
+            "run_ref": null,
+            "gh_path": "/usr/bin/gh",
+            "gh_sha256": "ce3200ab0615ae60ee68dd4833719cd3a3856e8b22ae1a3641998b39be8d3dbf"
+          },
+          "fact_id": "d0f67f6ffc8185b38565db2529ef7ff098cc53999f88828a66257ffc060a6b31"
+        },
+        "pr_reported": {
+          "pr": {
+            "number": 378,
+            "url": "https://github.com/RodrigoFAbreu/workflow-controller/pull/378"
+          },
+          "state": "open",
+          "head": "a5ff667be53c56c4994bd79656ab9a68b38d7e93",
+          "review_decision": null,
+          "reviewed_head": null,
+          "checks": {
+            "state": "failure",
+            "failing": [
+              "validate / tests (1)"
+            ]
+          },
+          "review_id": null,
+          "findings": null,
+          "identity_at_head": "ff512a08e79331505a47e87a7afec14d57cbfc0016346016eb5a71541d5c1fcb",
+          "observed_at": "2026-11-17T23:51:26Z",
+          "ingest_seq": 2,
+          "repository": "RodrigoFAbreu/workflow-controller",
+          "queried_commit": "f97bff12e29144fec13b0d3adf84c5cd870f8472",
+          "provenance": {
+            "source": "orchestrator_forge",
+            "fetched_by": {
+              "name": "workflow-controller",
+              "version": "1.31.1"
+            },
+            "fetched_at": "2026-11-17T23:51:26Z",
+            "raw_sha256": "99a1969bd15809a57e3e85164392d29056c54fc8dfa157a853b79f97a32b8f65",
+            "run_ref": "controller:20261117T235126Z-2261965f"
+          },
+          "fact_id": "138fb571b5bf551afed93ce533cbde53ebfc49252f03db7634b5aaf063368c2c"
+        },
+        "pr_keys": {
+          "reopened_for": [
+            "[378,\"checks_failed\",\"a5ff667be53c56c4994bd79656ab9a68b38d7e93\",[\"validate / tests (1)\"]]"
+          ],
+          "applied": [],
+          "ingest_seq": 3
+        }
+      },
+      "reopenings": [
+        {
+          "n": 1,
+          "at": "2026-11-17T23:51:45Z",
+          "from_phase": "AWAITING_FUNCTIONAL_REVIEW",
+          "cause": "checks_failed",
+          "pr_number": 378,
+          "pr_head": "a5ff667be53c56c4994bd79656ab9a68b38d7e93",
+          "fact_id": "d0f67f6ffc8185b38565db2529ef7ff098cc53999f88828a66257ffc060a6b31",
+          "key": "[378,\"checks_failed\",\"a5ff667be53c56c4994bd79656ab9a68b38d7e93\",[\"validate / tests (1)\"]]"
+        }
+      ]
     }
   }
 }

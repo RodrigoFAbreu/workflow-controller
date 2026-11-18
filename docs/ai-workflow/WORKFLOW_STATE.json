@@ -82197,12 +82197,12 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci2d-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci2d-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_FUNCTIONAL_REVIEW",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 4,
-      "implementation_revision": 3,
+      "implementation_revision": 4,
       "functional_review_round": null,
       "base_commit": "a9a25a502df03f0e23a2147b506bb4b9fb189aee",
-      "reviewed_implementation_head": "f97bff12e29144fec13b0d3adf84c5cd870f8472",
+      "reviewed_implementation_head": "5eead55ca3cda67acc14029a99721b4e21fdd3fe",
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": "CP5",
       "checkpoints": {
@@ -82496,8 +82496,8 @@
           "external": 2
         }
       },
-      "state_revision": 37,
-      "last_transition": "2026-11-18T00:06:00Z",
+      "state_revision": 39,
+      "last_transition": "2026-11-18T00:20:00Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -82910,7 +82910,9 @@
           "reopened_for": [
             "[378,\"checks_failed\",\"a5ff667be53c56c4994bd79656ab9a68b38d7e93\",[\"validate / tests (1)\"]]"
           ],
-          "applied": [],
+          "applied": [
+            "[378,\"checks_failed\",\"a5ff667be53c56c4994bd79656ab9a68b38d7e93\",[\"validate / tests (1)\"]]"
+          ],
           "ingest_seq": 3
         }
       },

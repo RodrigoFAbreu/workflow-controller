@@ -85,7 +85,7 @@ class _Target:
         return json.loads((self.root / ".workflow-manager" / "installation.json").read_text())["workflow_version"]
 
     def inspect(self):
-        return managed_repo.inspect(self.root, manager_bin=str(self.stub))
+        return fixtures.inspect_unchanged(self.root, str(self.stub))
 
     def records(self) -> list[dict]:
         return [json.loads(p.read_text()) for p in sorted((self.runtime / "jobs").glob("*.json"))]

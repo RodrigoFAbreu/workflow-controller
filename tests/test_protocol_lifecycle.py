@@ -31,7 +31,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import cli, forge as forge_mod, gitrepo, job, managed_repo, milestone_branch, protocol, worker  # noqa: E402
+from controller import cli, forge as forge_mod, gitrepo, job, milestone_branch, protocol, worker  # noqa: E402
 from controller import runtime as controller_runtime  # noqa: E402
 from controller.errors import WorkflowReleaseChangedError  # noqa: E402
 from tests import fixtures  # noqa: E402
@@ -359,7 +359,7 @@ class Lifecycle:
             fixtures.take_snapshot(key, self.td, self.snapshot_state())
 
     def inspect(self):
-        return managed_repo.inspect(self.root, manager_bin=str(self.stub))
+        return fixtures.inspect_unchanged(self.root, str(self.stub))
 
     def workflow(self, code: str, *args: str) -> None:
         fixtures.run_workflow_python(self.root, "import json\n" + code, *args)

@@ -14,6 +14,7 @@ import atexit
 import collections
 import contextlib
 import copy
+import hashlib
 import json
 import os
 import re
@@ -452,6 +453,52 @@ def count_process_starts():
         yield counts
     finally:
         subprocess.Popen.__init__ = real_init
+
+
+_INSPECT_CACHE: dict = {}
+
+
+def _file_fingerprint(path: Path) -> object:
+    """What a read of ``path`` can depend on: its bytes and its mode bits, or a marker for a path that is absent."""
+    try:
+        info = path.lstat()
+        return (info.st_mode, hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None)
+    except OSError:
+        return None
+
+
+def _inspect_key(root: Path, manager_bin: str) -> tuple:
+    """The inputs ``managed_repo.inspect`` reads: the record, every file the record lists as managed, and the stub
+    manager (path, bytes and mode bits, since the executable bit is tested). The target's Git configuration and hooks
+    are an assumption, not part of the key."""
+    root = Path(root)
+    record = root / ".workflow-manager" / "installation.json"
+    key: list = [str(root), str(manager_bin), _file_fingerprint(Path(manager_bin)), _file_fingerprint(record)]
+    try:
+        managed = json.loads(record.read_text(encoding="utf-8")).get("managed")
+    except (OSError, ValueError, AttributeError):
+        managed = None
+    if isinstance(managed, dict):
+        for name in sorted(k for k in managed if isinstance(k, str)):
+            key.append((name, _file_fingerprint(root / name)))
+    return tuple(key)
+
+
+def inspect_unchanged(root: Path, manager_bin: str):
+    """``managed_repo.inspect(root, manager_bin=...)`` for a lifecycle driver, repeated only when its inputs changed.
+
+    A previous successful result is returned (as a deep copy, so a caller cannot change the next answer) while the key
+    of ``_inspect_key`` is equal; otherwise the real ``inspect`` runs and its result replaces the root's entry. A
+    refusal is raised and never kept, so it is asked again. Production ``inspect`` is not cached: this is the tests'."""
+    from controller import managed_repo
+    root = Path(root)
+    key = _inspect_key(root, manager_bin)
+    entry = _INSPECT_CACHE.get(str(root))
+    if entry is not None and entry[0] == key:
+        return copy.deepcopy(entry[1])
+    result = managed_repo.inspect(root, manager_bin=str(manager_bin))
+    _INSPECT_CACHE[str(root)] = (key, copy.deepcopy(result))
+    return result
 
 
 @contextlib.contextmanager

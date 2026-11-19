@@ -6,6 +6,10 @@
 
 from __future__ import annotations
 
+import copy
+import dataclasses
+import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -17,7 +21,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import protocol  # noqa: E402
+from controller import managed_repo, protocol  # noqa: E402
+from controller.errors import DriftedInstallationError  # noqa: E402
 from tests import fixtures  # noqa: E402
 from tests import test_protocol_lifecycle as lifecycle  # noqa: E402
 
@@ -178,6 +183,95 @@ class DecidedRowSavingTest(unittest.TestCase):
         # nothing else differs: the production sequence of queries is unchanged.
         for kind in set(spy_counts) | set(direct_counts) | set(query_counts):
             self.assertEqual(direct_counts[kind] - spy_counts[kind], query_counts[kind], kind)
+
+
+class InspectCacheTest(unittest.TestCase):
+    """``fixtures.inspect_unchanged`` (D2): a repeated ``inspect`` of unchanged inputs starts no process, and
+    anything the real ``inspect`` reads moves the key."""
+
+    def setUp(self) -> None:
+        fixtures._INSPECT_CACHE.clear()
+        self.addCleanup(fixtures._INSPECT_CACHE.clear)
+        self.life = lifecycle.GateLifecycle(self)
+        self.root, self.stub = self.life.root, self.life.stub
+
+    def cached(self):
+        return fixtures.inspect_unchanged(self.root, str(self.stub))
+
+    def fresh(self):
+        return managed_repo.inspect(self.root, manager_bin=str(self.stub))
+
+    def record(self) -> Path:
+        return self.root / ".workflow-manager" / "installation.json"
+
+    def assert_moved(self, change) -> None:
+        """After ``change`` the answer is a real inspect again (processes start) and equals a fresh one."""
+        self.cached()
+        change()
+        with fixtures.count_process_starts() as counts:
+            answer = self.cached()
+        self.assertGreater(sum(counts.values()), 0)
+        self.assertEqual(answer, self.fresh())
+
+    def test_a_second_call_starts_no_process_and_equals_a_fresh_inspect(self) -> None:
+        first = self.cached()
+        with fixtures.count_process_starts() as counts:
+            second = self.cached()
+        self.assertEqual(dict(counts), {})
+        self.assertEqual(second, first)
+        self.assertEqual(second, self.fresh())
+        self.assertTrue(second.target_protocol)
+
+    def test_the_key_moves_when_the_record_changes(self) -> None:
+        def change() -> None:
+            data = json.loads(self.record().read_text())
+            data["note"] = "changed"
+            self.record().write_text(json.dumps(data, indent=2))
+        self.assert_moved(change)
+        self.assertEqual(self.cached().manifest["note"], "changed")
+
+    def test_the_key_moves_when_a_managed_script_changes(self) -> None:
+        managed = json.loads(self.record().read_text())["managed"]
+        script = self.root / protocol.qualifying_script_keys(managed)[0]
+        before = self.cached().script_digests
+
+        self.assert_moved(lambda: script.write_text(script.read_text() + "\n# changed\n"))
+        self.assertNotEqual(self.cached().script_digests, before)
+
+    def test_the_key_moves_when_the_stub_changes(self) -> None:
+        self.assert_moved(lambda: fixtures.write_stub_workflow_manager(
+            self.stub, verify_stdout="a different clean line", release="2.12.0"))
+
+    def test_the_stubs_mode_bits_move_the_key(self) -> None:
+        self.assert_moved(lambda: os.chmod(self.stub, 0o750))
+
+    def test_a_refusal_is_raised_again_and_never_cached(self) -> None:
+        good = self.cached()
+        fixtures.write_stub_workflow_manager(self.stub, verify_exit=1, release="2.12.0")
+        for _ in range(2):
+            with self.assertRaises(DriftedInstallationError):
+                self.cached()
+        fixtures.write_stub_workflow_manager(self.stub, release="2.12.0")
+        self.assertEqual(self.cached(), good)
+
+    def test_two_roots_do_not_share_an_entry(self) -> None:
+        other = lifecycle.GateLifecycle(self)
+        mine = self.cached()
+        theirs = fixtures.inspect_unchanged(other.root, str(other.stub))
+        self.assertNotEqual(mine.root, theirs.root)
+        self.assertEqual(fixtures.inspect_unchanged(other.root, str(other.stub)).root, theirs.root)
+        self.assertEqual(self.cached().root, mine.root)
+
+    def test_the_cached_result_is_a_copy(self) -> None:
+        self.cached()
+        served = self.cached()
+        served.manifest["note"] = "mutated"
+        served.verify["returncode"] = 99
+        again = self.cached()
+        self.assertNotIn("note", again.manifest)
+        self.assertEqual(again.verify["returncode"], 0)
+        self.assertEqual(again, self.fresh())
+        self.assertTrue(dataclasses.is_dataclass(again) and copy.deepcopy(again) == again)
 
 
 if __name__ == "__main__":

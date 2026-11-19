@@ -85189,7 +85189,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-uf1-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-uf1-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 8,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -85302,7 +85302,144 @@
           "workflow_release": "2.29.3"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "664c201c0060bb5520991441ffca1584e855a541b65d63f77f65d908e15c61f8",
+        "approved_review_content_id": "b21bdb13c6d993c20fb85b0393d29eaa734163e95afdb0c5cbc86e9a8dbf472c",
+        "review_content_manifest": [
+          {
+            "path": "controller/__init__.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c5a83836b298c95f777824ab8b6be282c775ca8f"
+          },
+          {
+            "path": "controller/cli.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8fea49574366001a6822351d5835ca8996570e7c"
+          },
+          {
+            "path": "controller/usage_probe.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f759bb055d07476c02c1eca22694a10bc05315a6"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-uf1-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f14d410d8fb1e1ef56ef88646bb8c98bd314ae38"
+          },
+          {
+            "path": "docs/common-problems.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "8f57cd113c1241b4c8b18bf640d2be0dbddf58f5"
+          },
+          {
+            "path": "docs/exit-codes.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6f641cf61306444f3096a77a831728911d37340c"
+          },
+          {
+            "path": "docs/guide/commands.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "11774488d7a3ec173bfbca5420590c69bd1d01ad"
+          },
+          {
+            "path": "docs/guide/runtime.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "1442134186ae7c6685fd68f670d5a88fb6e1d338"
+          },
+          {
+            "path": "tests/test_package_structure.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "99c56ecf3cc4624a60e80b6789321e1fb2a2c7af"
+          },
+          {
+            "path": "tests/test_usage_command.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "068cc58bfc0463a9c6e197f648e20dd4bace45e7"
+          },
+          {
+            "path": "tests/test_usage_probe.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "99bf51aec20cee915190c1447caaa9cb1cd13e2c"
+          }
+        ],
+        "reviewed_content_commit": "db91cc1a7763ea780126a5c1eafe6a60f61a8af6",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-19T21:33:38Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "b21bdb13c6d993c20fb85b0393d29eaa734163e95afdb0c5cbc86e9a8dbf472c",
+            "ledger": {
+              "local": {
+                "bundle_id": "664c201c0060bb5520991441ffca1584e855a541b65d63f77f65d908e15c61f8",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "bc640da050b19f470eefb046803f5d718d56bc5eef7241ba97676a5eeb3a3569",
+                "ledger_entry_sha256": "959b42c008c4d224174c7d8f2a13975dc626831a36830a7b96ec545095f8ddf7",
+                "run_ref": "session:local .ai-review/workflow-controller-uf1/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "664c201c0060bb5520991441ffca1584e855a541b65d63f77f65d908e15c61f8",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "1bf943a6ad8986e112b023199c7371656b29c0e1a007e4aad8e4a39dd5f8eb50",
+                "ledger_entry_sha256": "9bc46f8bc331da4d9bc77ca6a914fb2a962e7002157d83b8e88cfcf2cd927db3",
+                "run_ref": "codex:20261119T212856Z-b71fe0b7",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-19T21:33:38Z",
+          "workflow_release": "2.29.3"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "b4b2bb9435af57a0a3c81b964f3697f61ef4f2cd527482c801ad9c7fd4f530d6",
@@ -85333,12 +85470,12 @@
           "external": 3
         },
         "implementation": {
-          "local": 1,
-          "external": 1
+          "local": 2,
+          "external": 2
         }
       },
-      "state_revision": 44,
-      "last_transition": "2026-11-19T21:21:40Z",
+      "state_revision": 47,
+      "last_transition": "2026-11-19T21:33:38Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -85549,6 +85686,20 @@
               "at": "2026-11-19T21:16:08Z"
             }
           ]
+        },
+        "F-56813d229f8e": {
+          "digest": "56813d229f8eadaf9b579a8aebd643160c07d55595959557d6938879900f4c89",
+          "text": "**O1. The Codex-hold recipe's lead-in still says \"both\".** `docs/common-problems.md` (\"A pause that should have lifted\") introduces the recipe with \"Re-read both limits, then ask the gate\", but since the I2 fix the recipe refreshes only Codex (`usage --refresh --provider codex`). The paragraph after it also says \"the other provider is still probed\", which applies only to `--provider all`. Saying \"Re-read the Codex limit\" (or keeping `--refresh --provider all` and checking Codex) would make the lead-in and the commands agree.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "b21bdb13c6d993c20fb85b0393d29eaa734163e95afdb0c5cbc86e9a8dbf472c",
+              "verdict": "APPROVE",
+              "at": "2026-11-19T21:24:19Z"
+            }
+          ]
         }
       },
       "amendment_history": [
@@ -85666,17 +85817,25 @@
       ],
       "amendment_base_commit": "fdfe34090960b373706b9c041115eb9981a3991d",
       "implementation_review_stages": {
-        "review_content_id": "17091b4f454cdf9b16af59c7ce7b34b488c7d636b5d0e0be1676961a89c6c855",
+        "review_content_id": "b21bdb13c6d993c20fb85b0393d29eaa734163e95afdb0c5cbc86e9a8dbf472c",
         "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
-          "bundle_id": "ab2846e6446ff96547fd9905a8d9e7e8317470c446ede81f9a35346a824097e7",
+          "bundle_id": "664c201c0060bb5520991441ffca1584e855a541b65d63f77f65d908e15c61f8",
           "verdict": "APPROVE",
-          "round": 1,
-          "completed_at": "2026-11-19T21:16:08Z",
-          "verdict_sha256": "415c724bc3285ac7b017be6ac03e379d70d0105f921e91f403e7a91fd8f9cb09",
+          "round": 2,
+          "completed_at": "2026-11-19T21:24:19Z",
+          "verdict_sha256": "bc640da050b19f470eefb046803f5d718d56bc5eef7241ba97676a5eeb3a3569",
           "run_ref": "session:local .ai-review/workflow-controller-uf1/feedback/REVIEW_FEEDBACK.md",
           "reviewer_model": "anthropic/claude-opus-5-5"
         },
-        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "664c201c0060bb5520991441ffca1584e855a541b65d63f77f65d908e15c61f8",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-19T21:31:13Z",
+          "verdict_sha256": "1bf943a6ad8986e112b023199c7371656b29c0e1a007e4aad8e4a39dd5f8eb50",
+          "run_ref": "codex:20261119T212856Z-b71fe0b7",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
       }
     }
   }

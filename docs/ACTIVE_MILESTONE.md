@@ -1,6 +1,13 @@
 # Active Milestone
 
-## Latest milestone (FX2)
+## Latest milestone (UF1)
+
+**In progress: implementing (`IMPLEMENTING`).** Plan `docs/ai-workflow/CONTROLLER_UF1_PLAN.md` (revision 6), three checkpoints; `workflow-controller usage --refresh` re-reads the Codex and the Claude limit by one cheap probe each.
+
+- **CP1 complete (verified state).** `controller/usage_probe.py` (D2, D3, D4, D6) holds the two pinned probe command lines (`claude_argv`, `codex_exec_argv`, `codex_compose_argv`, each checked by `check_probe_argv`), `check_probe_composed` (the composed-configuration check of revision 6), `sweep_stale` (a `usage-probe/<job id>/` layout older than 300 seconds is removed at the start of a refresh) and `refresh(providers, ...)`, which runs one probe per provider under its own `review.JobLayout` (area `usage-probe`), records a reading only for an `ok` probe and returns a `ProbeResult` per provider. `controller/review.py` is not edited. `tests/test_usage_probe.py` covers the argv, environment, private homes, outcomes, recording rules, sweep and boundary refusals of D2 against the fake `codex` and `claude`. Implementation choices: the model/effort declaration is asserted at import (the CLI would fail to start if the table dropped `haiku` or `gpt-6.1-sol`; the test fails first); the Codex compose argv carries `--listen stdio://` and no `-C`; and the probe's `-c` set also carries `skills.bundled.enabled=false` (the review's own override), because without it Codex writes `skills/.system` into the private home, which `review.check_home` refuses, and loads the bundled skills into the probe's context. Verified with `tests.test_usage_probe`, `tests.test_usage`, `tests.test_package_structure` and `tests.test_write_containment` (passing).
+- **CP1 live check (2026-11-19, claude 2.1.318, codex-cli 0.167.0, scratch runtime root).** `refresh(["claude", "codex"])` against the installed builds returned `ok` for both. Claude accepted `--tools ""` and `--max-turns 1` under the pinned set and emitted a `rate_limit_event` (five-hour 49%, weekly 9%). Codex accepted the pinned `--strict-config` set with `-s read-only --skip-git-repo-check -C <throwaway>`, its compose command answered `config/read` with no refused layer, and a rollout carrying `rate_limits` was written in the private home (five-hour 30%, weekly 9%). Both credential copies ended `unchanged`; no layout remained.
+
+## Previous milestone (FX2)
 
 **Complete: accepted by policy (`MILESTONE_COMPLETE`).** Accepted after the functional review passed (PR #384, checks green at the approved head). Plan `docs/ai-workflow/CONTROLLER_FX2_PLAN.md` (revision 3), two checkpoints; it stops a half-written checkout failing `tests.test_functional_sandbox.RunTest.test_restored_source_and_checklist_edits_are_refused_at_the_first_write_and_never_differ` ([#206](https://github.com/RodrigoFAbreu/workflow-controller/issues/206)). Only the test and pages change; no `controller/` module.
 

@@ -12,10 +12,14 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from controller import protocol  # noqa: E402
 from tests import fixtures  # noqa: E402
+from tests import test_protocol_lifecycle as lifecycle  # noqa: E402
 
 
 class CounterTest(unittest.TestCase):
@@ -87,6 +91,93 @@ class CounterTest(unittest.TestCase):
             worker.start()
             worker.join()
         self.assertEqual(counts["git"], 1)
+
+
+def _answer(row: str) -> SimpleNamespace:
+    return SimpleNamespace(raw={"row": row})
+
+
+class DecidedRowTest(unittest.TestCase):
+    """``Lifecycle.decided_row`` (D1): the row a step decided is read from the step's own ``next-action`` call."""
+
+    def block(self, answers, drive=lambda stub: None, *, raising: bool = False):
+        """Run ``decided_row`` over a stub life, ``protocol.next_action`` faked to answer ``answers`` in order, and
+        ``drive`` standing in for the step; return the rows appended and the calls the fake saw."""
+        seen: list[tuple] = []
+        rows_iter = iter(answers)
+
+        def fake(*args, **kwargs):
+            seen.append((args, kwargs))
+            return _answer(next(rows_iter))
+
+        stub = SimpleNamespace(root=Path("root"))
+        rows: list[str] = []
+        with mock.patch.object(protocol, "next_action", fake):
+            try:
+                with lifecycle.Lifecycle.decided_row(stub, rows):
+                    drive(stub)
+                    if raising:
+                        raise RuntimeError("step failed")
+            except RuntimeError:
+                pass
+        return rows, seen
+
+    def test_the_identity_bound_call_is_not_mistaken_for_the_decision(self) -> None:
+        def drive(stub):
+            protocol.next_action(stub.root, lifecycle.WID, expected_digests={})
+            protocol.next_action(stub.root, lifecycle.WID, expect_state_identity="id", expected_digests={})
+
+        rows, seen = self.block(["38a", "38b"], drive)
+        self.assertEqual(rows, ["38a"])
+        self.assertEqual(len(seen), 2)  # every call passed through, and no extra query was made
+
+    def test_a_call_with_the_identity_first_is_skipped(self) -> None:
+        def drive(stub):
+            protocol.next_action(stub.root, lifecycle.WID, expect_state_identity="id")
+            protocol.next_action(stub.root, lifecycle.WID)
+
+        rows, _ = self.block(["currency", "decision"], drive)
+        self.assertEqual(rows, ["decision"])
+
+    def test_calls_pass_through_unchanged(self) -> None:
+        def drive(stub):
+            protocol.next_action(stub.root, lifecycle.WID, expected_digests={"a": "b"}, timeout=3.0)
+
+        _, seen = self.block(["x"], drive)
+        self.assertEqual(seen, [((Path("root"), lifecycle.WID), {"expected_digests": {"a": "b"}, "timeout": 3.0})])
+
+    def test_a_step_that_never_decides_asks_directly_afterwards(self) -> None:
+        rows, seen = self.block(["after"])
+        self.assertEqual(rows, ["after"])
+        self.assertEqual(seen, [((Path("root"), lifecycle.WID), {})])
+
+    def test_a_step_that_raises_still_appends_its_decided_row(self) -> None:
+        def drive(stub):
+            protocol.next_action(stub.root, lifecycle.WID)
+
+        rows, _ = self.block(["38c"], drive, raising=True)
+        self.assertEqual(rows, ["38c"])
+
+
+class DecidedRowSavingTest(unittest.TestCase):
+    """On a real lifecycle: the spy row equals the direct row, and costs exactly one ``next-action`` query less."""
+
+    def test_the_spy_row_equals_the_direct_row_and_saves_one_query(self) -> None:
+        spy_life = lifecycle.GateLifecycle(self)
+        direct_life = lifecycle.GateLifecycle(self)
+        with fixtures.count_process_starts() as spy_counts:
+            spy_life.step()
+        with fixtures.count_process_starts() as direct_counts:
+            direct_life.rows.append(protocol.next_action(direct_life.root, lifecycle.WID).raw["row"])
+            lifecycle.Lifecycle.step(direct_life)
+        with fixtures.count_process_starts() as query_counts:
+            protocol.next_action(spy_life.root, lifecycle.WID)
+        self.assertEqual(spy_life.rows, direct_life.rows)
+        self.assertEqual(query_counts["protocol:next-action"], 1)
+        # The step with the spy starts exactly one protocol query (with its own isolation calls) fewer, and
+        # nothing else differs: the production sequence of queries is unchanged.
+        for kind in set(spy_counts) | set(direct_counts) | set(query_counts):
+            self.assertEqual(direct_counts[kind] - spy_counts[kind], query_counts[kind], kind)
 
 
 if __name__ == "__main__":

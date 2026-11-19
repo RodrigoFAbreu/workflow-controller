@@ -779,13 +779,12 @@ class TesterLifecycle(lifecycle.GateLifecycle):
 
     def step(self, *, gate=None, functional="default", real_selection=False) -> dict:
         """``real_selection`` keeps ``review.claude_selection_error`` real (C10i), so a test can fake the static probe."""
-        self.rows.append(protocol.next_action(self.root, lifecycle.WID).raw["row"])
-
         def launch(task, *, cwd, **kwargs):
             self.effect(task)
             return lifecycle._result(self.report)
 
-        with mock.patch.object(worker, "launch", launch), mock.patch.object(review, "launch_functional", self.fake_tester), \
+        with self.decided_row(self.rows), mock.patch.object(worker, "launch", launch), \
+                mock.patch.object(review, "launch_functional", self.fake_tester), \
                 mock.patch.object(review, "claude_selection_error",
                                   review.claude_selection_error if real_selection else lambda *a, **k: None):
             return job.execute_step(self.inspect(), identity=IDENTITY, runtime=self.runtime, usage_gate=gate,
@@ -1115,8 +1114,8 @@ class TheFaultStopsSandboxTest(_TheFaultStopsHelpers, _TesterCase):
 
         with mock.patch.object(review, "resolve_binary", lambda name: Path("/bin/true")), \
                 mock.patch.object(functional_review, "static_probe", no_bwrap), \
-                mock.patch.object(review, "launch_functional", life.fake_tester):
-            life.rows.append(protocol.next_action(life.root, lifecycle.WID).raw["row"])
+                mock.patch.object(review, "launch_functional", life.fake_tester), \
+                life.decided_row(life.rows):
             record = job.execute_step(life.inspect(), identity=IDENTITY, runtime=life.runtime, usage_gate=called,
                                       routing=options, functional=life.functional)
         self.assertEqual(self.gate_of(record), "functional_tester_unavailable")

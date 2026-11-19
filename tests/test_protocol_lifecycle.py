@@ -385,6 +385,29 @@ class Lifecycle:
         else:
             raise AssertionError(f"no scripted effect for {task!r}")
 
+    @contextlib.contextmanager
+    def decided_row(self, rows: list[str]):
+        """Append to ``rows`` the protocol row the step's own decision read, instead of asking the Workflow for it
+        before the step (CI2f, D1). It wraps ``protocol.next_action`` for the block, passes every call through
+        unchanged and keeps the ``raw["row"]`` of the first call made without ``expect_state_identity`` (the
+        ``decide`` call; ``check_currency`` carries the identity). The append is in a ``finally``, so a step that
+        raises still records its row; a step that never decided (a refusal before the decision) asks directly
+        afterwards, and its state is unchanged by construction."""
+        real = protocol.next_action
+        decided: list[str] = []
+
+        def spy(*args, **kwargs):
+            answer = real(*args, **kwargs)
+            if not decided and kwargs.get("expect_state_identity") is None:
+                decided.append(answer.raw["row"])
+            return answer
+
+        try:
+            with mock.patch.object(protocol, "next_action", spy):
+                yield
+        finally:
+            rows.append(decided[0] if decided else real(self.root, WID).raw["row"])
+
     def step(self) -> dict:
         def launch(task, *, cwd, **kwargs):
             self.effect(task)
@@ -642,8 +665,8 @@ class GateLifecycle(Lifecycle):
         self.rows: list[str] = []
 
     def step(self) -> dict:
-        self.rows.append(protocol.next_action(self.root, WID).raw["row"])
-        return super().step()
+        with self.decided_row(self.rows):
+            return super().step()
 
     SNAPSHOT_ATTRS = ("tasks", "rows", "satisfied")
     LATE_CANONICAL = {"checks": "green", "refused": ()}
@@ -1113,13 +1136,11 @@ class LoopLifecycle(GateLifecycle):
             return self._step_with_budget()
 
     def _step_with_budget(self) -> dict:
-        self.rows.append(protocol.next_action(self.root, WID).raw["row"])
-
         def launch(task, *, cwd, **kwargs):
             self.effect(task)
             return _result(self.report)
 
-        with mock.patch.object(worker, "launch", launch):
+        with self.decided_row(self.rows), mock.patch.object(worker, "launch", launch):
             return job.execute_step(self.inspect(), identity=IDENTITY, runtime=self.runtime,
                                     wait_seconds=self.wait_seconds, poll_seconds=10)
 

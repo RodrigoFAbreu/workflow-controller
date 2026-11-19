@@ -84635,18 +84635,22 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-fx2-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-fx2-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "IMPLEMENTING",
+      "phase": "SELF_REVIEWING_IMPLEMENTATION",
       "plan_revision": 3,
       "implementation_revision": null,
       "functional_review_round": null,
       "base_commit": "655f9eeefd3cac43f46105706da31395176fd333",
       "reviewed_implementation_head": null,
       "current_checkpoint_id": null,
-      "last_completed_checkpoint_id": "CP1",
+      "last_completed_checkpoint_id": "CP2",
       "checkpoints": {
         "CP1": {
           "status": "COMPLETE",
           "start_commit": "635f9f349ec1e9e0ac5de6df1923fd5df6e78447"
+        },
+        "CP2": {
+          "status": "COMPLETE",
+          "start_commit": "de8a26a371821555f9ed719148f4c1f701a72366"
         }
       },
       "current_bundle_id": "814e0f58f9268c060fa8a157bb17f583d462f56f22d1cde55108957b332add9a",
@@ -84775,8 +84779,8 @@
           "external": 0
         }
       },
-      "state_revision": 15,
-      "last_transition": "2026-11-19T15:28:09Z",
+      "state_revision": 17,
+      "last_transition": "2026-11-19T15:29:17Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

@@ -1,6 +1,14 @@
 # Active Milestone
 
-## Latest milestone (CI2f)
+## Latest milestone (FX2)
+
+**Implemented; awaiting the implementation review.** Plan `docs/ai-workflow/CONTROLLER_FX2_PLAN.md` (revision 3), two checkpoints; it stops a half-written checkout failing `tests.test_functional_sandbox.RunTest.test_restored_source_and_checklist_edits_are_refused_at_the_first_write_and_never_differ` ([#206](https://github.com/RodrigoFAbreu/workflow-controller/issues/206)). Only the test and pages change; no `controller/` module.
+
+- **CP1 complete (verified state).** The watcher's `poll()` keeps an `armed` set (D1): a read equal to the original arms the path, and a differing read counts only for an armed path, so the empty file `git checkout` creates before writing it is no longer recorded as an unrefused write. The watcher sets `both_armed` once both paths are armed; the test waits on it (2 s) after `launch()` returns and, after `seen == []`, asserts `armed == set(paths)` (D2), so a watcher that saw no finished file fails. Measured as D3 directs (`taskset -c 0`, 16 copies x 13 runs: 1 failure in 208 before, 0 in 208 after; the pinned and unpinned 3 x 67 settings showed no failure either way). Verified with `tests.test_functional_sandbox`, `tests.test_package_structure` and `tests.test_write_containment` (passing).
+- **CP2 complete (verified state).** `docs/items/workflow-controller-fx2.md` records the status, the plan link, the cause, the fix and the D3 measurement with its command and settings. `docs/backlog.yaml` and `docs/ROADMAP.md` are unchanged (the item stays `next` until acceptance). Verified with `tests.test_docs`, `tests.test_plan_document_consistency`, `tools/check_docs.py`, `workflow_backlog.py check` and `preflight-accept workflow-controller-fx2` (`ok: true`).
+- **Self-review (2026-11-19, verified state).** The diff from `635f9f3` was re-read against D1-D4: one test changed, the arming rule is the only mechanism, and a real write before a path is armed still fails the test (the path never arms). No defect found; this section and the item page's status line were brought up to date. The single local full run, in a fresh clone under `/tmp` at `a622bfe` (`python3 tools/run_tests.py`, under a SIGINT-resetting reaping wrapper): 6816 tests, 8 shards, exact coverage, 837 s, PASS. `tools/check_docs.py`, `tools/ci_workflows.py --check`, `scripts/workflow_backlog.py check` and `preflight-accept workflow-controller-fx2` pass in that clone.
+
+## Previous milestone (CI2f)
 
 **Complete: accepted by policy (`MILESTONE_COMPLETE`).** Accepted after the functional review passed (PR #381, checks green at the approved head). Plan `docs/ai-workflow/CONTROLLER_CI2F_PLAN.md` (revision 2), four checkpoints; the lifecycle drivers in the tests ask the Workflow for fewer things per step (production queries are unchanged).
 

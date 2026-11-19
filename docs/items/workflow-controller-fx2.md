@@ -2,7 +2,7 @@
 
 Item id: `workflow-controller-fx2`.
 
-Status: implementing (plan revision 3 approved, [plan](../ai-workflow/CONTROLLER_FX2_PLAN.md); CP1 done, CP2 this record). Owner decision 2026-11-19. Priority: high. Complexity: low. Issue: [#206](https://github.com/RodrigoFAbreu/workflow-controller/issues/206).
+Status: implemented on the milestone branch (two checkpoints); plan: [CONTROLLER_FX2_PLAN.md](../ai-workflow/CONTROLLER_FX2_PLAN.md) (revision 3). A `ci:` change that edits one test and pages only; it publishes no release. Owner decision 2026-11-19. Priority: high. Complexity: low. Issue: [#206](https://github.com/RodrigoFAbreu/workflow-controller/issues/206).
 
 ## Why
 

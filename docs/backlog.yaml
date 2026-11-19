@@ -584,7 +584,7 @@ items:
     detail: docs/items/workflow-controller-ci2e.md
   - id: workflow-controller-ci2f
     title: "CI: process starts per lifecycle step (#317)"
-    status: next
+    status: done
     order: 100
     depends_on: [workflow-controller-ci2]
     detail: docs/items/workflow-controller-ci2f.md

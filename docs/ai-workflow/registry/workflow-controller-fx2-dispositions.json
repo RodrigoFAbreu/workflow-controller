@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-fx2",
+  "dispositions": {
+    "F-b0eaed9213a3": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/385"
+    },
+    "F-b5f33c00a91e": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/385"
+    },
+    "F-fa6d0734e8ea": {
+      "disposition": "dropped",
+      "reason": "The D3 after-the-fact read fallback was removed from the plan (CONTROLLER_FX2_PLAN.md states there is no after-the-fact read fallback) and the test never arms from a read after the watcher stops, so the settle() ordering concern does not arise."
+    }
+  }
+}

@@ -2,7 +2,7 @@
 
 ## Latest milestone (FX2)
 
-**Implemented; awaiting the implementation review.** Plan `docs/ai-workflow/CONTROLLER_FX2_PLAN.md` (revision 3), two checkpoints; it stops a half-written checkout failing `tests.test_functional_sandbox.RunTest.test_restored_source_and_checklist_edits_are_refused_at_the_first_write_and_never_differ` ([#206](https://github.com/RodrigoFAbreu/workflow-controller/issues/206)). Only the test and pages change; no `controller/` module.
+**Complete: accepted by policy (`MILESTONE_COMPLETE`).** Accepted after the functional review passed (PR #384, checks green at the approved head). Plan `docs/ai-workflow/CONTROLLER_FX2_PLAN.md` (revision 3), two checkpoints; it stops a half-written checkout failing `tests.test_functional_sandbox.RunTest.test_restored_source_and_checklist_edits_are_refused_at_the_first_write_and_never_differ` ([#206](https://github.com/RodrigoFAbreu/workflow-controller/issues/206)). Only the test and pages change; no `controller/` module.
 
 - **CP1 complete (verified state).** The watcher's `poll()` keeps an `armed` set (D1): a read equal to the original arms the path, and a differing read counts only for an armed path, so the empty file `git checkout` creates before writing it is no longer recorded as an unrefused write. The watcher sets `both_armed` once both paths are armed; the test waits on it (2 s) after `launch()` returns and, after `seen == []`, asserts `armed == set(paths)` (D2), so a watcher that saw no finished file fails. Measured as D3 directs (`taskset -c 0`, 16 copies x 13 runs: 1 failure in 208 before, 0 in 208 after; the pinned and unpinned 3 x 67 settings showed no failure either way). Verified with `tests.test_functional_sandbox`, `tests.test_package_structure` and `tests.test_write_containment` (passing).
 - **CP2 complete (verified state).** `docs/items/workflow-controller-fx2.md` records the status, the plan link, the cause, the fix and the D3 measurement with its command and settings. `docs/backlog.yaml` and `docs/ROADMAP.md` are unchanged (the item stays `next` until acceptance). Verified with `tests.test_docs`, `tests.test_plan_document_consistency`, `tools/check_docs.py`, `workflow_backlog.py check` and `preflight-accept workflow-controller-fx2` (`ok: true`).
@@ -795,4 +795,4 @@ Expected: every `rc=0`; `# Test run: PASS`; `preflight-accept` `"ok": true`.
 
 ## Next action
 
-`/milestone-plan` for `workflow-controller-ci2g` (CI: shard affinity for tests that share a snapshot (#317)), the item `python3 scripts/workflow_backlog.py next` returns, ready for `PLANNING`.
+`/milestone-plan` for `workflow-controller-uf1` (A `usage --refresh` that re-reads both the Codex and the Claude limit), the item `python3 scripts/workflow_backlog.py next` returns, ready for `PLANNING`.

@@ -104,7 +104,7 @@
 | 98 | [CI: after-merge and trigger policy, and the automated timings refresh (#317)](items/workflow-controller-ci2d.md) `workflow-controller-ci2d` | Done | - | workflow-controller-ci2 |
 | 99 | [CI: a runtime check replacing the static repo-reach heuristic (#322)](items/workflow-controller-ci2e.md) `workflow-controller-ci2e` | Done | - | workflow-controller-ci2 |
 | 100 | [CI: process starts per lifecycle step (#317)](items/workflow-controller-ci2f.md) `workflow-controller-ci2f` | Done | - | workflow-controller-ci2 |
-| 101 | [Fix the flaky functional-sandbox test (#206)](items/workflow-controller-fx2.md) `workflow-controller-fx2` | Next | - | - |
+| 101 | [Fix the flaky functional-sandbox test (#206)](items/workflow-controller-fx2.md) `workflow-controller-fx2` | Done | - | - |
 | 102 | [A \`usage --refresh\` that re-reads both the Codex and the Claude limit](items/workflow-controller-uf1.md) `workflow-controller-uf1` | Next | - | - |
 | 103 | [CI: shard affinity for tests that share a snapshot (#317)](items/workflow-controller-ci2g.md) `workflow-controller-ci2g` | Next | - | workflow-controller-ci2c |
 | 104 | [CI: split the after-merge determinism check (#317)](items/workflow-controller-ci2h.md) `workflow-controller-ci2h` | Next | - | workflow-controller-ci2d |

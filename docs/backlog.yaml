@@ -590,7 +590,7 @@ items:
     detail: docs/items/workflow-controller-ci2f.md
   - id: workflow-controller-fx2
     title: "Fix the flaky functional-sandbox test (#206)"
-    status: next
+    status: done
     order: 101
     depends_on: []
     detail: docs/items/workflow-controller-fx2.md

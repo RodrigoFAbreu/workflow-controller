@@ -260,21 +260,53 @@ required check pending forever.
   read them: `docs/ACTIVE_MILESTONE.md` and `docs/roadmap-archive.md`. The
   guides (`docs/guide/`), the ADRs, `README.md` and the Workflow's own
   records are code for this purpose: a test parses them, so a change to one
-  runs the shards. The set holds only paths that no test of the validation
-  gate reads as input.
-- **The guard.** `tests/test_ci_changes.py` scans `tests/`, `scripts/`,
-  `tools/` and `controller/` for readers of a path in the set and fails
-  with the reader and the path when a module outside the documentation gate
-  reads one. The fix is to take the path out of the set, not to widen the
-  gate. The guard is static and has limits: a path built from a non-constant
-  segment or through an `os.path` form it does not fold is not seen, and a
-  pattern made only of `*`/`**` (a whole-tree walk) counts only on a root
-  that a repository-root value reaches (`REPO_ROOT`, or what is assigned,
-  returned or passed from it, a call to a same-module function or
-  method that returns one, or an import alias of `REPO_ROOT`, in the same
-  module), whatever the root is called; the reach is by name within a module, so a temporary directory
-  that shares a name with a reached one is flagged and needs an entry in
-  `MENTIONS`, and a value passed in from another module is not followed.
+  runs the shards. The set holds only paths that no test the shards run
+  reads as input.
+- **The check: the shards run without the set** (CI2e,
+  [#322](https://github.com/RodrigoFAbreu/workflow-controller/issues/322)).
+  The `tests` job runs `python3 tools/ci_changes.py hide` after the install
+  and before `exec-shard`. `hide` lists the tracked files the set accepts
+  (`git ls-files -z`), marks each `skip-worktree`, deletes it from the work
+  tree and prints the count, so `git status` stays clean and the checkout is
+  otherwise the same. A shard that passes without those files proves, by
+  running, that no test it ran needs them, so a change confined to them
+  cannot change a shard's result. The `plan` job stays sighted: `exec-shard
+  --expect-digest` compares a plan discovered with the set present against an
+  inventory discovered without it, so a test generated from a path of the set
+  fails loudly. The two documentation-gate modules (`tests.test_docs`,
+  `tests.test_backlog`) read the set by design; `CI_PLACEMENT` places them as
+  `excluded` from the shards, and `docs-tests` runs them on the real checkout
+  (`DOCS_TEST_MODULES`). The step costs no runner. It replaced a static scan
+  of the source (about 1,200 lines and four allow-lists) that inferred the
+  same thing.
+- **What it does not prove.** It proves a path of the set is not needed by
+  the tests the shards run. The `main`, package and conformance modules are
+  not in the shards, so they do not run blind; a documentation-only change
+  still skips only the shards, so their coverage is unchanged. Three limits:
+  (1) *Git-object reads*: `hide` changes the work tree and the index view,
+  not `HEAD` or the object database, so a test that reads the set through Git
+  (`git clone`, `git show HEAD:<path>`, `git archive`, a pinned worktree)
+  passes blind while depending on it; the two existing readers
+  (`CloneCase` in `tests/test_run_scenarios.py` and the pinned worktree in
+  `scripts/workflow_state_demo_test.py`) were checked and name no path of the
+  set. (2) *Tolerant readers*: a test that globs a directory of the set, or
+  skips when a page is absent, iterates over nothing and passes, so its
+  assertions never run against the real files; nothing enforces this now.
+  (3) *Successful subtests are invisible*: the runner keeps only the parent
+  test's outcome, so no sighted-versus-blind count is compared; the signal is
+  a shard that fails or errors.
+- **Reproduce it, and move a path out.** In a scratch clone (never in a
+  working checkout: nothing restores the files),
+  `git clone -q . "$TMPDIR/scratch" && cd "$TMPDIR/scratch" &&
+  python3 tools/ci_changes.py hide`, then
+  `python3 tools/run_tests.py <modules>`; `hide --dry-run` lists the paths
+  without touching them. When a shard fails blind because a test reads a path
+  of the set, the path leaves the set; the test does not leave the shards.
+  How depends on where the path is classified: a path under `DOCS_PREFIXES`
+  or a `DOCS_FILES` entry leaves by narrowing or removing that entry; a
+  top-level page leaves by an entry in `DOCS_TOP_LEVEL_EXCEPTIONS` with its
+  reader. `NOT_DOCUMENTATION` only records directories already outside the
+  set; a line there alone moves nothing.
 - **Fail closed.** `code` is `false` only for the three cases below. A
   manual dispatch, a `HEAD` that is not a merge commit (for a pull request),
   an empty diff, a failed `git` call, an unreadable event payload or a path

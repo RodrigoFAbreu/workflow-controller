@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ci2e",
+  "requirements": {
+    "R1": {
+      "description": "A command removes exactly the documentation set from a checkout, keeps git status clean, and refuses outside a work tree",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The CI shards run with the set removed, the documentation gate runs only in docs-tests, and a test proves a reader of the set fails blind",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "The static AST scan and its four allow-lists are gone, with no second mechanism left",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R4": {
+      "description": "The pages and item records state the mechanism, its limit and the reproduction",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    }
+  }
+}

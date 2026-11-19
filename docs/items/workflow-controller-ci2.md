@@ -14,7 +14,7 @@ CI2 was large and said "split at planning". By the sizing rule (at most one new 
 | [`workflow-controller-ci2f`](workflow-controller-ci2f.md) | 8, 9 | process starts per lifecycle step (split out of ci2c) |
 | [`workflow-controller-ci2g`](workflow-controller-ci2g.md) | 10 | shard affinity for tests that share a snapshot (split out of ci2c) |
 | [`workflow-controller-ci2d`](workflow-controller-ci2d.md) | 11, 12, 13 and the automation of the timings refresh | after-merge and trigger policy |
-| [`workflow-controller-ci2e`](workflow-controller-ci2e.md) | [#322](https://github.com/RodrigoFAbreu/workflow-controller/issues/322) | a runtime check replacing the static repo-reach heuristic |
+| [`workflow-controller-ci2e`](workflow-controller-ci2e.md) | [#322](https://github.com/RodrigoFAbreu/workflow-controller/issues/322) | a runtime check replacing the static repo-reach heuristic (implemented: the shards run with the set removed) |
 | [`workflow-controller-ci2h`](workflow-controller-ci2h.md) | [#317](https://github.com/RodrigoFAbreu/workflow-controller/issues/317) (the release wait) | split the after-merge determinism check (split out of ci2d at its planning) |
 
 Scope item 1 is split on purpose: this slice refreshes the timings once by hand (a one-off measurement) and ci2d automates the refresh. Item 14 ("not worth doing") needs no work. Each later slice depends on this one and is planned after it.

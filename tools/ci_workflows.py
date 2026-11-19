@@ -492,6 +492,10 @@ def tests_workflow() -> dict:
                     # image without the sysctl passes unchanged; never
                     # continue-on-error, since an ignored failure is a silent pass.
                     {"name": "allow unprivileged user namespaces", "run": ALLOW_USERNS},
+                    # The check that lets a documentation-only change skip the
+                    # shards: they run without the documentation set, so a test
+                    # that needs a path of it fails here (tools/ci_changes.py hide).
+                    {"name": "hide the documentation set", "run": "python3 tools/ci_changes.py hide"},
                     {"name": "shard", "run": exec_shard},
                     {"if": "always()", "uses": "actions/upload-artifact@v4",
                      "with": {"name": RESULTS_ARTIFACT, "path": f"{RESULTS_DIR}/"}},
@@ -1090,7 +1094,9 @@ WORKFLOWS = {
                      "documentation, and a Draft pull request before its first review-bound head\n"
                      "(tools/ci_changes.py), skips plan and tests; the docs-tests and docs jobs run on every\n"
                      "event and tests-result requires docs, which needs docs-tests. docs-tests is the\n"
-                     "shared python-tests.yml of RodrigoFAbreu/action-workflows."),
+                     "shared python-tests.yml of RodrigoFAbreu/action-workflows. The tests job removes the\n"
+                     "documentation set from its checkout (tools/ci_changes.py hide) before it runs a shard,\n"
+                     "so a shard that passes proves no test it ran needs those files."),
     "build-publish.yml": (build_publish_workflow,
                           "Build and publication: classify the trunk commit and, when a release is due or\n"
                           "resumable, build, verify and publish it as one release transaction\n"

@@ -455,10 +455,16 @@ These are the commands of the `docs` job, so a clean run locally is a clean
 `docs` job. A pull request that changes only documentation also skips the test
 shards (see [Documentation-only pull requests](ci-and-releases.md#documentation-only-pull-requests)).
 Which paths count as documentation is `tools/ci_changes.py`'s set, and
-`python3 -m unittest tests.test_ci_changes` keeps it honest. When a new test
-reads a path of that set, the guard test names the reader and the path; take
-the path out of the set (or read it only from the two gate modules), because
-a path a test reads is code.
+`python3 -m unittest tests.test_ci_changes` tests the classification. The
+proof that no shard test reads the set is run, not scanned: the `tests` job
+runs `python3 tools/ci_changes.py hide` (`--dry-run` lists the paths) before
+the shards, which deletes the set from the checkout and marks it
+`skip-worktree`. Run it only in a scratch clone: nothing restores the files.
+When a new test reads a path of the set, its shard fails on the pull request;
+take the path out of the set (or read it only from the two gate modules),
+because a path a test reads is code. See
+[Documentation-only pull requests](ci-and-releases.md#documentation-only-pull-requests)
+for what the run does not prove.
 
 What it checks:
 

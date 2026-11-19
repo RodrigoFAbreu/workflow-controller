@@ -29,11 +29,20 @@ Subcommands:
     ``true`` or ``false``. An empty or unknown ``code`` (the ``changes`` job
     failed or was cancelled) fails.
 
-The documentation set below is a list of paths that **no test of the
-validation gate reads as input**. ``tests/test_ci_changes.py`` keeps it
-honest: it scans the repository for readers of these paths and fails when a
-module outside the gate reads one, so the set shrinks rather than the gate
-growing (D2).
+``hide``
+    Removes the documentation set from the working tree (CI2e, #322). It
+    lists the tracked files ``is_documentation`` accepts, deletes them and
+    marks each ``skip-worktree``, so ``git status`` stays clean. The ``tests``
+    job runs it before the shards: a shard that passes without those files
+    proves, by running, that no test it ran needs them. ``--dry-run`` lists
+    the paths and touches nothing. It refuses outside a Git work tree. The
+    runner checkout is disposable, so nothing restores the files; run it
+    only in a scratch clone.
+
+The documentation set below is a list of paths that no test the shards run
+needs as input. The ``hide`` step proves it by running (CI2e, #322): the
+shards run with the set absent, so a test that reads one fails there, and the
+path then leaves the set rather than the test leaving the shards (D3).
 """
 
 from __future__ import annotations
@@ -79,50 +88,6 @@ NOT_DOCUMENTATION: tuple[tuple[str, str], ...] = (
     ("docs/milestones/", "milestone narratives the Workflow scripts read"),
     ("README.md", "named by the documentation checks and the workflow tests"),
 )
-
-#: The two test modules of the documentation gate, each with its reason. They
-#: are the only test modules allowed to read a documentation-set path.
-GATE_MODULES: tuple[tuple[str, str], ...] = (
-    ("tests/test_docs.py", "the documentation gate: links, anchors, commands, the harness table"),
-    ("tests/test_backlog.py", "the documentation gate: backlog and roadmap checks on the real files"),
-)
-
-#: The tools the documentation gate itself runs, each with its reason. They
-#: have no candidate under the scan (their paths come from a loop), so they are
-#: named rather than discovered.
-GATE_TOOLS: tuple[tuple[str, str], ...] = (
-    ("tools/check_docs.py", "run by the docs job; reads the page lists of USER_PAGES/COMMAND_PAGES/LINK_GLOBS"),
-    ("scripts/workflow_backlog.py", "run through tests.test_backlog"),
-)
-
-#: Reads that are mentions: a module and a folded path it names without
-#: reading. Kept short; more than ten means the plan is amended (D2).
-MENTIONS: tuple[tuple[str, str, str], ...] = (
-    ("controller/identity.py", "**/*",
-     "hashes every file of a pinned snapshot or a temporary tree (compute_tree_digest); never the checkout's documentation"),
-    ("scripts/workflow_state_test.py", "**/*",
-     "lists a temporary repository's files; the scan reaches a parameter by name, so the name `root` is conflated"),
-    ("scripts/workflow_gate_policy_test.py", "**/*",
-     "lists a temporary repository's files; the scan reaches a parameter by name, so the name `root` is conflated"),
-)
-
-#: Roots that are temporary repositories a module builds itself: a module and
-#: a root expression, each with its reason. A fixture entry is refused when a
-#: repository-root value can reach the expression (the guard test checks it).
-FIXTURES: tuple[tuple[str, str, str], ...] = (
-    ("scripts/workflow_acceptance_matrix_test.py", "self.scratch.root", "a temporary repository the module builds itself"),
-    ("scripts/workflow_acceptance_matrix_test.py", "root", "a temporary repository the module builds itself"),
-    ("scripts/workflow_fingerprint_test.py", "self.root", "a temporary repository the module builds itself"),
-    ("scripts/workflow_fingerprint_test.py", "repo.root", "a temporary repository the module builds itself"),
-    ("scripts/workflow_gate_policy_test.py", "ev.root", "a temporary repository the module builds itself"),
-    ("scripts/workflow_state_completion_obligations_test.py", "root", "a temporary repository the module builds itself"),
-    ("scripts/workflow_state_completion_obligations_test.py", "self.root", "a temporary repository the module builds itself"),
-    ("scripts/workflow_state_completion_obligations_test.py", "d.root", "a temporary repository the module builds itself"),
-    ("scripts/workflow_test_harness.py", "self.root", "a temporary repository the module builds itself"),
-    ("tests/test_evidence.py", "self.root", "a temporary repository the module builds itself"),
-    ("tests/test_identity.py", "checkout", "a temporary checkout the module builds itself"),
-)
-
 
 
 #: Work-item phases from which a Draft pull request runs the shards (D2): the
@@ -345,6 +310,51 @@ def cmd_detect(args: argparse.Namespace, env: dict[str, str] | None = None) -> i
 
 
 # ---------------------------------------------------------------------------
+# hide
+# ---------------------------------------------------------------------------
+
+#: Paths handed to one ``git update-index`` call, to stay under the argument limit.
+HIDE_CHUNK = 200
+
+
+def hidden_paths(cwd: Path | None = None, git: Callable[[list[str], Path | None], str] = _git) -> list[str]:
+    """The tracked files of the work tree at ``cwd`` that are documentation.
+    Raises :class:`DetectError` outside a Git work tree."""
+    if git(["rev-parse", "--is-inside-work-tree"], cwd).strip() != "true":
+        raise DetectError("not inside a Git work tree")
+    raw = git(["ls-files", "-z"], cwd)
+    return [name for name in raw.split("\0") if name and is_documentation(name)]
+
+
+def cmd_hide(args: argparse.Namespace, cwd: Path | None = None) -> int:
+    try:
+        top = Path(_git(["rev-parse", "--show-toplevel"], cwd).strip())
+        paths = hidden_paths(top)
+    except DetectError as error:
+        print(f"hide: {error}", file=sys.stderr)
+        return 1
+    if args.dry_run:
+        for name in paths:
+            print(name)
+        print(f"would hide {len(paths)} documentation paths")
+        return 0
+    for start in range(0, len(paths), HIDE_CHUNK):
+        _git(["update-index", "--skip-worktree", "--", *paths[start:start + HIDE_CHUNK]], top)
+    for name in paths:
+        target = top / name
+        target.unlink(missing_ok=True)
+        parent = target.parent
+        while parent != top:
+            try:
+                parent.rmdir()
+            except OSError:
+                break
+            parent = parent.parent
+    print(f"hid {len(paths)} documentation paths")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # require
 # ---------------------------------------------------------------------------
 
@@ -369,6 +379,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("detect", help="write the code output for this pull request").set_defaults(func=cmd_detect)
+    hide = sub.add_parser("hide", help="remove the documentation set from the work tree (scratch clones and CI only)")
+    hide.add_argument("--dry-run", action="store_true", help="list the paths and touch nothing")
+    hide.set_defaults(func=cmd_hide)
     req = sub.add_parser("require", help="fail unless the gate jobs succeeded and code is true or false")
     req.add_argument("--changes", default="", help="result of the changes job")
     req.add_argument("--docs", default="", help="result of the docs job")

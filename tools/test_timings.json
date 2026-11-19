@@ -160,45 +160,10 @@
       "seconds": 0.646,
       "tests": 12
     },
-    "tests.test_ci_changes.DocumentationSetGuardTests": {
-      "samples": 5,
-      "seconds": 45.795,
-      "tests": 7
-    },
-    "tests.test_ci_changes.FixtureRefusalTests": {
-      "samples": 5,
-      "seconds": 48.931,
-      "tests": 9
-    },
     "tests.test_ci_changes.RequireTests": {
       "samples": 5,
       "seconds": 0.003,
       "tests": 2
-    },
-    "tests.test_ci_changes.ScannerAcceptsTests": {
-      "samples": 5,
-      "seconds": 0.002,
-      "tests": 8
-    },
-    "tests.test_ci_changes.ScannerFlagsTests": {
-      "samples": 5,
-      "seconds": 0.004,
-      "tests": 15
-    },
-    "tests.test_ci_changes.StaleEntryTests": {
-      "samples": 5,
-      "seconds": 0.005,
-      "tests": 7
-    },
-    "tests.test_ci_changes.TopLevelGlobTests": {
-      "samples": 5,
-      "seconds": 1.494,
-      "tests": 10
-    },
-    "tests.test_ci_changes.TouchesSetTests": {
-      "samples": 5,
-      "seconds": 0.768,
-      "tests": 1
     },
     "tests.test_ci_reuse.CommandLineTest": {
       "samples": 7,

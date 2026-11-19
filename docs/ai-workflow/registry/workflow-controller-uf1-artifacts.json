@@ -41,7 +41,9 @@
       "docs/guide/runtime.md": "the deliverable of this item, implementation content and never plan-stage design content",
       "docs/guide/commands.md": "the deliverable of this item, implementation content and never plan-stage design content",
       "docs/common-problems.md": "the deliverable of this item, implementation content and never plan-stage design content",
-      "docs/exit-codes.md": "the deliverable of this item, implementation content and never plan-stage design content"
+      "docs/exit-codes.md": "the deliverable of this item, implementation content and never plan-stage design content",
+      "controller/__init__.py": "the deliverable of this item, implementation content and never plan-stage design content",
+      "tests/test_package_structure.py": "the deliverable of this item, implementation content and never plan-stage design content"
     },
     "excluded_prefixes": {
       ".claude/commands/": "workflow command files this milestone creates (the bootstrap command, /approve-review, /accept-milestone) or modifies (the eight existing v1 commands, per D-States/D-Self-Governance) -- implementation of the approved design, not the design itself",
@@ -80,7 +82,9 @@
       "docs/guide/runtime.md": "the deliverable: the Controller code, its tests or the operator page this item edits",
       "docs/guide/commands.md": "the deliverable: the Controller code, its tests or the operator page this item edits",
       "docs/common-problems.md": "the deliverable: the Controller code, its tests or the operator page this item edits",
-      "docs/exit-codes.md": "the deliverable: the Controller code, its tests or the operator page this item edits"
+      "docs/exit-codes.md": "the deliverable: the Controller code, its tests or the operator page this item edits",
+      "controller/__init__.py": "the deliverable: the Controller code, its tests or the operator page this item edits",
+      "tests/test_package_structure.py": "the deliverable: the Controller code, its tests or the operator page this item edits"
     },
     "protected_prefixes": {
       "app/": "application source and its own tests -- product deliverable",

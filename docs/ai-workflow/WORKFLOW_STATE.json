@@ -85189,7 +85189,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-uf1-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-uf1-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 8,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -85333,12 +85333,12 @@
           "external": 3
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 41,
-      "last_transition": "2026-11-19T21:12:24Z",
+      "state_revision": 43,
+      "last_transition": "2026-11-19T21:20:22Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -85521,6 +85521,34 @@
               "at": "2026-11-19T20:36:34Z"
             }
           ]
+        },
+        "F-da5564dc1b20": {
+          "digest": "da5564dc1b209b1989f39a9554a497b215183bc49f033a9386b7374a3465c329",
+          "text": "**O1 (stale-layout margin).** `controller/usage_probe.py:41-47` says `STALE_SECONDS` (300) is \"more than twice the deadline, so a running probe's layout is never taken\", but a Codex probe runs two sequential bounded commands (the `app-server` compose and the `exec` launch, each under `TIMEOUT_SECONDS`), and the layout directory's own mtime is set at the start and not touched by either run, which writes only inside the subdirectories. So a live Codex probe's layout can legitimately be about 240 s old plus the kill and drain time. 300 s still holds, but with a 60 s margin, not the stated 2x. Suggest deriving the threshold (e.g. `2 * TIMEOUT_SECONDS + margin`), or updating the layout's mtime before the exec launch, and fixing the comment.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "17091b4f454cdf9b16af59c7ce7b34b488c7d636b5d0e0be1676961a89c6c855",
+              "verdict": "APPROVE",
+              "at": "2026-11-19T21:16:08Z"
+            }
+          ]
+        },
+        "F-d27080c2bab5": {
+          "digest": "d27080c2bab5c5251e73de6039b99952a0c05a92c89725d69050c1e180732eb5",
+          "text": "**O2 (view time taken before the probes).** `controller/cli.py` `_usage_show` reads `now = job.usage_now()` before `usage_probe.refresh` runs, and the view's percents, `age_seconds` and the refresh block's `reset` flag are judged against that time. After a slow probe (up to a few minutes across both providers) a window whose reset passed during the probes is still shown as current. Taking `now` again after the refresh, when `--refresh` is given, would fix it.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "17091b4f454cdf9b16af59c7ce7b34b488c7d636b5d0e0be1676961a89c6c855",
+              "verdict": "APPROVE",
+              "at": "2026-11-19T21:16:08Z"
+            }
+          ]
         }
       },
       "amendment_history": [
@@ -85636,7 +85664,20 @@
           "resolved_review_content_id": "b4b2bb9435af57a0a3c81b964f3697f61ef4f2cd527482c801ad9c7fd4f530d6"
         }
       ],
-      "amendment_base_commit": "fdfe34090960b373706b9c041115eb9981a3991d"
+      "amendment_base_commit": "fdfe34090960b373706b9c041115eb9981a3991d",
+      "implementation_review_stages": {
+        "review_content_id": "17091b4f454cdf9b16af59c7ce7b34b488c7d636b5d0e0be1676961a89c6c855",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "ab2846e6446ff96547fd9905a8d9e7e8317470c446ede81f9a35346a824097e7",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-19T21:16:08Z",
+          "verdict_sha256": "415c724bc3285ac7b017be6ac03e379d70d0105f921e91f403e7a91fd8f9cb09",
+          "run_ref": "session:local .ai-review/workflow-controller-uf1/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": null
+      }
     }
   }
 }

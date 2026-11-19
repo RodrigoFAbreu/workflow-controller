@@ -59,6 +59,14 @@ re-pointed symlink cannot change what runs, but a file rewritten in place
 between the hash and the exec is not caught. The installer never does that;
 it writes each version to its own file.
 
+`workflow-controller usage --refresh` re-reads the provider limits by one
+cheap probe each and records the readings in `usage.json`, so a stored
+reading older than its reset time does not keep a pause alive (see
+[`usage`](commands.md#usage)). Its probes run in a private
+`usage-probe/<job id>/` directory in the runtime root, removed after each
+probe; one a killed `--refresh` left is removed by the next refresh once it
+is 300 seconds old, and it holds nothing worth keeping.
+
 A `usage.json` this release cannot read (corrupt, or written by a newer
 release with a higher `version`) is never replaced. Deleting it is a last
 resort: repairing or restoring the original record in place lets a later

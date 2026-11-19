@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-uf1",
+  "dispositions": {
+    "F-a168ee07d040": {
+      "disposition": "fixed",
+      "note": "docs/common-problems.md ('A pause that should have lifted') and docs/guide/commands.md state that --refresh clears a hold only when the provider reports a new window (WINDOW_JITTER_SECONDS, merge_reading keeps the higher percent)."
+    },
+    "F-b612e710d8e6": {
+      "disposition": "fixed",
+      "note": "controller/usage_probe.py names the Codex effort (efforts[0], 'high' for Codex) in its comment; tests.test_usage_probe asserts CODEX_EFFORT == 'high'."
+    },
+    "F-0262de942f9c": {
+      "disposition": "fixed",
+      "note": "The live check ran at the end of CP1 and is recorded on docs/items/workflow-controller-uf1.md (claude 2.1.318, codex-cli 0.167.0, both ok)."
+    },
+    "F-c18c69df6af3": {
+      "disposition": "fixed",
+      "note": "controller/usage_probe.py sweep_stale removes a stale usage-probe layout at the start of the next refresh; tests.test_usage_probe SweepTest covers old vs young layouts; docs/common-problems.md says so."
+    },
+    "F-91655a29b49f": {
+      "disposition": "fixed",
+      "note": "docs/guide/commands.md usage row now names the probe layout under <runtime>/usage-probe/ and the credential copy-back."
+    },
+    "F-2291f1f5c5a4": {
+      "disposition": "fixed",
+      "note": "controller/usage_probe.py names haiku and gpt-6.1-sol itself and uses efforts[0]; test_each_named_model_is_declared_and_the_effort_is_the_lowest asserts it."
+    },
+    "F-d43ae3807495": {
+      "disposition": "fixed",
+      "note": "The check runs at import and the module docstring states it (controller/usage_probe.py, 'The checks of the named models run at import'); test_each_named_model_is_declared catches a dropped name before release."
+    },
+    "F-81b460dd55dc": {
+      "disposition": "dropped",
+      "reason": "Editing-only wording of a clause in D2 of the approved plan; no change in meaning and the plan is approved."
+    },
+    "F-ad5ece6ec9c8": {
+      "disposition": "fixed",
+      "note": "tests.test_usage_probe test_the_claude_flag_sets_are_equal_apart_from_the_listed_differences compares the whole flag sets with explicit allowances."
+    },
+    "F-2a666524bfb6": {
+      "disposition": "fixed",
+      "note": "controller/usage_probe.py compose argv leaves out -C and pins --listen stdio:// (docstring), carries its own _answered hold-open; test_the_codex_compose_argv_has_the_exec_set_and_no_dash_c_dir covers it."
+    },
+    "F-30edf1651d50": {
+      "disposition": "dropped",
+      "reason": "Wording of a historical amendment_history reason in WORKFLOW_STATE.json; the plan (revision 7) is correct and the recorded history is not rewritten."
+    },
+    "F-da5564dc1b20": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/387"
+    },
+    "F-d27080c2bab5": {
+      "disposition": "fixed",
+      "note": "controller/cli.py _usage_show takes now = job.usage_now() after the probes (commit 6603f3f); reset-crossing JSON and text tests added."
+    },
+    "F-56813d229f8e": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/387"
+    }
+  }
+}

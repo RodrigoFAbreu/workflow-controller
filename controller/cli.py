@@ -31,7 +31,7 @@ from typing import Any
 from controller import (
     claude_build, codex_build, codex_verify, evidence, functional_review, handoff, identity, job, lock, managed_repo, milestone_branch, model_discovery, notify,
     observe, protocol_decision, review, review_mode, review_rounds, route_select, routing, runtime, settings, target_state,
-    telemetry, usage, worker,
+    telemetry, usage, usage_probe, worker,
 )
 from controller.decision import Decision, decide_no_work_item, phase_to_wire
 from controller.errors import ControllerError, LifecycleWorkerActiveError, RoutingConfigError, SourceSnapshotError
@@ -563,8 +563,12 @@ def build_parser() -> argparse.ArgumentParser:
                          help="extend a reservation's lease, reviving a lapsed one")
     usage_p.add_argument("--release", default=None, metavar="TOKEN",
                          help="account a reservation and release it")
-    usage_p.add_argument("--outcome", choices=["ok", "not_started"], default="ok",
+    usage_p.add_argument("--outcome", choices=["ok", "not_started"], default=None,
                          help="with --release: not_started releases without charging (default: ok)")
+    usage_p.add_argument("--refresh", action="store_true", default=False,
+                         help="first re-read the provider's limit by one cheap probe call (a few tokens of your "
+                              "own allowance), record it, then show the view; exit 1 when a probe read nothing "
+                              "(use --provider to probe one)")
     usage_p.add_argument("--stream", default=None, metavar="PATH",
                          help="with --release: measure the worker's stream-json output")
     usage_p.add_argument("--usage-cap", type=_usage_percent, default=None, metavar="PERCENT",
@@ -586,7 +590,12 @@ def _validate_usage_args(parser: argparse.ArgumentParser, args: argparse.Namespa
         parser.error("usage: --renew/--release cannot be combined with --check, --wait or --reserve")
     if args.reserve and not (args.check or args.wait):
         parser.error("usage: --reserve needs --check or --wait")
-    if (args.stream is not None or args.outcome != "ok") and args.release is None:
+    if args.refresh and (gate or args.renew is not None or args.release is not None or args.stream is not None
+                         or args.outcome is not None):
+        parser.error("usage: --refresh cannot be combined with --check, --wait, --reserve, --renew, --release, "
+                     "--stream or --outcome")
+    # ``--outcome ok`` alone is the default spelled out, accepted as before UF1
+    if (args.stream is not None or args.outcome not in (None, "ok")) and args.release is None:
         parser.error("usage: --stream and --outcome are accepted only with --release")
     if gate and args.provider == "all":
         parser.error("usage: --check/--wait gate one provider; pass --provider claude or codex")
@@ -1955,28 +1964,75 @@ def _usage_view_text(view: dict, provider: str) -> list[str]:
     return lines
 
 
+#: ``usage --refresh`` exits 1 when a probed provider read nothing (UF1 D4). Private, like
+#: ``_NOTIFY_EXIT_REJECTED``: ``EXIT_TOKEN_UNKNOWN`` already names code 1.
+_USAGE_EXIT_PROBE_FAILED = 1
+
+
+def _usage_refresh_block(result: Any, view: dict, now: float) -> dict:
+    """One provider's ``refresh`` block (UF1 D5): the probe's outcome and cause, and each window as the
+    record holds it after the probe -- percent, reset (epoch and local time), observation time, source --
+    with ``reset`` true for a stored reading whose window has already ended."""
+    windows: dict = {}
+    for window in usage.WINDOWS:
+        w = view["windows"][window]
+        windows[window] = None if w is None else {
+            "percent": w["stored_percent"], "resets_at": w["resets_at"], "resets_at_local": _local_time(w["resets_at"]),
+            "observed_at": w["observed_at"], "source": w["source"], "reset": w["resets_at"] <= now}
+    return {"outcome": result.outcome, "detail": result.detail, "read": [r["window"] for r in result.readings],
+            "windows": windows}
+
+
+def _usage_refresh_text(block: dict) -> list[str]:
+    cause = "" if block["detail"] is None else f": {block['detail']}"
+    lines = [f"  refresh: {block['outcome']}{cause}"]
+    for window in usage.WINDOWS:
+        w = block["windows"][window]
+        label = "five-hour" if window == usage.FIVE_HOUR else "weekly"
+        if w is None:
+            lines.append(f"    {label}: no reading")
+            continue
+        state = "window already reset, " if w["reset"] else ""
+        observed = "an unknown time" if w["observed_at"] is None else _local_time(w["observed_at"])
+        lines.append(f"    {label}: stored {w['percent']:.0f}%, {state}resets {w['resets_at_local']}, "
+                     f"observed {observed} from {w['source']}")
+    return lines
+
+
 def _usage_show(args: argparse.Namespace, runtime_root: Path, values: dict) -> int:
     """``usage`` with no mode: each window's percent, reset, reading age, the
     reservations and the forecasts. Its writes are the Codex readings it
     merges into the shared record and the replay sweep's ``accounting:
     "done"`` on a terminal job record a crash left unaccounted."""
     context = _usage_context(args)
-    now = job.usage_now()
     job._settle_usage(runtime_root, quiet=True)  # the read below reports the error itself (exit 20)
+    providers = _usage_providers(args, gate=False)
+    results = {}
+    if args.refresh:  # UF1 D1, D4: the probes run before the view is built; a failed one changes nothing
+        results = usage_probe.refresh(providers, runtime_root=runtime_root, codex_home=_codex_home(),
+                                      claude_home=_claude_home())
+    now = job.usage_now()  # after the probes, so a window that reset while they ran is shown as reset
     views: dict = {}
-    for provider in _usage_providers(args, gate=False):
+    for provider in providers:
         fresh = _usage_fresh_readings(provider)
         if fresh:
             usage.record_reading(runtime_root, fresh)
         record = usage.snapshot(runtime_root, now=now)
         views[provider] = _usage_view(record, provider, usage.limits_from_values(values, provider), args, context, now)
+        if provider in results:
+            views[provider]["refresh"] = _usage_refresh_block(results[provider], views[provider], now)
+    code = (_USAGE_EXIT_PROBE_FAILED if any(r.outcome != usage_probe.OUTCOME_OK for r in results.values())
+            else EXIT_OK)
     if _usage_json(args):
         print(json.dumps({"at": now, "providers": views}, sort_keys=True))
-        return EXIT_OK
+        return code
     for provider, view in views.items():
         for line in _usage_view_text(view, provider):
             print(line)
-    return EXIT_OK
+        if "refresh" in view:
+            for line in _usage_refresh_text(view["refresh"]):
+                print(line)
+    return code
 
 
 def _usage_manual_event(runtime_root: Path, name: str, provider: str, context: dict, *, hold: Any = None,
@@ -2111,7 +2167,7 @@ def _usage_release(args: argparse.Namespace, runtime_root: Path, values: dict) -
               f"nothing was accounted", file=sys.stderr)
         return EXIT_USAGE
     stream_start = None
-    if args.outcome == usage.OUTCOME_NOT_STARTED:
+    if (args.outcome or "ok") == usage.OUTCOME_NOT_STARTED:
         end = None
     elif args.stream is not None:
         first, last = usage.read_claude_stream_span(Path(args.stream))
@@ -2122,7 +2178,7 @@ def _usage_release(args: argparse.Namespace, runtime_root: Path, values: dict) -
             usage.record_reading(runtime_root, fresh)
         end = list(usage.current_readings(usage.snapshot(runtime_root, now=now), provider).values()) \
             if provider is not None else None
-    result = usage.complete(runtime_root, args.release, end, args.outcome, now=now, stream_start=stream_start)
+    result = usage.complete(runtime_root, args.release, end, args.outcome or "ok", now=now, stream_start=stream_start)
     if result.status == usage.COMPLETE_NOOP:
         known = result.reason == "already_settled"
         message = ("already accounted; nothing changed" if known else

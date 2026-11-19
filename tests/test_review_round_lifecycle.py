@@ -23,7 +23,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from controller import job, managed_repo, protocol_decision, review_rounds, telemetry, worker  # noqa: E402
+from controller import job, protocol_decision, review_rounds, telemetry, worker  # noqa: E402
 from tests import fixtures  # noqa: E402
 from tests.test_protocol_decision import IDENTITY  # noqa: E402
 from tests.test_protocol_lifecycle import (  # noqa: E402
@@ -285,7 +285,7 @@ class CapLoop:
                                            work_item_id=WID)
 
     def inspect(self):
-        return managed_repo.inspect(self.root, manager_bin=str(self.stub))
+        return fixtures.inspect_unchanged(self.root, str(self.stub))
 
     # --- one step ---------------------------------------------------------------------
 

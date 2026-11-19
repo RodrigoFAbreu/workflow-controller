@@ -1,6 +1,18 @@
 # Active Milestone
 
-## Latest milestone (CI2e)
+## Latest milestone (CI2f)
+
+**Complete: accepted by policy (`MILESTONE_COMPLETE`).** Accepted after the functional review passed (PR #381, checks green at the approved head). Plan `docs/ai-workflow/CONTROLLER_CI2F_PLAN.md` (revision 2), four checkpoints; the lifecycle drivers in the tests ask the Workflow for fewer things per step (production queries are unchanged).
+
+- **CP1 complete (verified state).** `fixtures.count_process_starts()` (D3) hooks `subprocess.Popen.__init__`, counts each start by kind (`git`, `protocol:<operation>` with the global options skipped, `manager`, `other`), lets every start through and restores the hook on exit and on error. `tests/test_step_cost.py` adds `CounterTest` (a git call, interpreter runs by operation, the options before the operation, a stub manager run, another program, restoration, pass-through, nesting, a thread). Baseline process starts of the driver modules, whole modules under the counter (starts per module: git / protocol / manager / other; wall time under the counter): `test_protocol_lifecycle` 9223 / 1287 / 408 / 186 (243 s); `test_protocol_job` 10567 / 1360 / 468 / 195 (243 s); `test_protocol_outcome` 4077 / 464 / 148 / 92 (68 s); `test_review_round_lifecycle` 1940 / 270 / 72 / 51 (42 s); `test_functional_lifecycle` 9477 / 1318 / 314 / 162 (231 s); `test_functional_codex_route` 1832 / 238 / 60 / 30 (46 s). Verified with `tests.test_step_cost`, `tests.test_package_structure` and `tests.test_write_containment` (passing).
+
+- **CP2 complete (verified state).** `Lifecycle.decided_row(rows)` (D1) wraps `protocol.next_action` for one step, passes every call through, keeps the row of the first call without `expect_state_identity` (the decision) and appends it in a `finally`; a step that never decided asks directly afterwards. It replaces the pre-step query at the six sites (`GateLifecycle.step`, `LoopLifecycle._step_with_budget`, `TesterLifecycle.step`, `TheFaultStopsSandboxTest`, `RealLaunch.step`, `CodexLifecycle.step`), so each driven step starts one protocol query (and its isolation `git` calls) fewer. `tests/test_step_cost.py` adds `DecidedRowTest` and `DecidedRowSavingTest`. Self-review check (not committed): a temporary assertion that the spy row equals the row asked directly before the step held at every step of the lifecycle modules (207 tests passed). Verified with `tests.test_step_cost`, `tests.test_protocol_lifecycle`, `tests.test_protocol_job`, `tests.test_functional_lifecycle`, `tests.test_functional_codex_route`, `tests.test_pr_report`, `tests.test_shared_snapshot`, `tests.test_functional_select`, `tests.test_package_structure`, `tests.test_write_containment` (passing).
+
+- **CP3 complete (verified state).** `fixtures.inspect_unchanged(root, manager_bin)` (D2) returns a deep copy of the previous successful `managed_repo.inspect` result while its key is equal and otherwise runs the real `inspect`; the key is the root, the stub's path, bytes and mode bits, the installation record's bytes and the sha256 and mode of every file the record lists as managed (a refusal is raised and never kept; one entry per root). The `inspect()` of the four drivers (`tests/test_protocol_lifecycle.py`, `tests/test_protocol_job.py`, `tests/test_protocol_outcome.py`, `tests/test_review_round_lifecycle.py`) calls it; tests of `managed_repo.inspect` itself are untouched, and two imports left unused by the change were removed. `tests/test_step_cost.py` adds `InspectCacheTest` (a second call starts no process and equals a fresh inspect; the record, a managed script, the stub's bytes and the stub's mode bits each move the key and the answer equals a fresh inspect; a refusal is raised again and never cached; two roots do not share an entry; the result is a copy). Measured on a `GateLifecycle`: a repeated `inspect()` starts 0 processes against 10 for a real one (7 `git`, 2 stub-manager runs, 1 `describe`). Verified with the CP3 selection (`tests.test_step_cost`, `tests.test_protocol_lifecycle`, `tests.test_protocol_job`, `tests.test_protocol_outcome`, `tests.test_review_round_lifecycle`, `tests.test_shared_snapshot`, `tests.test_pr_report`, `tests.test_functional_select`, `tests.test_run_scenarios`, `tests.test_package_structure`, `tests.test_write_containment`: 338 tests, 8 shards, exact coverage, passing; `ReleaseMovedBetweenStepsTest` still refuses the stale step).
+
+- **CP4 complete (verified state).** The pages state the mechanism (`docs/guide/development.md`, "Process starts per lifecycle step") and `docs/items/workflow-controller-ci2f.md` records status, the before/after process starts of the six driver modules (git 37116 to 30830, protocol 4937 to 3977, manager 1466 to 418; local wall time 873 s to 757 s, a local single run, not a runner figure), the D4 bytecode measurement with its commands, and O1. `workflow-controller-ci2.md` marks the slice implemented. `docs/backlog.yaml` and `docs/ROADMAP.md` are unchanged.
+
+## Previous milestone (CI2e)
 
 **Complete: accepted by policy (`MILESTONE_COMPLETE`).** Accepted after the functional review passed (PR #379, checks green at the approved head). Plan `docs/ai-workflow/CONTROLLER_CI2E_PLAN.md` (revision 3), four checkpoints; it replaces the static repo-reach scan with a runtime check (the shards run with the documentation set removed).
 
@@ -739,52 +751,39 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-ci2e` (CI2e: a runtime check replacing the static repo-reach heuristic), implementation revision 1 (revisions 1 to 4 of the plan's amendment history are folded in: plan revision 3 plus amendment 0, which pruned the seven deleted scanner classes from `tools/test_timings.json`), plan
-`docs/ai-workflow/CONTROLLER_CI2E_PLAN.md`, base commit `509575d`. Four checkpoints, all complete: CP1 (`tools/ci_changes.py hide`), CP2 (the generated `tests` job runs `hide`; `tests.test_docs` and `tests.test_backlog` are `excluded`),
-CP3 (the static scanner and its tests are deleted; the seven scanner classes leave the committed timings) and CP4 (the pages). A `ci:` change; it publishes no release.
+Item `workflow-controller-ci2f` (CI2f: process starts per lifecycle step, [#317](https://github.com/RodrigoFAbreu/workflow-controller/issues/317)), implementation revision 1, plan
+`docs/ai-workflow/CONTROLLER_CI2F_PLAN.md` (revision 2), base commit `55ad7ff`. Four checkpoints, all complete: CP1 (`fixtures.count_process_starts`), CP2 (`Lifecycle.decided_row` at the six driver sites),
+CP3 (`fixtures.inspect_unchanged` in the four lifecycle drivers) and CP4 (the pages and item records). A `ci:` change to tests, test helpers and pages; it publishes no release and production queries are unchanged.
 Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the system directories, and no write inside the read-only
 product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write only to the scratch `TMPDIR`. No flow needs a pull request or a forge call, and none runs the full suite.
-**Never run `hide` in the product clone itself: it deletes tracked files.** Only run it in the scratch clone of Flow 2.
 
 Setup: `export TMPDIR=$(mktemp -d); P=$PWD` (the product clone). No data to seed.
 
-**Flow 1: the tool's tests.**
-Run `python3 -B tools/run_tests.py tests.test_ci_changes tests.test_test_shards; echo rc=$?`.
-Expected: `# Test run: PASS`, `rc=0` (a `namespace: none` line is expected in this sandbox). `HideTests` is among the tests run; the scanner classes (`ScannerFlagsTests` and the others) no longer exist.
+**Flow 1: the cost tests.**
+Run `python3 -B tools/run_tests.py tests.test_step_cost tests.test_package_structure tests.test_write_containment; echo rc=$?`.
+Expected: `# Test run: PASS`, `rc=0` (a `namespace: none` line is expected in this sandbox). `DecidedRowTest` and `InspectCacheTest` are among the tests run.
 
-**Flow 2: `hide` on a scratch clone, dry run first.**
-Run `git clone -q $P $TMPDIR/s && cd $TMPDIR/s`; `python3 -B tools/ci_changes.py hide --dry-run; echo rc=$?`; `git status --short | wc -l`.
-Expected: the paths listed, then `would hide 189 documentation paths`, `rc=0`, nothing changed (`git status` count 0, `docs/README.md` still present).
-Then `python3 -B tools/ci_changes.py hide; echo rc=$?; git status --short | wc -l; ls docs 2>&1 | head -3; ls tools/ci_changes.py`.
-Expected: `hid 189 documentation paths`, `rc=0`, `git status` still empty (skip-worktree), `docs/README.md` and the other set files gone (`docs/ACTIVE_MILESTONE.md` is not in the set and stays), code files such as `tools/ci_changes.py` present. Run `hide` again: it prints `hid 189 documentation paths` and `rc=0` (repeatable).
+**Flow 2: the lifecycle drivers still pass.**
+Run `python3 -B tools/run_tests.py tests.test_protocol_lifecycle tests.test_functional_codex_route tests.test_review_round_lifecycle tests.test_shared_snapshot tests.test_pr_report; echo rc=$?`.
+Expected: `PASS`, `rc=0`. (`tests.test_protocol_job`, `tests.test_protocol_outcome` and `tests.test_functional_lifecycle` are long; run them too if time allows, same expectation.)
 
-**Flow 3: the refusal outside a Git work tree.**
-Run `mkdir $TMPDIR/n && cd $TMPDIR/n && python3 -B $P/tools/ci_changes.py hide; echo rc=$?`.
-Expected: a `hide: ...` message on stderr and `rc=1`; nothing is deleted.
+**Flow 3: the cache is a test-only helper and production is untouched.**
+Run `git diff 55ad7ff..HEAD --stat -- controller scripts tools .github`; `grep -rn "inspect_unchanged\|count_process_starts\|decided_row" controller scripts tools; echo rc=$?`.
+Expected: the diff lists nothing under `controller`, `scripts`, `tools` or `.github` (empty output); `grep` finds nothing (`rc=1`). The helpers live in `tests/` only.
 
-**Flow 4: the blind run catches a reader (the check can fail).**
-In `$TMPDIR/s` (already hidden), run `python3 -B tools/run_tests.py tests.test_ci_changes tests.test_package_structure tests.test_write_containment; echo rc=$?`.
-Expected: `PASS`, `rc=0` (these modules do not read the set). Then run `python3 -B tools/run_tests.py tests.test_docs; echo rc=$?`.
-Expected: failure (for example `README.md: link 'docs/install.md' points at a missing file`), because `tests.test_docs` reads the pages that `hide` removed; this is why it is `excluded` from the shards and run by `docs-tests` on the real checkout.
+**Flow 4: the count is real (a relative saving).**
+Read `tests/test_step_cost.py` (`DecidedRowTest`, `InspectCacheTest`). Expected: the saving is asserted as a relative count (one `next-action` query fewer; a repeated `inspect` starts 0 processes against 10), not an absolute budget; a refusal is never cached; a changed record, managed script or stub moves the key; the cached result is a copy.
 
-**Flow 5: the generated workflow and the placement.**
-Run `python3 -B tools/ci_workflows.py --check; echo rc=$?`; `python3 -B tools/run_tests.py tests.test_ci_workflows; echo rc=$?`; `grep -n -B3 -A3 "ci_changes.py hide" .github/workflows/tests.yml`; `grep -n "DOCS_TEST_MODULES" tools/test_shards.py tools/ci_workflows.py`.
-Expected: both `rc=0`; the `hide the documentation set` step is in the `tests` job after the install and before `exec-shard`, and not in the `plan` job; `tests.test_docs` and `tests.test_backlog` are placed `excluded` with a reason naming `DOCS_TEST_MODULES`.
+**Flow 5: the guide and the item pages.**
+Read `docs/guide/development.md` ("Process starts per lifecycle step"), `docs/items/workflow-controller-ci2f.md` and `docs/items/workflow-controller-ci2.md`.
+Expected: the guide lists what production keeps (`describe`, `verify`, `next-action`, the identity-bound `next-action`, `reconcile`) and states the decided row and the cache key as the code does; the item page records the measured process starts (git 37116 to 30830, 873 s to 757 s locally) with the local-versus-runner caveat, the D4 bytecode decision (not done; 114 against 122 ms) and O1 (the runner `-X importtime` measurement is an open owner decision); `#317` stays open; the CI2 page marks the slice implemented.
 
-**Flow 6: the committed timings and the scanner's removal.**
-Run `python3 -B -c "import json;d=json.load(open('tools/test_timings.json'));print([k for k in json.dumps(d).split('\"') if 'ScannerFlagsTests' in k or 'TouchesSetTests' in k or 'DocumentationSetGuardTests' in k])"`; `grep -n "GATE_MODULES\|GATE_TOOLS\|MENTIONS\|FIXTURES" tools/ci_changes.py tests/test_ci_changes.py; echo rc=$?`.
-Expected: an empty list; `grep` finds nothing (`rc=1`); `python3 -B tools/run_tests.py tests.test_test_shards` (Flow 1) already shows the timings profile valid.
+**Flow 6: the docs checks and the backlog.**
+Run `python3 -B tools/check_docs.py; echo rc=$?`, `python3 -B tools/run_tests.py tests.test_docs tests.test_plan_document_consistency; echo rc=$?`, `python3 -B scripts/workflow_backlog.py check; echo rc=$?` and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-ci2f; echo rc=$?`.
+Expected: every `rc=0`; `# Test run: PASS`; `preflight-accept` `"ok": true`.
 
-**Flow 7: the guide and the item pages.**
-Read `docs/guide/ci-and-releases.md` ("Documentation-only pull requests"), `docs/guide/development.md` (the `hide` mention), `docs/items/workflow-controller-ci2e.md` and `docs/items/workflow-controller-ci2.md`.
-Expected: the blind run is described as the code does (`hide`, the `plan` job staying sighted, the gate modules `excluded` and run by `docs-tests`); what it does not prove (Git-object reads, tolerant readers, invisible passing subtests, modules outside the shards), the scratch-clone reproduction, and how a path leaves the set (D3) are stated; O1 (also blind in the `main` and package jobs) is an open owner decision; `#317` stays open.
-
-**Flow 8: the docs checks and the backlog.**
-Run `python3 -B tools/check_docs.py; echo rc=$?`, `python3 -B tools/run_tests.py tests.test_docs tests.test_plan_document_consistency tests.test_write_containment tests.test_package_structure; echo rc=$?`, `python3 -B scripts/workflow_backlog.py check; echo rc=$?` and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-ci2e; echo rc=$?`.
-Expected: every `rc=0`; `# Test run: PASS`; `preflight-accept` `"ok": true`. (Run these in the product clone, not the hidden scratch clone.)
-
-**Known limitations / out of scope.** The full shard set runs blind for the first time on the pull request's CI, and a reader it finds moves its path out of the set (plan D3); the sandbox cannot run it. The `main`, package and conformance jobs do not run blind (O1, a possible follow-up). Git-object readers, tolerant readers and passing subtests are not caught. The full suite is CI's. The self-review full run (6793 tests) had one timing flake outside this diff, `tests.test_job_codex_apply.RecoveryTest.test_a_drifted_release_ends_each_stage_without_carrying_out`, which passes alone. `#317` stays open.
+**Known limitations / out of scope.** The wall-time saving (116 s, 13 percent, six modules) is one local, unrepeated measurement, not a runner measurement; the CI saving is not claimed. The bytecode reuse (scope item 8) is measured and not done (D4); O1 is the owner's call. The cache assumes the target's Git configuration and hook files do not change between two steps of one test. The full suite is CI's. `#317` stays open.
 
 ## Next action
 
-`/milestone-plan` for `workflow-controller-ci2f` (CI: process starts per lifecycle step (#317)), the item `python3 scripts/workflow_backlog.py next` returns, ready for `PLANNING`.
+`/milestone-plan` for `workflow-controller-ci2g` (CI: shard affinity for tests that share a snapshot (#317)), the item `python3 scripts/workflow_backlog.py next` returns, ready for `PLANNING`.

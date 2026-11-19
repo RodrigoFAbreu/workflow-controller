@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ci2f",
+  "dispositions": {
+    "F-139ddded34b0": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/382"
+    },
+    "F-1a0592e42aff": {
+      "disposition": "fixed",
+      "note": "docs/items/workflow-controller-ci2f.md (line 19) names the six sites of the decided row, and CP4's counts follow the set CP1 measures."
+    },
+    "F-4a612abce5a5": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/382"
+    },
+    "F-4d1dc23b998d": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/382"
+    },
+    "F-80cb5de97224": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/382"
+    },
+    "F-8d1abfde43f8": {
+      "disposition": "fixed",
+      "note": "tests/fixtures.py `_inspect_key` includes the stub's path, bytes and mode bits, and its docstring plus docs/guide/development.md state the Git configuration and hook files as an assumption, not part of the key."
+    },
+    "F-b25723a7cceb": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/382"
+    },
+    "F-ce283bc1bbb1": {
+      "disposition": "fixed",
+      "note": "`Lifecycle.decided_row` appends in a `finally` (tests/test_protocol_lifecycle.py), so a step that raises still records its row; tests/test_step_cost.py test_a_step_that_raises_still_appends_its_decided_row covers it."
+    },
+    "F-cf8aadc3ebb6": {
+      "disposition": "follow-up",
+      "link": "https://github.com/RodrigoFAbreu/workflow-controller/issues/382"
+    }
+  }
+}

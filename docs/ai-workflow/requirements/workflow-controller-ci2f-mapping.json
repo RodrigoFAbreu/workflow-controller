@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ci2f",
+  "requirements": {
+    "R1": {
+      "description": "A test can count the processes a step starts, and the counter restores what it hooks",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "A lifecycle driver step no longer asks the Workflow for the row it is about to decide, with the production queries unchanged and the saving proven as one query",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "The lifecycle drivers do not repeat an inspect whose inputs are unchanged, and a changed or refused inspect is never served from the cache",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R4": {
+      "description": "The pages and item records state the mechanism, the measured counts, the bytecode decision and the open owner question",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    }
+  }
+}

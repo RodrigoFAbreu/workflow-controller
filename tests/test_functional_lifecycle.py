@@ -351,13 +351,13 @@ class RealLaunch:
 
     def step(self, **kwargs) -> dict:
         life = self.life
-        life.rows.append(life.row())
 
         def worker_launch(task, *, cwd, **extra):
             life.effect(task)
             return lifecycle._result(life.report)
 
-        with mock.patch.object(worker, "launch", worker_launch), mock.patch.object(review, "launch_functional", self.launch), \
+        with life.decided_row(life.rows), mock.patch.object(worker, "launch", worker_launch), \
+                mock.patch.object(review, "launch_functional", self.launch), \
                 mock.patch.object(review, "claude_selection_error", lambda *a, **k: None):
             return job.execute_step(life.inspect(), identity=IDENTITY, runtime=life.runtime,
                                     functional=life.functional, **kwargs)

@@ -11,8 +11,10 @@ console script).
 from __future__ import annotations
 
 import atexit
+import collections
 import contextlib
 import copy
+import hashlib
 import json
 import os
 import re
@@ -408,6 +410,95 @@ def git_call_spy():
     with unittest.mock.patch("subprocess.run", spy_run), \
             unittest.mock.patch("subprocess.Popen", SpyPopen):
         yield calls
+
+
+def _classify_process_start(args) -> str:
+    """The kind of one process start: ``git``, ``protocol:<operation>`` for a vendored ``workflow_protocol.py``
+    interpreter run, ``manager`` for a ``workflow-manager`` executable (the stub included), else ``other``."""
+    argv = [str(a) for a in ([args] if isinstance(args, (str, bytes, os.PathLike)) else args)]
+    if not argv:
+        return "other"
+    program = os.path.basename(argv[0])
+    if program == "git":
+        return "git"
+    if program.startswith("workflow-manager"):
+        return "manager"
+    for index, part in enumerate(argv[1:], start=1):
+        if os.path.basename(part) == "workflow_protocol.py":
+            # The global options (``--protocol-major N --repo-root R``) come first; the operation is the first word
+            # that is neither an option nor an option's value.
+            rest, position = argv[index + 1:], 0
+            while position < len(rest) and rest[position].startswith("--"):
+                position += 2
+            operation = rest[position] if position < len(rest) else "?"
+            return f"protocol:{operation}"
+    return "other"
+
+
+@contextlib.contextmanager
+def count_process_starts():
+    """Count every process the test process starts while the block runs, by kind (the ``Counter`` yielded):
+    ``git``, ``protocol:<operation>``, ``manager`` and ``other``. It hooks ``subprocess.Popen.__init__``, which
+    ``subprocess.run`` and ``check_output`` also go through, lets every start through unchanged and restores the
+    original on exit, even on an error. A start from a thread counts; blocks nest and each sees its own starts."""
+    counts: collections.Counter = collections.Counter()
+    real_init = subprocess.Popen.__init__
+
+    def counting_init(self, args, *a, **kw):
+        counts[_classify_process_start(args)] += 1
+        return real_init(self, args, *a, **kw)
+
+    subprocess.Popen.__init__ = counting_init
+    try:
+        yield counts
+    finally:
+        subprocess.Popen.__init__ = real_init
+
+
+_INSPECT_CACHE: dict = {}
+
+
+def _file_fingerprint(path: Path) -> object:
+    """What a read of ``path`` can depend on: its bytes and its mode bits, or a marker for a path that is absent."""
+    try:
+        info = path.lstat()
+        return (info.st_mode, hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None)
+    except OSError:
+        return None
+
+
+def _inspect_key(root: Path, manager_bin: str) -> tuple:
+    """The inputs ``managed_repo.inspect`` reads: the record, every file the record lists as managed, and the stub
+    manager (path, bytes and mode bits, since the executable bit is tested). The target's Git configuration and hooks
+    are an assumption, not part of the key."""
+    root = Path(root)
+    record = root / ".workflow-manager" / "installation.json"
+    key: list = [str(root), str(manager_bin), _file_fingerprint(Path(manager_bin)), _file_fingerprint(record)]
+    try:
+        managed = json.loads(record.read_text(encoding="utf-8")).get("managed")
+    except (OSError, ValueError, AttributeError):
+        managed = None
+    if isinstance(managed, dict):
+        for name in sorted(k for k in managed if isinstance(k, str)):
+            key.append((name, _file_fingerprint(root / name)))
+    return tuple(key)
+
+
+def inspect_unchanged(root: Path, manager_bin: str):
+    """``managed_repo.inspect(root, manager_bin=...)`` for a lifecycle driver, repeated only when its inputs changed.
+
+    A previous successful result is returned (as a deep copy, so a caller cannot change the next answer) while the key
+    of ``_inspect_key`` is equal; otherwise the real ``inspect`` runs and its result replaces the root's entry. A
+    refusal is raised and never kept, so it is asked again. Production ``inspect`` is not cached: this is the tests'."""
+    from controller import managed_repo
+    root = Path(root)
+    key = _inspect_key(root, manager_bin)
+    entry = _INSPECT_CACHE.get(str(root))
+    if entry is not None and entry[0] == key:
+        return copy.deepcopy(entry[1])
+    result = managed_repo.inspect(root, manager_bin=str(manager_bin))
+    _INSPECT_CACHE[str(root)] = (key, copy.deepcopy(result))
+    return result
 
 
 @contextlib.contextmanager

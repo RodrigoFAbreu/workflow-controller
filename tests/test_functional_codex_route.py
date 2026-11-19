@@ -53,7 +53,6 @@ class CodexLifecycle(TesterLifecycle):
     def step(self, *, gate=None, functional="default", route=CODEX_ROUTE, real_selection=False) -> dict:
         """``real_selection`` keeps the host-dependent selection probes (C10i): the Claude one is then ``static_probe``'s
         to fake, the Codex one reads the binary, the login and the build record."""
-        self.rows.append(test_protocol_job.protocol.next_action(self.root, test_protocol_job.lifecycle.WID).raw["row"])
         inner = gate
 
         def counted(route_, provider=usage.PROVIDER_CLAUDE):
@@ -70,7 +69,7 @@ class CodexLifecycle(TesterLifecycle):
 
         selection = [] if real_selection else [mock.patch.object(review, "claude_selection_error", lambda *a, **k: None),
                                                mock.patch.object(codex_tester, "selection_error", lambda *a, **k: None)]
-        with contextlib.ExitStack() as stack:
+        with self.decided_row(self.rows), contextlib.ExitStack() as stack:
             for patch in [mock.patch.object(worker, "launch", launch),
                           mock.patch.object(codex_tester, "launch_codex_functional", self.fake_tester),
                           mock.patch.object(review, "launch_functional", claude), *selection]:

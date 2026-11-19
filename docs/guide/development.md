@@ -676,6 +676,43 @@ row in one test must drive. The counts are per process, so a row is built once
 on every shard that reaches it; the scenario kit always drives and counts
 `kit_drove`, which is 0 in a full run.
 
+## Process starts per lifecycle step
+
+A lifecycle step in the tests starts many processes: each protocol query is
+one interpreter plus six `git` calls of its isolation, and every
+`managed_repo.inspect` is one `describe`, two stub-manager runs and about seven
+`git` calls. The drivers ask for fewer of them; the production path does not.
+
+- **What production keeps.** `job.execute_step` still asks the Workflow for
+  `describe` at admission, `verify` (the preflight), `next-action` to decide,
+  a second `next-action` bound to the state identity (`check_currency`), the
+  `describe` calls that compare the release after a worker, and `reconcile`.
+  Each is a safety check and no test change touches one. `managed_repo.inspect`
+  is never cached in production.
+- **The decided row.** A driver used to record the row with a direct
+  `next-action` query before the step, and the step's `decide` asked the same
+  question again. `Lifecycle.decided_row(rows)` (`tests/test_protocol_lifecycle.py`)
+  wraps `protocol.next_action` for one step, passes every call through, keeps
+  the row of the first call made without `expect_state_identity` (the decision;
+  the `check_currency` call carries the identity) and appends it in a `finally`,
+  so a step that raises still records its row. A step that never decided asks
+  directly afterwards. Use it in a new driver in place of a pre-step query; the
+  post-step `row()` assertions stay.
+- **The cached inspect.** `fixtures.inspect_unchanged(root, manager_bin)` returns
+  a deep copy of the previous successful `managed_repo.inspect` while its key is
+  equal. The key is the root, the stub's path, bytes and mode bits, the bytes of
+  `.workflow-manager/installation.json` and the sha256 and mode of every file
+  that record lists as managed. A refusal is raised again and never kept; one
+  entry is kept per root. It assumes the target's Git configuration and hook
+  files do not change between two steps of one test. The four lifecycle drivers'
+  `inspect()` call it; a test of `managed_repo.inspect` itself calls that
+  directly.
+- **Counting.** `fixtures.count_process_starts()` hooks `subprocess.Popen.__init__`
+  and counts each start as `git`, `protocol:<operation>`, `manager` or `other`,
+  restoring the hook on exit and on error. Prove a saving as a relative count
+  (the same step with and without the call differs by exactly the removed
+  query), as `tests/test_step_cost.py` does, not as an absolute budget.
+
 ## Throwaway Git repositories
 
 Every Git repository a test creates goes through `fixtures.git_init` or

@@ -217,9 +217,11 @@ See [pausing for usage limits](run.md#pausing-for-usage-limits) and [how the lim
 `run`, `step` or a lane's watchdog still reports a usage hold such as "codex weekly usage 99% ... reaches the 99% threshold" after the provider's window reset. The stored reading is only replaced when a session records a newer one, so it can outlive its window. Re-read both limits, then ask the gate:
 
 ```bash
-workflow-controller usage --refresh --provider all
-workflow-controller usage --check
+workflow-controller usage --refresh --provider codex
+workflow-controller usage --check --provider codex
 ```
+
+`usage --check` asks about one provider and defaults to Claude, so name the provider that holds: here `codex`. To check both, run `--check --provider claude` and `--check --provider codex` separately.
 
 A watchdog or restart script makes these two calls before it acts on a hold; the Controller's own `run` and `step` admission does not refresh by itself. `--refresh` spends a few tokens of your own allowance on one probe per provider and prints what it read, when, and which stored windows have already reset. It clears the hold only when the provider reports a new window: a reset that does not move `resets_at` by more than `WINDOW_JITTER_SECONDS` (120 seconds) is the same window, and `usage.merge_reading` keeps the stored higher percent. If a probe read nothing, `--refresh` exits `1`, names the cause and changes nothing; the other provider is still probed. A `--refresh` that was killed can leave a layout under `<runtime>/usage-probe/`; the next refresh removes it once it is 300 seconds old. See [`usage`](guide/commands.md#usage).
 

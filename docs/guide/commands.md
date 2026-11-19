@@ -321,7 +321,9 @@ cannot be combined with `--check`, `--wait`, `--reserve`, `--renew`,
 `--release`, `--stream` or `--outcome` (exit `2`, nothing probed). It
 changes only what `usage` reads: `run` and `step` admission is unchanged,
 so a lane script that decides on a hold calls `usage --refresh --provider
-all` first, then `usage --check`.
+all` first, then `usage --check --provider <name>` for the provider it is
+deciding on. `--check` defaults to Claude, so a Codex hold needs `--provider
+codex`; checking both providers takes two separate checks.
 
 A refresh clears a hold only when the provider reports a new window. A
 reading whose reset time moves by no more than `WINDOW_JITTER_SECONDS`

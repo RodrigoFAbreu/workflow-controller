@@ -970,6 +970,36 @@ class UsageRefreshTest(_UsageCommandCase):
         code, text, _err = self.run_cmd("usage", "--refresh", "--provider", "claude")
         self.assertIn("stored 99%, window already reset", text)
 
+    def test_a_window_that_reset_while_the_probes_ran_is_shown_as_reset(self) -> None:
+        """The view's clock is read after the probes (UF1 review I1): a probe read 99% resetting 10 s
+        after it started and took 20 s, so the final view must show the window reset and 0% effective."""
+
+        def refresh(providers, *, runtime_root, **_kw):
+            readings = [usage.make_reading("claude", FIVE, 99, NOW + 10, self.now, "probe")]
+            usage.record_reading(runtime_root, readings)
+            self.now = NOW + 20  # the probe's duration
+            return {"claude": usage_probe.ProbeResult("claude", usage_probe.OUTCOME_OK, readings=readings)}
+
+        self.enterContext(unittest.mock.patch.object(usage_probe, "refresh", refresh))
+        code, out, err = self.run_cmd("--json", "usage", "--refresh", "--provider", "claude")
+        self.assertEqual(code, cli.EXIT_OK, err)
+        payload = json.loads(out)
+        view = payload["providers"]["claude"]
+        window = view["refresh"]["windows"][FIVE]
+        self.assertEqual((window["percent"], window["reset"]), (99.0, True))
+        self.assertEqual(view["windows"][FIVE]["percent"], 0.0)
+        self.assertEqual(payload["at"], NOW + 20)
+
+    def test_the_documented_codex_check_holds_while_claude_is_clear(self) -> None:
+        """The watchdog recipe in docs/common-problems.md (UF1 review I2): ``--check`` alone asks Claude."""
+        self.reading(10, weekly=10)
+        self.reading(10, weekly=99, provider="codex")
+        code, out, err = self.run_cmd("usage", "--check")
+        self.assertEqual((code, out.strip()), (cli.EXIT_OK, "go"), err)
+        code, _out, err = self.run_cmd("usage", "--check", "--provider", "codex")
+        self.assertEqual(code, cli.EXIT_USAGE_PAUSED, err)
+        self.assertIn("weekly", err)
+
     def test_usage_without_refresh_starts_no_probe_and_has_no_block(self) -> None:
         calls = self.fake_refresh({})
         code, out, _err = self.run_cmd("--json", "usage")

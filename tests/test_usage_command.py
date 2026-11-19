@@ -927,6 +927,14 @@ class UsageRefreshTest(_UsageCommandCase):
             self.assertEqual(ctx.exception.code, cli.EXIT_USAGE)
         self.assertEqual(calls, [])
 
+    def test_outcome_ok_without_refresh_or_release_is_accepted_as_before(self) -> None:
+        calls = self.fake_refresh({})
+        code, _out, err = self.run_cmd("usage", "--outcome", "ok")
+        self.assertEqual((code, calls), (cli.EXIT_OK, []), err)
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as ctx:
+            cli.main(["--runtime-dir", str(self.runtime_root), "usage", "--outcome", "not_started"])
+        self.assertEqual(ctx.exception.code, cli.EXIT_USAGE)
+
     def test_provider_chooses_one_probe_and_all_chooses_both(self) -> None:
         calls = self.fake_refresh({})
         self.run_cmd("usage", "--refresh", "--provider", "codex")

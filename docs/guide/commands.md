@@ -300,9 +300,10 @@ the shared record and Codex's from `$CODEX_HOME/sessions` (else
 `--refresh` first re-reads the limit of each provider `--provider` names
 (both when it is absent or `all`) by one cheap probe call, records the
 reading in the shared record, and then prints the view. The probe is a
-single turn at the lowest declared effort on the cheapest declared model
-(`haiku` for Claude, `gpt-6.1-sol` for Codex), so it spends a few tokens
-of your own allowance; it runs in a private layout under
+one-word prompt, a single turn, on a cheap model the probe names itself
+(`haiku` for Claude, `gpt-6.1-sol` for Codex) at the lowest effort the
+adapter declares (`low` for Claude, `high` for Codex, which declares no
+lower one), so it spends a few tokens of your own allowance; it runs in a private layout under
 `<runtime>/usage-probe/<job id>/` with its own configuration home, so your
 Claude and Codex settings, hooks and sessions are neither read into the
 probe nor changed. A credential the provider refreshed during the probe is

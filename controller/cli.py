@@ -590,10 +590,13 @@ def _validate_usage_args(parser: argparse.ArgumentParser, args: argparse.Namespa
         parser.error("usage: --renew/--release cannot be combined with --check, --wait or --reserve")
     if args.reserve and not (args.check or args.wait):
         parser.error("usage: --reserve needs --check or --wait")
-    if (args.stream is not None or args.outcome is not None) and args.release is None:
+    if args.refresh and (gate or args.renew is not None or args.release is not None or args.stream is not None
+                         or args.outcome is not None):
+        parser.error("usage: --refresh cannot be combined with --check, --wait, --reserve, --renew, --release, "
+                     "--stream or --outcome")
+    # ``--outcome ok`` alone is the default spelled out, accepted as before UF1
+    if (args.stream is not None or args.outcome not in (None, "ok")) and args.release is None:
         parser.error("usage: --stream and --outcome are accepted only with --release")
-    if args.refresh and (gate or args.renew is not None or args.release is not None):
-        parser.error("usage: --refresh cannot be combined with --check, --wait, --reserve, --renew or --release")
     if gate and args.provider == "all":
         parser.error("usage: --check/--wait gate one provider; pass --provider claude or codex")
 

@@ -263,6 +263,24 @@ class FailureTest(ProbeCase):
         self.assertEqual(results["codex"].outcome, "no_reading")
         self.assertUnchanged(before)
 
+    def test_a_binary_that_cannot_be_started_is_failed_and_the_other_provider_still_runs(self):
+        broken = self.tmp / "bin-broken" / "codex"
+        broken.parent.mkdir()
+        broken.write_text("#!/nonexistent/interpreter\n")
+        broken.chmod(0o755)
+        before = self.record()
+        results = self.refresh(codex_binary=str(broken))
+        self.assertEqual({p: r.outcome for p, r in results.items()}, {"codex": "failed", "claude": "ok"})
+        self.assertIn("could not run", results["codex"].detail)
+        self.assertEqual(self.record().get("codex"), before.get("codex"))
+        self.assertIn("claude", self.record())
+        self.assertEqual(self.leftovers(), [])
+
+    def test_the_timeout_cause_names_the_deadline_the_probe_ran_under(self):
+        results = self.refresh(("codex",), codex_binary=self.codex(exec={"verdict": "hang"}, hang_seconds=30,
+                                                                  orphan_seconds=0), timeout=2)
+        self.assertIn("2-second deadline", results["codex"].detail)
+
     def test_an_operator_home_without_a_credential_is_failed_with_the_cause(self):
         (self.codex_home / "auth.json").unlink()
         results = self.refresh(("codex",))

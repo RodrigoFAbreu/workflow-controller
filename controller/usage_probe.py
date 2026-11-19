@@ -269,6 +269,8 @@ def _probe(provider: str, selected: review.ReviewHarness, *, runtime_root: Path,
         result = launch(layout, binary, env, system_dir, timeout, run)
     except ReviewLaunchRefusedError as exc:
         result = ProbeResult(provider, OUTCOME_FAILED, str(exc))
+    except OSError as exc:  # a binary that resolves but cannot be started, a layout that cannot be written (D4)
+        result = ProbeResult(provider, OUTCOME_FAILED, f"the probe could not run: {exc}")
     finally:
         failures: list[Exception] = []
         if captured is not None:
@@ -286,9 +288,9 @@ def _probe(provider: str, selected: review.ReviewHarness, *, runtime_root: Path,
     return result
 
 
-def _finish(provider: str, run: review.RunResult, readings: list[dict]) -> ProbeResult:
+def _finish(provider: str, run: review.RunResult, readings: list[dict], timeout: float) -> ProbeResult:
     if run.timed_out:
-        return ProbeResult(provider, OUTCOME_TIMED_OUT, f"the probe passed its {int(TIMEOUT_SECONDS)}-second deadline")
+        return ProbeResult(provider, OUTCOME_TIMED_OUT, f"the probe passed its {timeout:g}-second deadline")
     if run.exit_code != 0:
         return ProbeResult(provider, OUTCOME_FAILED, f"exit {run.exit_code}: {_tail(run)}")
     if not readings:
@@ -303,7 +305,7 @@ def _launch_claude(layout: review.JobLayout, binary: Path, env: Mapping[str, str
     command = claude_argv(binary)
     check_probe_argv("claude", command)
     made = run(command, cwd=layout.tree, env=env, timeout=timeout, stdin_text=PROMPT)
-    return _finish(usage.PROVIDER_CLAUDE, made, usage.read_claude_stream(made.stdout))
+    return _finish(usage.PROVIDER_CLAUDE, made, usage.read_claude_stream(made.stdout), timeout)
 
 
 def _launch_codex(layout: review.JobLayout, binary: Path, env: Mapping[str, str], system_dir: Path, timeout: float,
@@ -320,7 +322,7 @@ def _launch_codex(layout: review.JobLayout, binary: Path, env: Mapping[str, str]
     made = run(command, cwd=layout.tree, env=env, timeout=timeout)
     # the probe's private home holds exactly the session file the probe wrote, never an earlier session's
     return _finish(usage.PROVIDER_CODEX, made, usage.read_codex_home(layout.codex_home) if made.exit_code == 0
-                   and not made.timed_out else [])
+                   and not made.timed_out else [], timeout)
 
 
 # ---------------------------------------------------------------------------

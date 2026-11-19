@@ -2005,13 +2005,13 @@ def _usage_show(args: argparse.Namespace, runtime_root: Path, values: dict) -> i
     merges into the shared record and the replay sweep's ``accounting:
     "done"`` on a terminal job record a crash left unaccounted."""
     context = _usage_context(args)
-    now = job.usage_now()
     job._settle_usage(runtime_root, quiet=True)  # the read below reports the error itself (exit 20)
     providers = _usage_providers(args, gate=False)
     results = {}
     if args.refresh:  # UF1 D1, D4: the probes run before the view is built; a failed one changes nothing
         results = usage_probe.refresh(providers, runtime_root=runtime_root, codex_home=_codex_home(),
                                       claude_home=_claude_home())
+    now = job.usage_now()  # after the probes, so a window that reset while they ran is shown as reset
     views: dict = {}
     for provider in providers:
         fresh = _usage_fresh_readings(provider)

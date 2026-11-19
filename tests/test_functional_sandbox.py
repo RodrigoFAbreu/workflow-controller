@@ -713,6 +713,8 @@ class RunTest(Fixture):
     def test_restored_source_and_checklist_edits_are_refused_at_the_first_write_and_never_differ(self) -> None:
         stop = threading.Event()
         seen: list[str] = []
+        armed: set[str] = set()
+        both_armed = threading.Event()
         job = f"{self.job_prefix}watch"
         paths = {rel: self.runtime / "functional" / job / "clone" / rel
                  for rel in ("src/app.py", "docs/ACTIVE_MILESTONE.md")}
@@ -722,10 +724,17 @@ class RunTest(Fixture):
             while not stop.is_set():
                 for rel, path in paths.items():
                     try:
-                        if path.read_bytes() != originals[rel]:
-                            seen.append(rel)
+                        data = path.read_bytes()
                     except OSError:
-                        pass
+                        continue
+                    # `git checkout` creates a file empty before it writes it, so a read that
+                    # differs counts only for a path already read equal to its original.
+                    if data == originals[rel]:
+                        armed.add(rel)
+                        if armed == set(paths):
+                            both_armed.set()
+                    elif rel in armed:
+                        seen.append(rel)
                 time.sleep(0.002)
 
         watcher = threading.Thread(target=poll, daemon=True)
@@ -735,10 +744,12 @@ class RunTest(Fixture):
                 {"op": "restore", "path": "src/app.py", "new": "print('edited')\n"},
                 {"op": "restore", "path": "docs/ACTIVE_MILESTONE.md", "new": "edited\n"},
                 results()]}, job_id=job)
+            both_armed.wait(2)
         finally:
             stop.set()
             watcher.join(2)
         self.assertEqual(seen, [])
+        self.assertEqual(armed, set(paths))
         self.assertTrue(all(a["refused"] for a in self.actions()[:2]))
         self.assertEqual((result["breach"], result["unbound"]), ([], []))
         self.settle(result)

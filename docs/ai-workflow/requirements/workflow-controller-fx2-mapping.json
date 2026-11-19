@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-fx2",
+  "requirements": {
+    "R1": {
+      "description": "A half-written file in the clone is never recorded as an unrefused write, and the test still proves the watcher saw both files finished",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The item page records the cause, the fix and the before and after measurement",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    }
+  }
+}

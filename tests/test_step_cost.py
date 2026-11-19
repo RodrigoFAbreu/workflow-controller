@@ -46,23 +46,23 @@ class CounterTest(unittest.TestCase):
         with fixtures.count_process_starts() as counts:
             for operation in ("describe", "next-action", "next-action"):
                 subprocess.run([sys.executable, "-B", "-E", "-s", str(self.protocol_script), operation],
-                               check=True, capture_output=True)
+                               check=True, capture_output=True, timeout=60)
         self.assertEqual(dict(counts), {"protocol:describe": 1, "protocol:next-action": 2})
 
     def test_skips_the_global_options_before_the_operation(self) -> None:
         with fixtures.count_process_starts() as counts:
             subprocess.run([sys.executable, str(self.protocol_script), "--protocol-major", "1", "--repo-root",
-                            str(self.tmp), "reconcile"], capture_output=True)
+                            str(self.tmp), "reconcile"], capture_output=True, timeout=60)
         self.assertEqual(dict(counts), {"protocol:reconcile": 1})
 
     def test_counts_a_stub_manager_run(self) -> None:
         with fixtures.count_process_starts() as counts:
-            subprocess.run([str(self.stub), "verify"], check=True, capture_output=True)
+            subprocess.run([str(self.stub), "verify"], check=True, capture_output=True, timeout=60)
         self.assertEqual(dict(counts), {"manager": 1})
 
     def test_counts_any_other_program_as_other(self) -> None:
         with fixtures.count_process_starts() as counts:
-            subprocess.run([sys.executable, "-c", "pass"], check=True)
+            subprocess.run([sys.executable, "-c", "pass"], check=True, timeout=60)
         self.assertEqual(dict(counts), {"other": 1})
 
     def test_restores_popen_on_exit_and_on_error(self) -> None:
@@ -77,7 +77,7 @@ class CounterTest(unittest.TestCase):
 
     def test_lets_every_start_through_unchanged(self) -> None:
         with fixtures.count_process_starts():
-            done = subprocess.run([sys.executable, "-c", "print('hi')"], capture_output=True, text=True)
+            done = subprocess.run([sys.executable, "-c", "print('hi')"], capture_output=True, text=True, timeout=60)
         self.assertEqual((done.returncode, done.stdout), (0, "hi\n"))
 
     def test_blocks_nest_and_each_sees_its_own_starts(self) -> None:

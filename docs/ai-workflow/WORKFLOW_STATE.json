@@ -84635,7 +84635,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-fx2-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-fx2-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 3,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -84744,7 +84744,90 @@
           "workflow_release": "2.29.3"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "29a305b41ab2175f58e528bc949c53278378997409f9c6f2de72ea75dddc67db",
+        "approved_review_content_id": "0e5082a3ab162220a54e03114c6993f5203c5277edfc70969d9f219e7a1ebfbd",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-fx2-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "00d9e511c1e9015523c462d23fb71aad9466e81d"
+          },
+          {
+            "path": "tests/test_functional_sandbox.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "41418861a8e6eeb5453a580a89335f253d432176"
+          }
+        ],
+        "reviewed_content_commit": "98a64b5ebefd30bcfe50e162313980da78c8239e",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-19T15:55:00Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "0e5082a3ab162220a54e03114c6993f5203c5277edfc70969d9f219e7a1ebfbd",
+            "ledger": {
+              "local": {
+                "bundle_id": "29a305b41ab2175f58e528bc949c53278378997409f9c6f2de72ea75dddc67db",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "22be130b2f5ddfff2c468bf3278e3e78ab4b28adf8cb846f99ed43129a2adb39",
+                "ledger_entry_sha256": "c422440caa844a52ff53eb6d294944f83269bca4fb766ba048d52cb6bb162ab3",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-fx2/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "29a305b41ab2175f58e528bc949c53278378997409f9c6f2de72ea75dddc67db",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "655d25087b43607418ef42dc3aae4e73638a0c583f8c19699558b461acc56fc3",
+                "ledger_entry_sha256": "1d4672029c47cec4e89ae70dfd41aae5bd8d26304f86ad3925482e0c8a589685",
+                "run_ref": "codex:20261119T155202Z-53537a59",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-19T15:55:00Z",
+          "workflow_release": "2.29.3"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "6fd005f57fc3648a8e46ca698452444a67796515e28d4e494232b57e2fc8d21e",
@@ -84775,12 +84858,12 @@
           "external": 2
         },
         "implementation": {
-          "local": 0,
-          "external": 0
+          "local": 1,
+          "external": 1
         }
       },
-      "state_revision": 18,
-      "last_transition": "2026-11-19T15:45:26Z",
+      "state_revision": 21,
+      "last_transition": "2026-11-19T15:55:00Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -84818,6 +84901,55 @@
               "at": "2026-11-19T14:59:51Z"
             }
           ]
+        },
+        "F-b0eaed9213a3": {
+          "digest": "b0eaed9213a31b6d80126dace4bdd2248aca6a945f8beabf5437bc8e1a2d36ba",
+          "text": "O1. The self-review bullet in `docs/ACTIVE_MILESTONE.md` says \"a real write before a path is armed still fails the test (the path never arms)\". That does not hold for this test's only writes. The fake tester's `restore` op (`tests/fake_functional_tester.py`, about lines 165-173) writes the new text, reads it back, and writes the original bytes again. So if the sandbox wrongly allowed a restore that ran before the watcher's first equal read, the watcher would afterwards read the original, arm the path and pass both `seen == []` and `armed == set(paths)`. That regression is still caught by `assertTrue(all(a[\"refused\"] for a in self.actions()[:2]))`, and the old watcher could only catch such a window by chance (a 2 ms poll against a write window of microseconds), so the test is no weaker in practice. Only the statement is wrong: the watcher catches a write after arming, and the `refused` log catches a write before it. Fix the narrative wording if the page is touched again. The item page's own wording (\"a watcher that never saw a finished file fails instead of passing vacuously\") is accurate.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "0e5082a3ab162220a54e03114c6993f5203c5277edfc70969d9f219e7a1ebfbd",
+              "verdict": "APPROVE",
+              "at": "2026-11-19T15:51:36Z"
+            }
+          ]
+        },
+        "F-b5f33c00a91e": {
+          "digest": "b5f33c00a91ea80bf944182cadd013fbd166e9865ce8af343aa695f815f79d6d",
+          "text": "`docs/ACTIVE_MILESTONE.md:11` incorrectly says a write before arming prevents the path from ever arming. A restore operation can return the original bytes before the watcher reads them, allowing both watcher assertions to pass. The existing `refused` assertion still catches that failure. Adjust the explanation to identify which assertion provides this protection.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "0e5082a3ab162220a54e03114c6993f5203c5277edfc70969d9f219e7a1ebfbd",
+              "verdict": "APPROVE",
+              "at": "2026-11-19T15:53:39Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "0e5082a3ab162220a54e03114c6993f5203c5277edfc70969d9f219e7a1ebfbd",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "29a305b41ab2175f58e528bc949c53278378997409f9c6f2de72ea75dddc67db",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-19T15:51:36Z",
+          "verdict_sha256": "22be130b2f5ddfff2c468bf3278e3e78ab4b28adf8cb846f99ed43129a2adb39",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-fx2/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "29a305b41ab2175f58e528bc949c53278378997409f9c6f2de72ea75dddc67db",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-19T15:53:39Z",
+          "verdict_sha256": "655d25087b43607418ef42dc3aae4e73638a0c583f8c19699558b461acc56fc3",
+          "run_ref": "codex:20261119T155202Z-53537a59",
+          "reviewer_model": "openai/gpt-6.1-sol"
         }
       }
     }

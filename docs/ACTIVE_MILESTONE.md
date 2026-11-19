@@ -771,40 +771,42 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-fx2` (FX2: fix the flaky functional-sandbox test, [#206](https://github.com/RodrigoFAbreu/workflow-controller/issues/206)), implementation revision 1, plan
-`docs/ai-workflow/CONTROLLER_FX2_PLAN.md` (revision 3), base commit `655f9ee`. Two checkpoints, both complete: CP1 (the watcher in
-`tests.test_functional_sandbox.RunTest.test_restored_source_and_checklist_edits_are_refused_at_the_first_write_and_never_differ` arms a path before it counts a difference) and CP2 (the item page). A `ci:` change to one test and pages; it publishes no release and no `controller/` module changes.
-Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the system directories, and no write inside the read-only
-product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write only to the scratch `TMPDIR`. No flow needs a pull request or a forge call, and none runs the full suite.
+Item `workflow-controller-uf1` (UF1: `usage --refresh` re-reads the Codex and the Claude limit), implementation revision 2, plan
+`docs/ai-workflow/CONTROLLER_UF1_PLAN.md` (revision 8), base commit `f4c2fa9`. Three checkpoints, all complete (CP1 the probes in `controller/usage_probe.py`, CP2 the option and its `refresh` block in `controller/cli.py`, CP3 the pages), plus the self-review and review fixes. A `feat:` change, a minor release.
+Every flow runs offline in the tester's sandbox: no network, no real `gh`, `claude`, `codex` or `ssh` (the stand-ins refuse and log), a `PATH` of the sandbox's `bin/` and the system directories, no write inside the read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.` for the test runner; flows write only to the scratch `TMPDIR`. No flow needs a pull request or a forge call, and none runs the full suite. A real probe needs the real binaries and a live account, so it is out of scope here; the fake `claude` and `codex` in the tests stand for them.
 
-Setup: `export TMPDIR=$(mktemp -d); P=$PWD` (the product clone). No data to seed.
+Setup: `export TMPDIR=$(mktemp -d); mkdir $TMPDIR/bin $TMPDIR/h; P=$PWD` (the product clone, read-only). Define `run(){ env -i PATH="$TMPDIR/bin:/usr/bin:/bin" HOME=$TMPDIR/h TMPDIR=$TMPDIR PYTHONPATH=$P python3 -B -m controller "$@"; echo "rc=$?"; }`. No data to seed; `$TMPDIR/bin` holds no `claude` or `codex`.
 
-**Flow 1: the fixed test and its module.**
-Run `python3 -B tools/run_tests.py tests.test_functional_sandbox; echo rc=$?`.
-Expected: `# Test run: PASS`, `rc=0` (a `namespace: none` line is expected in this sandbox).
+**Flow 1: the refused combinations (D1).**
+Run `run usage --refresh --check`, `run usage --refresh --wait`, `run usage --refresh --outcome ok`, `run usage --refresh --stream x`.
+Expected: each prints `usage: --refresh cannot be combined with --check, --wait, --reserve, --renew, --release, --stream or --outcome` and `rc=2`; nothing is probed.
 
-**Flow 2: the fixed test, repeated.**
-Run `for i in 1 2 3 4 5 6 7 8 9 10; do python3 -B tools/run_tests.py tests.test_functional_sandbox.RunTest.test_restored_source_and_checklist_edits_are_refused_at_the_first_write_and_never_differ >/dev/null 2>&1; echo -n "$? "; done; echo`.
-Expected: ten `0`. (The race was reproduced once in 208 runs under `taskset -c 0` with 16 copies before the fix and 0 in 208 after; a clean ten is the expected result, not a proof.)
+**Flow 2: a probe that cannot start changes nothing and the view is still printed (D4, D5).**
+Run `run usage --refresh --provider codex`, then `run usage --refresh --provider all --json`.
+Expected: the first prints the codex view and a line `refresh: not_found: the reviewer binary 'codex' cannot be resolved` with both windows `no reading`, `rc=1`. The second prints JSON with `providers.claude.refresh` and `providers.codex.refresh` each `outcome: not_found`, `read: []`, both windows `null`, `rc=1`; the failing claude probe did not skip codex.
 
-**Flow 3: only the test and pages changed.**
-Run `git diff 655f9ee..HEAD --stat -- controller scripts tools .github; echo rc=$?` and `git diff 655f9ee..HEAD --stat -- tests`.
-Expected: the first prints nothing under those directories; the second lists only `tests/test_functional_sandbox.py` (17 lines changed).
+**Flow 3: `--provider` chooses the probe set.**
+Run `run usage --refresh --provider claude --json`.
+Expected: only the claude block carries `refresh` with `not_found`; no codex `refresh` block; `rc=1`.
 
-**Flow 4: the arming rule, read from the test.**
-Read `tests/test_functional_sandbox.py` around line 713 (`poll()`).
-Expected: a read equal to the original arms the path (`armed`); a differing read is recorded in `seen` only for an armed path; `both_armed` is set once both paths are armed; the test waits on it (2 s) after `launch()`, then asserts `seen == []` and `armed == set(paths)`, so a watcher that never saw a finished file fails rather than passing vacuously.
+**Flow 4: without `--refresh`, `usage` is unchanged (D1).**
+Run `run usage`, `run usage --json`, then `run usage --outcome ok`.
+Expected: no `refresh` line or key, `rc=0` for the first two, nothing probed (no `usage-probe` directory under the runtime root); `usage --outcome ok` (without `--release`) is accepted as before UF1.
 
-**Flow 5: the item page.**
-Read `docs/items/workflow-controller-fx2.md`.
-Expected: it records the status, the plan link, the cause (the empty file `git checkout` creates before writing), the fix, and the D3 measurement with its command and settings (1 failure in 208 before, 0 in 208 after under `taskset -c 0`, 16 x 13; the pinned and unpinned settings showed none either way), with the small-sample caveat.
+**Flow 5: the tests of the item.**
+Run `python3 -B tools/run_tests.py tests.test_usage_probe tests.test_usage_command tests.test_usage tests.test_usage_gate tests.test_cli tests.test_package_structure tests.test_write_containment; echo rc=$?`.
+Expected: `# Test run: PASS`, `rc=0` (a `namespace: none` line is expected in this sandbox). They cover the pinned argv, private homes, outcomes, the record only for an `ok` probe, the 300-second sweep, the text and JSON blocks, a stored 99% past its window shown as reset, and an unstartable binary failing one probe without skipping the other.
 
-**Flow 6: the docs checks and the backlog.**
-Run `python3 -B tools/check_docs.py; echo rc=$?`, `python3 -B tools/run_tests.py tests.test_docs tests.test_plan_document_consistency tests.test_package_structure tests.test_write_containment; echo rc=$?`, `python3 -B scripts/workflow_backlog.py check; echo rc=$?` and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-fx2; echo rc=$?`.
+**Flow 6: the pages (R4).**
+Read the usage section of `docs/guide/commands.md` (around line 300), `docs/guide/runtime.md`, "A pause that should have lifted" in `docs/common-problems.md`, row 1 of `docs/exit-codes.md` and `docs/items/workflow-controller-uf1.md`.
+Expected: the option, `--provider`, the `refresh` block, exit `1` on a failed probe, the refused combinations, the watchdog call (`usage --refresh --provider all`, then `usage --check`), the new-window rule (`WINDOW_JITTER_SECONDS`) and the 300-second probe-layout sweep are all stated; the item page records the status, the plan link and the CP1 live check (claude 2.1.318 five-hour 49% weekly 9%; codex-cli 0.167.0 five-hour 30% weekly 9%, credentials `unchanged`).
+
+**Flow 7: the docs checks and the backlog.**
+Run `python3 -B tools/check_docs.py; echo rc=$?`, `python3 -B tools/run_tests.py tests.test_docs tests.test_plan_document_consistency; echo rc=$?`, `python3 -B scripts/workflow_backlog.py check; echo rc=$?` and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-uf1; echo rc=$?`.
 Expected: every `rc=0`; `# Test run: PASS`; `preflight-accept` `"ok": true`.
 
-**Known limitations / out of scope.** The race is timing-dependent: one failure in 208 before-runs is a small sample, so the fix rests on the reasoning (a partial read is a strict prefix of the original and never equals it) as well as the count. A write that lands before a path is armed still fails the test, because the path never arms. The full suite (6816 tests, PASS at the self-review) is CI's. `#206` closes with the pull request.
+**Known limitations / out of scope.** A real `--refresh` costs a few tokens of the owner's allowance and needs real `claude` and `codex` with credentials; it was run once live at the end of CP1 (both `ok`) and is not repeatable in the sandbox. A refresh clears a hold only when the provider reports a new window (`usage.merge_reading` keeps the higher percent inside one window). The operator's own watchdog scripts outside this repository are not changed. The single local full run ended FAIL with 5 failures outside this item's modules (3 in `tests.test_fake_codex_contract`, an environment leak of `~/.codex/config.toml`; 2 in `tests.test_codex_review_role` under load, passing alone); CI's run on the pull request is the full verification.
 
 ## Next action
 
-`/milestone-plan` for `workflow-controller-uf1` (A `usage --refresh` that re-reads both the Codex and the Claude limit), the item `python3 scripts/workflow_backlog.py next` returns, ready for `PLANNING`.
+Functional review of `workflow-controller-uf1`: run the checklist above, put findings in the feedback directory's `FUNCTIONAL_REVIEW.md`, then `/accept-milestone` (or `/apply-functional-review` for findings).

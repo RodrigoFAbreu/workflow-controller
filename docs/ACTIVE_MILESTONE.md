@@ -759,38 +759,39 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-ci2f` (CI2f: process starts per lifecycle step, [#317](https://github.com/RodrigoFAbreu/workflow-controller/issues/317)), implementation revision 1, plan
-`docs/ai-workflow/CONTROLLER_CI2F_PLAN.md` (revision 2), base commit `55ad7ff`. Four checkpoints, all complete: CP1 (`fixtures.count_process_starts`), CP2 (`Lifecycle.decided_row` at the six driver sites),
-CP3 (`fixtures.inspect_unchanged` in the four lifecycle drivers) and CP4 (the pages and item records). A `ci:` change to tests, test helpers and pages; it publishes no release and production queries are unchanged.
+Item `workflow-controller-fx2` (FX2: fix the flaky functional-sandbox test, [#206](https://github.com/RodrigoFAbreu/workflow-controller/issues/206)), implementation revision 1, plan
+`docs/ai-workflow/CONTROLLER_FX2_PLAN.md` (revision 3), base commit `655f9ee`. Two checkpoints, both complete: CP1 (the watcher in
+`tests.test_functional_sandbox.RunTest.test_restored_source_and_checklist_edits_are_refused_at_the_first_write_and_never_differ` arms a path before it counts a difference) and CP2 (the item page). A `ci:` change to one test and pages; it publishes no release and no `controller/` module changes.
 Every flow runs offline: no network, no real `gh` (the stand-in refuses and logs), `claude`, `codex` or `ssh`, a `PATH` of the sandbox's `bin/` and the system directories, and no write inside the read-only
 product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.`; flows write only to the scratch `TMPDIR`. No flow needs a pull request or a forge call, and none runs the full suite.
 
 Setup: `export TMPDIR=$(mktemp -d); P=$PWD` (the product clone). No data to seed.
 
-**Flow 1: the cost tests.**
-Run `python3 -B tools/run_tests.py tests.test_step_cost tests.test_package_structure tests.test_write_containment; echo rc=$?`.
-Expected: `# Test run: PASS`, `rc=0` (a `namespace: none` line is expected in this sandbox). `DecidedRowTest` and `InspectCacheTest` are among the tests run.
+**Flow 1: the fixed test and its module.**
+Run `python3 -B tools/run_tests.py tests.test_functional_sandbox; echo rc=$?`.
+Expected: `# Test run: PASS`, `rc=0` (a `namespace: none` line is expected in this sandbox).
 
-**Flow 2: the lifecycle drivers still pass.**
-Run `python3 -B tools/run_tests.py tests.test_protocol_lifecycle tests.test_functional_codex_route tests.test_review_round_lifecycle tests.test_shared_snapshot tests.test_pr_report; echo rc=$?`.
-Expected: `PASS`, `rc=0`. (`tests.test_protocol_job`, `tests.test_protocol_outcome` and `tests.test_functional_lifecycle` are long; run them too if time allows, same expectation.)
+**Flow 2: the fixed test, repeated.**
+Run `for i in 1 2 3 4 5 6 7 8 9 10; do python3 -B tools/run_tests.py tests.test_functional_sandbox.RunTest.test_restored_source_and_checklist_edits_are_refused_at_the_first_write_and_never_differ >/dev/null 2>&1; echo -n "$? "; done; echo`.
+Expected: ten `0`. (The race was reproduced once in 208 runs under `taskset -c 0` with 16 copies before the fix and 0 in 208 after; a clean ten is the expected result, not a proof.)
 
-**Flow 3: the cache is a test-only helper and production is untouched.**
-Run `git diff 55ad7ff..HEAD --stat -- controller scripts tools .github`; `grep -rn "inspect_unchanged\|count_process_starts\|decided_row" controller scripts tools; echo rc=$?`.
-Expected: the diff lists nothing under `controller`, `scripts`, `tools` or `.github` (empty output); `grep` finds nothing (`rc=1`). The helpers live in `tests/` only.
+**Flow 3: only the test and pages changed.**
+Run `git diff 655f9ee..HEAD --stat -- controller scripts tools .github; echo rc=$?` and `git diff 655f9ee..HEAD --stat -- tests`.
+Expected: the first prints nothing under those directories; the second lists only `tests/test_functional_sandbox.py` (17 lines changed).
 
-**Flow 4: the count is real (a relative saving).**
-Read `tests/test_step_cost.py` (`DecidedRowTest`, `InspectCacheTest`). Expected: the saving is asserted as a relative count (one `next-action` query fewer; a repeated `inspect` starts 0 processes against 10), not an absolute budget; a refusal is never cached; a changed record, managed script or stub moves the key; the cached result is a copy.
+**Flow 4: the arming rule, read from the test.**
+Read `tests/test_functional_sandbox.py` around line 713 (`poll()`).
+Expected: a read equal to the original arms the path (`armed`); a differing read is recorded in `seen` only for an armed path; `both_armed` is set once both paths are armed; the test waits on it (2 s) after `launch()`, then asserts `seen == []` and `armed == set(paths)`, so a watcher that never saw a finished file fails rather than passing vacuously.
 
-**Flow 5: the guide and the item pages.**
-Read `docs/guide/development.md` ("Process starts per lifecycle step"), `docs/items/workflow-controller-ci2f.md` and `docs/items/workflow-controller-ci2.md`.
-Expected: the guide lists what production keeps (`describe`, `verify`, `next-action`, the identity-bound `next-action`, `reconcile`) and states the decided row and the cache key as the code does; the item page records the measured process starts (git 37116 to 30830, 873 s to 757 s locally) with the local-versus-runner caveat, the D4 bytecode decision (not done; 114 against 122 ms) and O1 (the runner `-X importtime` measurement is an open owner decision); `#317` stays open; the CI2 page marks the slice implemented.
+**Flow 5: the item page.**
+Read `docs/items/workflow-controller-fx2.md`.
+Expected: it records the status, the plan link, the cause (the empty file `git checkout` creates before writing), the fix, and the D3 measurement with its command and settings (1 failure in 208 before, 0 in 208 after under `taskset -c 0`, 16 x 13; the pinned and unpinned settings showed none either way), with the small-sample caveat.
 
 **Flow 6: the docs checks and the backlog.**
-Run `python3 -B tools/check_docs.py; echo rc=$?`, `python3 -B tools/run_tests.py tests.test_docs tests.test_plan_document_consistency; echo rc=$?`, `python3 -B scripts/workflow_backlog.py check; echo rc=$?` and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-ci2f; echo rc=$?`.
+Run `python3 -B tools/check_docs.py; echo rc=$?`, `python3 -B tools/run_tests.py tests.test_docs tests.test_plan_document_consistency tests.test_package_structure tests.test_write_containment; echo rc=$?`, `python3 -B scripts/workflow_backlog.py check; echo rc=$?` and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-fx2; echo rc=$?`.
 Expected: every `rc=0`; `# Test run: PASS`; `preflight-accept` `"ok": true`.
 
-**Known limitations / out of scope.** The wall-time saving (116 s, 13 percent, six modules) is one local, unrepeated measurement, not a runner measurement; the CI saving is not claimed. The bytecode reuse (scope item 8) is measured and not done (D4); O1 is the owner's call. The cache assumes the target's Git configuration and hook files do not change between two steps of one test. The full suite is CI's. `#317` stays open.
+**Known limitations / out of scope.** The race is timing-dependent: one failure in 208 before-runs is a small sample, so the fix rests on the reasoning (a partial read is a strict prefix of the original and never equals it) as well as the count. A write that lands before a path is armed still fails the test, because the path never arms. The full suite (6816 tests, PASS at the self-review) is CI's. `#206` closes with the pull request.
 
 ## Next action
 

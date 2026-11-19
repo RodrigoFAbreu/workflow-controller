@@ -23,7 +23,7 @@
 | `workflow-controller verify-claude [--force]` | run the live sandbox probes against the `claude` a launch would run and record its digest when every probe holds (see [`verify-claude`](#verify-claude)); takes no repository |
 | `workflow-controller verify-codex [--force] [--codex-binary PATH]` | run the sandbox boundary probes against the `codex` a launch would run and record its digest when every probe holds (see [`verify-codex`](#verify-codex)); takes no repository |
 | `workflow-controller notifications [--test]` | the effective SignalHub notification table and where the URL and key were found (never the key); `--test` sends one `info` test event through the real transport (see [`notifications`](#notifications)); takes no repository and writes nothing |
-| `workflow-controller usage [--provider claude\|codex\|all] [--check \| --wait] [--reserve] [--release TOKEN] ...` | the usage budget's readings, and the gate a manually started worker passes (see [`usage`](#usage)); writes only the shared usage record, its event file and the accounting mark of a job record a crash left unaccounted |
+| `workflow-controller usage [--provider claude\|codex\|all] [--check \| --wait] [--reserve] [--release TOKEN] ...` | the usage budget's readings, and the gate a manually started worker passes (see [`usage`](#usage)); writes only the shared usage record, its event file and the accounting mark of a job record a crash left unaccounted; with `--refresh` it also writes a probe layout under `<runtime>/usage-probe/` and may copy a refreshed credential back into an operator home |
 | `workflow-controller --version` | the version, then the running runtime (see [Runtime identity](runtime.md#runtime-identity)) |
 
 Global options -- declared on the top-level parser, so they are accepted
@@ -296,6 +296,38 @@ chooses `claude`, `codex` or `all` (the default for showing; `claude` for
 a gate). `--json` prints one JSON object. It reads Claude's windows from
 the shared record and Codex's from `$CODEX_HOME/sessions` (else
 `~/.codex/sessions`).
+
+`--refresh` first re-reads the limit of each provider `--provider` names
+(both when it is absent or `all`) by one cheap probe call, records the
+reading in the shared record, and then prints the view. The probe is a
+single turn at the lowest declared effort on the cheapest declared model
+(`haiku` for Claude, `gpt-6.1-sol` for Codex), so it spends a few tokens
+of your own allowance; it runs in a private layout under
+`<runtime>/usage-probe/<job id>/` with its own configuration home, so your
+Claude and Codex settings, hooks and sessions are neither read into the
+probe nor changed. A credential the provider refreshed during the probe is
+copied back into the operator home; an unchanged one is not. A managed
+configuration layer that could supply an MCP server, hook or plugin makes
+the probe refuse before it calls the provider (`failed`, with the layer
+named). Each provider's view then gains a `refresh` block (in `--json`,
+`providers.<name>.refresh`): the probe's outcome (`ok`, `not_found`, `failed`,
+`timed_out` or `no_reading`) and its cause, the windows it read, and each stored window
+with its percent, reset time, when it was observed and its source. A
+stored window whose reset time has passed is marked `window already reset`.
+A probe that read nothing leaves the record unchanged and exits `1`, with
+the view still printed and the other provider still probed. `--refresh`
+cannot be combined with `--check`, `--wait`, `--reserve`, `--renew`,
+`--release`, `--stream` or `--outcome` (exit `2`, nothing probed). It
+changes only what `usage` reads: `run` and `step` admission is unchanged,
+so a lane script that decides on a hold calls `usage --refresh --provider
+all` first, then `usage --check`.
+
+A refresh clears a hold only when the provider reports a new window. A
+reading whose reset time moves by no more than `WINDOW_JITTER_SECONDS`
+(120) is the same window, and `usage.merge_reading` keeps the stored higher
+percent. A `--refresh` killed mid-probe can leave a layout under
+`<runtime>/usage-probe/`; the next refresh removes it once it is 300
+seconds old.
 
 To gate a worker, name the context it runs in. The account windows and
 the live reservations are always evaluated; a cap is evaluated only when

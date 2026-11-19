@@ -85189,7 +85189,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-uf1-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-uf1-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "IMPLEMENTING",
+      "phase": "AMENDING_PLAN",
       "plan_revision": 6,
       "implementation_revision": null,
       "functional_review_round": null,
@@ -85205,7 +85205,7 @@
       },
       "current_bundle_id": "b65abc56b44a39472ba40b5ce2cac9bf67cd0a1cc1815d824b29ea29d9295933",
       "plan_approval": {
-        "status": "CURRENT",
+        "status": "SUPERSEDED",
         "basis": "POLICY_SATISFIED",
         "reviewed_bundle_id": "b65abc56b44a39472ba40b5ce2cac9bf67cd0a1cc1815d824b29ea29d9295933",
         "approved_review_content_id": "a5e2ee221f4f7886de4598bc7b9076bca6173b941a007dcf69c1a459f18c6db7",
@@ -85329,31 +85329,25 @@
           "external": 0
         }
       },
-      "state_revision": 24,
-      "last_transition": "2026-11-19T19:11:27Z",
+      "state_revision": 25,
+      "last_transition": "2026-11-19T20:11:38Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
-        "status": "BOUND",
-        "at": "2026-11-19T18:59:40Z",
+        "status": "CONSUMED",
+        "at": "2026-11-19T20:11:38Z",
         "consumed": {
-          "review_content_id": "7c7afbdf2ba8cba5d17d1554990ab108825b9f460bcea23a11ee110faa46c5cc",
-          "plan_revision": 5,
+          "review_content_id": "a5e2ee221f4f7886de4598bc7b9076bca6173b941a007dcf69c1a459f18c6db7",
+          "plan_revision": 6,
           "legacy": false
         },
-        "published": {
-          "review_content_id": "a5e2ee221f4f7886de4598bc7b9076bca6173b941a007dcf69c1a459f18c6db7",
-          "plan_revision": 6
-        },
-        "bound": {
-          "review_content_id": "a5e2ee221f4f7886de4598bc7b9076bca6173b941a007dcf69c1a459f18c6db7",
-          "bundle_id": "b65abc56b44a39472ba40b5ce2cac9bf67cd0a1cc1815d824b29ea29d9295933",
-          "plan_revision": 6
-        }
+        "published": null,
+        "bound": null
       },
       "consumed_plan_review_content_ids": [
         "08dff8270e9161cfa11e7185dc2ea5821839a6e93155aa36b7845a16791894a8",
         "58694043f22472f197c7ddd51b41dfe43517502dfaf2027b6513779699b8ba6d",
         "7c7afbdf2ba8cba5d17d1554990ab108825b9f460bcea23a11ee110faa46c5cc",
+        "a5e2ee221f4f7886de4598bc7b9076bca6173b941a007dcf69c1a459f18c6db7",
         "cf56b28426d15a3edb74b7c3b602d971b9a812e5036cd4e91c2355e0c48dda89",
         "e4de0dfa0aa0963c380954e9a75425d3e5313a6b937b7706d72122910ac415cf"
       ],
@@ -85498,7 +85492,115 @@
             }
           ]
         }
-      }
+      },
+      "amendment_history": [
+        {
+          "amendment_id": "0",
+          "requested_at": "2026-11-19T20:11:38Z",
+          "requested_from_phase": "IMPLEMENTING",
+          "reason": "CP2 of the item edits controller/__init__.py, but the plan's artifact declaration (docs/ai-workflow/registry/workflow-controller-uf1-artifacts.json) does not classify it, so the Controller refuses with UnclassifiedPathError at the start of CP2; the amended plan adds controller/__init__.py to the declaration as a deliverable (excluded at the plan stage and protected at the implementation stage, like the item's other controller files) and to CP2's file list.",
+          "superseded_plan_revision": 6,
+          "superseded_plan_approval": {
+            "status": "CURRENT",
+            "basis": "POLICY_SATISFIED",
+            "reviewed_bundle_id": "b65abc56b44a39472ba40b5ce2cac9bf67cd0a1cc1815d824b29ea29d9295933",
+            "approved_review_content_id": "a5e2ee221f4f7886de4598bc7b9076bca6173b941a007dcf69c1a459f18c6db7",
+            "review_content_manifest": [
+              {
+                "path": "docs/ai-workflow/CONTROLLER_UF1_PLAN.md",
+                "exists": true,
+                "mode": "100644",
+                "blob": "9cae90d1128e7c2c036bd07b135dfeadc697e688"
+              },
+              {
+                "path": "docs/ai-workflow/registry/workflow-controller-uf1-registry.json",
+                "exists": true,
+                "mode": "100644",
+                "blob": "ed608ef997ae280a7bcdc42687e807bc71a1a2bc"
+              },
+              {
+                "path": "docs/ai-workflow/requirements/workflow-controller-uf1-mapping.json",
+                "exists": true,
+                "mode": "100644",
+                "blob": "9440df861f42303a3d8c1d984659b3dd25b7ba18"
+              }
+            ],
+            "reviewed_content_commit": null,
+            "legacy_evidence": null,
+            "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+            "waived_guarantees": [],
+            "recorded_at": "2026-11-19T19:06:34Z",
+            "policy_evidence": {
+              "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+              "policy_source": "default",
+              "file_digest": null,
+              "adopted_digest": null,
+              "adopted_at": null,
+              "requirements": [
+                {
+                  "id": "gate_reachable",
+                  "met": true,
+                  "detail": "the approval gate is reachable"
+                },
+                {
+                  "id": "verdict_approve_bound",
+                  "met": true,
+                  "detail": "the latest verdict is APPROVE and names the current bundle"
+                },
+                {
+                  "id": "distinct_reviewer_models",
+                  "met": true,
+                  "detail": "families 'anthropic' and 'openai' differ"
+                },
+                {
+                  "id": "review_evidence_audited",
+                  "met": true,
+                  "detail": "both stages carry the audit keys"
+                }
+              ],
+              "inputs": {
+                "review_content_id": "a5e2ee221f4f7886de4598bc7b9076bca6173b941a007dcf69c1a459f18c6db7",
+                "ledger": {
+                  "local": {
+                    "bundle_id": "b65abc56b44a39472ba40b5ce2cac9bf67cd0a1cc1815d824b29ea29d9295933",
+                    "verdict": "APPROVE",
+                    "round": 6,
+                    "verdict_sha256": "5df10732af60b1b68c13db819b6e10bb5a73867a19d85ac3b4370b4f4debd3cf",
+                    "ledger_entry_sha256": "bcf6ded071ee5c2b54b51dfe40c0a5be271c82767ba9b039984614f0f09edca2",
+                    "run_ref": "session:local .ai-review/workflow-controller-uf1/feedback/REVIEW_FEEDBACK.md",
+                    "reviewer_model": "anthropic/claude-opus-5-5"
+                  },
+                  "manual": {
+                    "bundle_id": "b65abc56b44a39472ba40b5ce2cac9bf67cd0a1cc1815d824b29ea29d9295933",
+                    "verdict": "APPROVE",
+                    "round": 6,
+                    "verdict_sha256": "c0533a7d42e2ef887a78bb03a53a3d0bd152bc9cd5ceef82f0b9a87ce79456ff",
+                    "ledger_entry_sha256": "3a570a937f65e9e9fa51669f890307e9b3eb5717da75fcb4d1a4b4994eb38e86",
+                    "run_ref": "codex:20261119T190228Z-83fa68f6",
+                    "reviewer_model": "openai/gpt-6.1-sol"
+                  }
+                },
+                "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+              },
+              "floor_digest": null,
+              "trust": {
+                "review_verdicts": "orchestrator"
+              },
+              "evaluated_at": "2026-11-19T19:06:34Z",
+              "workflow_release": "2.29.3"
+            }
+          },
+          "checkpoints_snapshot": {
+            "CP1": {
+              "status": "COMPLETE",
+              "start_commit": "af24af09ce524e4f3c68d353aee27b32178b64e1"
+            }
+          },
+          "pre_amendment_approval_commit": "af24af09ce524e4f3c68d353aee27b32178b64e1",
+          "resolved_at_plan_revision": null
+        }
+      ],
+      "amendment_base_commit": "fdfe34090960b373706b9c041115eb9981a3991d"
     }
   }
 }

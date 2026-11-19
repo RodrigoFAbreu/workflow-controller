@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-uf1",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -85178,6 +85178,321 @@
         },
         "evaluated_at": "2026-11-19T16:47:24Z",
         "workflow_release": "2.29.3"
+      }
+    },
+    "workflow-controller-uf1": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-uf1",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_UF1_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-uf1-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-uf1-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 6,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "f4c2fa98d621cb09636d5fb4049e89e17118172e",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "b65abc56b44a39472ba40b5ce2cac9bf67cd0a1cc1815d824b29ea29d9295933",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "b65abc56b44a39472ba40b5ce2cac9bf67cd0a1cc1815d824b29ea29d9295933",
+        "approved_review_content_id": "a5e2ee221f4f7886de4598bc7b9076bca6173b941a007dcf69c1a459f18c6db7",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_UF1_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9cae90d1128e7c2c036bd07b135dfeadc697e688"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-uf1-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ed608ef997ae280a7bcdc42687e807bc71a1a2bc"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-uf1-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9440df861f42303a3d8c1d984659b3dd25b7ba18"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-19T19:06:34Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "a5e2ee221f4f7886de4598bc7b9076bca6173b941a007dcf69c1a459f18c6db7",
+            "ledger": {
+              "local": {
+                "bundle_id": "b65abc56b44a39472ba40b5ce2cac9bf67cd0a1cc1815d824b29ea29d9295933",
+                "verdict": "APPROVE",
+                "round": 6,
+                "verdict_sha256": "5df10732af60b1b68c13db819b6e10bb5a73867a19d85ac3b4370b4f4debd3cf",
+                "ledger_entry_sha256": "bcf6ded071ee5c2b54b51dfe40c0a5be271c82767ba9b039984614f0f09edca2",
+                "run_ref": "session:local .ai-review/workflow-controller-uf1/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "b65abc56b44a39472ba40b5ce2cac9bf67cd0a1cc1815d824b29ea29d9295933",
+                "verdict": "APPROVE",
+                "round": 6,
+                "verdict_sha256": "c0533a7d42e2ef887a78bb03a53a3d0bd152bc9cd5ceef82f0b9a87ce79456ff",
+                "ledger_entry_sha256": "3a570a937f65e9e9fa51669f890307e9b3eb5717da75fcb4d1a4b4994eb38e86",
+                "run_ref": "codex:20261119T190228Z-83fa68f6",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-19T19:06:34Z",
+          "workflow_release": "2.29.3"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "a5e2ee221f4f7886de4598bc7b9076bca6173b941a007dcf69c1a459f18c6db7",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "b65abc56b44a39472ba40b5ce2cac9bf67cd0a1cc1815d824b29ea29d9295933",
+          "verdict": "APPROVE",
+          "round": 6,
+          "completed_at": "2026-11-19T19:01:59Z",
+          "verdict_sha256": "5df10732af60b1b68c13db819b6e10bb5a73867a19d85ac3b4370b4f4debd3cf",
+          "run_ref": "session:local .ai-review/workflow-controller-uf1/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "b65abc56b44a39472ba40b5ce2cac9bf67cd0a1cc1815d824b29ea29d9295933",
+          "verdict": "APPROVE",
+          "round": 6,
+          "completed_at": "2026-11-19T19:04:01Z",
+          "verdict_sha256": "c0533a7d42e2ef887a78bb03a53a3d0bd152bc9cd5ceef82f0b9a87ce79456ff",
+          "run_ref": "codex:20261119T190228Z-83fa68f6",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 6,
+          "external": 2
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 22,
+      "last_transition": "2026-11-19T19:06:34Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-19T18:59:40Z",
+        "consumed": {
+          "review_content_id": "7c7afbdf2ba8cba5d17d1554990ab108825b9f460bcea23a11ee110faa46c5cc",
+          "plan_revision": 5,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "a5e2ee221f4f7886de4598bc7b9076bca6173b941a007dcf69c1a459f18c6db7",
+          "plan_revision": 6
+        },
+        "bound": {
+          "review_content_id": "a5e2ee221f4f7886de4598bc7b9076bca6173b941a007dcf69c1a459f18c6db7",
+          "bundle_id": "b65abc56b44a39472ba40b5ce2cac9bf67cd0a1cc1815d824b29ea29d9295933",
+          "plan_revision": 6
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "08dff8270e9161cfa11e7185dc2ea5821839a6e93155aa36b7845a16791894a8",
+        "58694043f22472f197c7ddd51b41dfe43517502dfaf2027b6513779699b8ba6d",
+        "7c7afbdf2ba8cba5d17d1554990ab108825b9f460bcea23a11ee110faa46c5cc",
+        "cf56b28426d15a3edb74b7c3b602d971b9a812e5036cd4e91c2355e0c48dda89",
+        "e4de0dfa0aa0963c380954e9a75425d3e5313a6b937b7706d72122910ac415cf"
+      ],
+      "optional_findings": {
+        "F-a168ee07d040": {
+          "digest": "a168ee07d0407d6f26acf2e5043720701d9ed6cc36c00af64114ea61738cdd9b",
+          "text": "**O1. Same-window resets cannot be lowered.** By `merge_reading`, a provider-side reset that zeroes usage without moving `resets_at` by more than `WINDOW_JITTER_SECONDS` (120 s) leaves the stored higher percent in place. The plan states the rule (What exists, third bullet), but the `docs/common-problems.md` entry (CP3) should say that `--refresh` clears a hold only when the provider reports a new window, so an operator is not surprised when it does not.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "cf56b28426d15a3edb74b7c3b602d971b9a812e5036cd4e91c2355e0c48dda89",
+              "verdict": "REVISE",
+              "at": "2026-11-19T18:39:24Z"
+            }
+          ]
+        },
+        "F-b612e710d8e6": {
+          "digest": "b612e710d8e67ea58fb35beb636a0f16034669ab008b782fd75b8d7d663e6afb",
+          "text": "**O1. The Codex probe's lowest declared effort is `high`.** `controller/harness.py` declares only `high` and `xhigh` for Codex (the contract-tested levels), so \"the lowest reasoning effort that table declares\" is `high`, not a low one. For a one-word prompt the cost is still small, but D2 or the CP3 page should name the value so that \"cheap\" is not read as a low effort.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "e4de0dfa0aa0963c380954e9a75425d3e5313a6b937b7706d72122910ac415cf",
+              "verdict": "REVISE",
+              "at": "2026-11-19T18:44:06Z"
+            }
+          ]
+        },
+        "F-0262de942f9c": {
+          "digest": "0262de942f9c1786c94c258187f0c26a336b0c9d360f9beea25c2e79a0bda58b",
+          "text": "**O2. Run the live check before the view is built.** The CP3 live check is the first time the design meets the installed builds. It checks that `--tools \"\"` and `--max-turns 1` are accepted (`--max-turns` is not in `claude --help` for 2.1.318), that a `rate_limit_event` is emitted, and that a Codex rollout carrying `rate_limits` is written. If one of these fails, CP1's argv and CP2's view change after the fact. Running the same check at the end of CP1, and recording it on the item page in CP3, finds this one checkpoint earlier.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "e4de0dfa0aa0963c380954e9a75425d3e5313a6b937b7706d72122910ac415cf",
+              "verdict": "REVISE",
+              "at": "2026-11-19T18:44:06Z"
+            }
+          ]
+        },
+        "F-c18c69df6af3": {
+          "digest": "c18c69df6af3002bcf9d0d719e365b42495e84f25824e104fe5302628d29eb02",
+          "text": "**O1. A killed `usage --refresh` leaves a credential copy behind.** D2 and D6 say the probe's layout is \"removed in every case\". That holds for exceptions and timeouts, but not for a SIGKILL or a power loss during the up to 120 s probe. In that case `<runtime>/usage-probe/<job id>/` keeps a 0600 copy of the operator's Codex `auth.json` or Claude `.credentials.json`, and no existing sweep knows the new area. Removing any stale `usage-probe/*` layout at the start of the next `refresh` (under the harness's credential lock, so a running probe's layout is not taken) would close this. The page could say so.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 3,
+              "review_content_id": "08dff8270e9161cfa11e7185dc2ea5821839a6e93155aa36b7845a16791894a8",
+              "verdict": "REVISE",
+              "at": "2026-11-19T18:48:00Z"
+            }
+          ]
+        },
+        "F-91655a29b49f": {
+          "digest": "91655a29b49f0e5e0281e833f7fc86ec3eace7c152c7dcb2cdcc4bd78bc1a06a",
+          "text": "**O1. Update the `usage` row of the command table.** `docs/guide/commands.md:26` says `usage` \"writes only the shared usage record, its event file and the accounting mark of a job record a crash left unaccounted\". With `--refresh` it also writes the probe layout under `<runtime>/usage-probe/` and may copy a refreshed credential back into an operator home (D6). CP3 documents the option in the `usage` section, and the summary row should name these writes too.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "58694043f22472f197c7ddd51b41dfe43517502dfaf2027b6513779699b8ba6d",
+              "verdict": "REVISE",
+              "at": "2026-11-19T18:52:20Z"
+            }
+          ]
+        },
+        "F-2291f1f5c5a4": {
+          "digest": "2291f1f5c5a46104f9d61e04acdd5aa2c55f9ec2f0fc5fe5584f12cd5bc8703c",
+          "text": "**O2. \"The cheapest model ... read from the table\" needs a rule.** `controller/harness.py:89` declares `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5`, `claude-fable-5-1`, `opus`, `sonnet` and `haiku` with no cost order, so the code cannot derive \"cheapest\" from the table. D2 could say that the probe names `haiku` (and `gpt-6.1-sol`) itself and asserts that each is a declared model of its adapter, with `efforts[0]` as the lowest effort. A test of that assertion would notice when the table drops the name.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 4,
+              "review_content_id": "58694043f22472f197c7ddd51b41dfe43517502dfaf2027b6513779699b8ba6d",
+              "verdict": "REVISE",
+              "at": "2026-11-19T18:52:20Z"
+            }
+          ]
+        },
+        "F-d43ae3807495": {
+          "digest": "d43ae380749568c9b4ea71d306b8518c5cc1a2b4b66a7348101a49791b0f0f77",
+          "text": "**O1. Check at import or at call time.** D2 says `usage_probe.py` \"asserts at import\" that each named model is declared. `controller.cli` imports the module, so a table change that drops `haiku` would break every `workflow-controller` command, not only `usage --refresh`. CP1's test catches this before a release either way. Doing the same check at the start of `refresh` (a `failed` outcome naming the cause) would keep the rest of the CLI working. The implementer can choose; whichever is chosen should be stated.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "7c7afbdf2ba8cba5d17d1554990ab108825b9f460bcea23a11ee110faa46c5cc",
+              "verdict": "APPROVE",
+              "at": "2026-11-19T18:55:45Z"
+            }
+          ]
+        },
+        "F-81b460dd55dc": {
+          "digest": "81b460dd55dc0397e36ee5143ba5bf3d0dca36b50503313e254e98493e1c8753",
+          "text": "**O2. A clause in D2 is out of place.** In D2's first paragraph, \"and a fixed 120-second timeout\" now follows the new sentence about the import assertion, so it reads as part of that sentence. It belongs with the model and the effort, as it did in revision 4. This is an editing fix with no change in meaning.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "7c7afbdf2ba8cba5d17d1554990ab108825b9f460bcea23a11ee110faa46c5cc",
+              "verdict": "APPROVE",
+              "at": "2026-11-19T18:55:45Z"
+            }
+          ]
+        },
+        "F-ad5ece6ec9c8": {
+          "digest": "ad5ece6ec9c80f90c66017ece1ce2e2da6daf92b5d5f0c563542f622a5514540",
+          "text": "**O1. The shared Claude flag test checks the wrong direction for detecting additions.** D2/CP1 assert that each existing probe flag also appears in `review.claude_argv`. Adding a hardening flag to the review argv would still pass. Compare the complete flag sets with explicit allowances for intentional differences if detecting future additions is intended.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 5,
+              "review_content_id": "7c7afbdf2ba8cba5d17d1554990ab108825b9f460bcea23a11ee110faa46c5cc",
+              "verdict": "REVISE",
+              "at": "2026-11-19T18:58:27Z"
+            }
+          ]
+        },
+        "F-2a666524bfb6": {
+          "digest": "2a666524bfb6354b5cec8735740cbf907597da474d2ba6e484da5699937b73f0",
+          "text": "**O1. State the compose argv exactly.** D2 says the Codex compose command carries the exec argv's `--strict-config`, `--disable` and `-c` set, with `-s`, `--skip-git-repo-check`, `--ignore-rules`, `--color` and the prompt left out. The list of flags left out does not name `-C`, but `codex app-server` (0.167.0) has no `-C`/`--cd` option, and `review.KIND_FLAGS[\"app-server\"]` does not accept it either. The plan also does not say whether `--listen stdio://` is pinned. `review.argv(\"app-server\")` passes it and `review.check_argv` requires it, although stdio is the binary's default. `check_probe_argv` pins this argv, so D2 should name `-C` among the flags left out and say whether `--listen stdio://` is in the argv. The compose function also needs the hold-open behaviour of `review.compose_config`: its `run_bounded(..., hold_open_until=_answered)` keeps stdin open until the `config/read` answer arrives, because the server exits at end of input before it answers (`tests/fake_codex.py` copies that behaviour). `_answered` is private and is not in D2's list of imported names, so the probe needs its own copy of it.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 6,
+              "review_content_id": "a5e2ee221f4f7886de4598bc7b9076bca6173b941a007dcf69c1a459f18c6db7",
+              "verdict": "APPROVE",
+              "at": "2026-11-19T19:01:59Z"
+            }
+          ]
+        }
       }
     }
   }

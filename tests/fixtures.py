@@ -11,6 +11,7 @@ console script).
 from __future__ import annotations
 
 import atexit
+import collections
 import contextlib
 import copy
 import json
@@ -408,6 +409,49 @@ def git_call_spy():
     with unittest.mock.patch("subprocess.run", spy_run), \
             unittest.mock.patch("subprocess.Popen", SpyPopen):
         yield calls
+
+
+def _classify_process_start(args) -> str:
+    """The kind of one process start: ``git``, ``protocol:<operation>`` for a vendored ``workflow_protocol.py``
+    interpreter run, ``manager`` for a ``workflow-manager`` executable (the stub included), else ``other``."""
+    argv = [str(a) for a in ([args] if isinstance(args, (str, bytes, os.PathLike)) else args)]
+    if not argv:
+        return "other"
+    program = os.path.basename(argv[0])
+    if program == "git":
+        return "git"
+    if program.startswith("workflow-manager"):
+        return "manager"
+    for index, part in enumerate(argv[1:], start=1):
+        if os.path.basename(part) == "workflow_protocol.py":
+            # The global options (``--protocol-major N --repo-root R``) come first; the operation is the first word
+            # that is neither an option nor an option's value.
+            rest, position = argv[index + 1:], 0
+            while position < len(rest) and rest[position].startswith("--"):
+                position += 2
+            operation = rest[position] if position < len(rest) else "?"
+            return f"protocol:{operation}"
+    return "other"
+
+
+@contextlib.contextmanager
+def count_process_starts():
+    """Count every process the test process starts while the block runs, by kind (the ``Counter`` yielded):
+    ``git``, ``protocol:<operation>``, ``manager`` and ``other``. It hooks ``subprocess.Popen.__init__``, which
+    ``subprocess.run`` and ``check_output`` also go through, lets every start through unchanged and restores the
+    original on exit, even on an error. A start from a thread counts; blocks nest and each sees its own starts."""
+    counts: collections.Counter = collections.Counter()
+    real_init = subprocess.Popen.__init__
+
+    def counting_init(self, args, *a, **kw):
+        counts[_classify_process_start(args)] += 1
+        return real_init(self, args, *a, **kw)
+
+    subprocess.Popen.__init__ = counting_init
+    try:
+        yield counts
+    finally:
+        subprocess.Popen.__init__ = real_init
 
 
 @contextlib.contextmanager

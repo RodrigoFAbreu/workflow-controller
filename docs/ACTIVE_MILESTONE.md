@@ -1,6 +1,12 @@
 # Active Milestone
 
-## Latest milestone (CI2e)
+## Latest milestone (CI2f)
+
+**In progress (`IMPLEMENTING`).** Plan `docs/ai-workflow/CONTROLLER_CI2F_PLAN.md` (revision 2), four checkpoints; the lifecycle drivers in the tests ask the Workflow for fewer things per step (production queries are unchanged).
+
+- **CP1 complete (verified state).** `fixtures.count_process_starts()` (D3) hooks `subprocess.Popen.__init__`, counts each start by kind (`git`, `protocol:<operation>` with the global options skipped, `manager`, `other`), lets every start through and restores the hook on exit and on error. `tests/test_step_cost.py` adds `CounterTest` (a git call, interpreter runs by operation, the options before the operation, a stub manager run, another program, restoration, pass-through, nesting, a thread). Baseline process starts of the driver modules, whole modules under the counter (starts per module: git / protocol / manager / other; wall time under the counter): `test_protocol_lifecycle` 9223 / 1287 / 408 / 186 (243 s); `test_protocol_job` 10567 / 1360 / 468 / 195 (243 s); `test_protocol_outcome` 4077 / 464 / 148 / 92 (68 s); `test_review_round_lifecycle` 1940 / 270 / 72 / 51 (42 s); `test_functional_lifecycle` 9477 / 1318 / 314 / 162 (231 s); `test_functional_codex_route` 1832 / 238 / 60 / 30 (46 s). Verified with `tests.test_step_cost`, `tests.test_package_structure` and `tests.test_write_containment` (passing).
+
+## Previous milestone (CI2e)
 
 **Complete: accepted by policy (`MILESTONE_COMPLETE`).** Accepted after the functional review passed (PR #379, checks green at the approved head). Plan `docs/ai-workflow/CONTROLLER_CI2E_PLAN.md` (revision 3), four checkpoints; it replaces the static repo-reach scan with a runtime check (the shards run with the documentation set removed).
 

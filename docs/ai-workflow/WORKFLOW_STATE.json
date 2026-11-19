@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-ci2f",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -83931,6 +83931,261 @@
         },
         "evaluated_at": "2026-11-18T22:33:37Z",
         "workflow_release": "2.29.3"
+      }
+    },
+    "workflow-controller-ci2f": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-ci2f",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CI2F_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-ci2f-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci2f-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 2,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "55ad7ffda7e8be1dba378ac97bb53b82ba750157",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "b0bc7e87825c0f5f3352ca176202eb1efad5459a1b2f829455b6ee08046e6c64",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "b0bc7e87825c0f5f3352ca176202eb1efad5459a1b2f829455b6ee08046e6c64",
+        "approved_review_content_id": "76147486b4540a484a776854553dc407841052d4e56dc5ce13017707760adeff",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CI2F_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "49298a210fd33e9252a377d567c1210020b18fbc"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-ci2f-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b7e4af75f8e51dd7b9284b5e1bab7883d9b0741c"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-ci2f-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "b37bfc937693866b13d658d5cd11dbb1b467b447"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-19T09:28:04Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "76147486b4540a484a776854553dc407841052d4e56dc5ce13017707760adeff",
+            "ledger": {
+              "local": {
+                "bundle_id": "b0bc7e87825c0f5f3352ca176202eb1efad5459a1b2f829455b6ee08046e6c64",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "457df1eae7575d72ef280beabe8237aa547bc60178af9ad98d80468e2c8f5b1b",
+                "ledger_entry_sha256": "b8170b0b280713143d124819881a3ccb13c9cf8ea6f3efcf2ac2e29311d07a32",
+                "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-ci2f/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "b0bc7e87825c0f5f3352ca176202eb1efad5459a1b2f829455b6ee08046e6c64",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "c602683dad15e9edb57427731a594ece2440dd4835878bfc0179ca4a72b20f0a",
+                "ledger_entry_sha256": "6387907ff8e3b6d6bc4d01fd120d760ec4c852b91948a6c40ddfa113af104bbd",
+                "run_ref": "codex:20261119T092319Z-3252f83f",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-19T09:28:04Z",
+          "workflow_release": "2.29.3"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "76147486b4540a484a776854553dc407841052d4e56dc5ce13017707760adeff",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "b0bc7e87825c0f5f3352ca176202eb1efad5459a1b2f829455b6ee08046e6c64",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-19T00:48:47Z",
+          "verdict_sha256": "457df1eae7575d72ef280beabe8237aa547bc60178af9ad98d80468e2c8f5b1b",
+          "run_ref": "session:local /home/rodrigo/Workspace/workflow-controller/.ai-review/workflow-controller-ci2f/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "b0bc7e87825c0f5f3352ca176202eb1efad5459a1b2f829455b6ee08046e6c64",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-19T09:25:40Z",
+          "verdict_sha256": "c602683dad15e9edb57427731a594ece2440dd4835878bfc0179ca4a72b20f0a",
+          "run_ref": "codex:20261119T092319Z-3252f83f",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 2,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 9,
+      "last_transition": "2026-11-19T09:28:04Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-19T00:46:17Z",
+        "consumed": {
+          "review_content_id": "88d4bfb483848fcdedda2adafec16d9629bc974fdecdf2fa0123a547d6fc2cd7",
+          "plan_revision": 1,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "76147486b4540a484a776854553dc407841052d4e56dc5ce13017707760adeff",
+          "plan_revision": 2
+        },
+        "bound": {
+          "review_content_id": "76147486b4540a484a776854553dc407841052d4e56dc5ce13017707760adeff",
+          "bundle_id": "b0bc7e87825c0f5f3352ca176202eb1efad5459a1b2f829455b6ee08046e6c64",
+          "plan_revision": 2
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "88d4bfb483848fcdedda2adafec16d9629bc974fdecdf2fa0123a547d6fc2cd7"
+      ],
+      "optional_findings": {
+        "F-ce283bc1bbb1": {
+          "digest": "ce283bc1bbb114f819112ade68dd52ddaa71560ea3ae43d70252667747f0649d",
+          "text": "**O1. D1 does not say what happens to `rows` when a step raises.** Today the row is appended before `execute_step`, so a step that raises still records its row. Two `TesterLifecycle` tests run `life.step()` under `assertRaises` (`tests/test_protocol_job.py:1205`, `:1243`). D1's \"append that row after the step\" should say whether the append happens in a `finally` (keeping today's behaviour) or is skipped, and `DecidedRowTest` should pin that choice.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "88d4bfb483848fcdedda2adafec16d9629bc974fdecdf2fa0123a547d6fc2cd7",
+              "verdict": "REVISE",
+              "at": "2026-11-19T00:46:00Z"
+            }
+          ]
+        },
+        "F-8d1abfde43f8": {
+          "digest": "8d1abfde43f8958486941bfdacf91f47dfc356e41913f913039cf200c5f316bb",
+          "text": "**O2. D2 states the cache key's completeness and the sharing safety too strongly.** `inspect` also depends on things outside the key: the stub's executable bit (`shutil.which` in `_resolve_manager_bin`), and the target's Git configuration and hook files, which `_git_isolation` refuses on before `describe` runs. `ManagedRepository` is frozen, but its `manifest`, `verify`, `status` and `script_digests` are mutable dicts (no current reader mutates them). No driver test changes these things today, so the cache is correct in practice. Still, D2 should state them as the cache's assumptions, or add the stub's mode to the key, rather than claim \"nothing else it consults changes\".",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "88d4bfb483848fcdedda2adafec16d9629bc974fdecdf2fa0123a547d6fc2cd7",
+              "verdict": "REVISE",
+              "at": "2026-11-19T00:46:00Z"
+            }
+          ]
+        },
+        "F-139ddded34b0": {
+          "digest": "139ddded34b0fedc953d7fe9c5714efeebe04c198dc7881c21a688a33a17619e",
+          "text": "**O1. D1's \"first call without `expect_state_identity`\" is a no-item query when the step's target is `NoWorkItemYet`.** For that target `protocol_decision.decide` calls `protocol.next_action(root, None)` (`controller/protocol_decision.py:179-181`), and its row (a `plan.start` row) is not the one today's direct `next_action(root, WID)` records for a completed item (disposition `complete`). No row-recording driver steps past `MILESTONE_COMPLETE` today: the only such step is `ProtocolModeLifecycleTest` (`tests/test_protocol_lifecycle.py:484`), whose `Lifecycle` records no rows. So nothing breaks now. D1 should still say what the spy records in that case, or match only a call whose work item is the driver's `WID` and use the direct-call fallback otherwise.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "76147486b4540a484a776854553dc407841052d4e56dc5ce13017707760adeff",
+              "verdict": "APPROVE",
+              "at": "2026-11-19T00:48:47Z"
+            }
+          ]
+        },
+        "F-cf8aadc3ebb6": {
+          "digest": "cf8aadc3ebb614308b3adb70c213ced57662d1a30b08b89234f8e48e73591b3a",
+          "text": "**O2. The direct-call fallback in the `finally` can hide the step's own exception.** When a step raises before its decision and the fallback `next_action` then raises too (for example under a test's patched `protocol` function), the second exception replaces the first. Today the direct call runs before the step, so this cannot happen. Run the fallback only when the step returned, or keep the original exception when the fallback fails.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "76147486b4540a484a776854553dc407841052d4e56dc5ce13017707760adeff",
+              "verdict": "APPROVE",
+              "at": "2026-11-19T00:48:47Z"
+            }
+          ]
+        },
+        "F-1a0592e42aff": {
+          "digest": "1a0592e42aff7d0c3cb909cab2b74f8219ee606b5d4944c1a782a71bd178a9a4",
+          "text": "**O3. CP1 still records the baseline for \"the five drivers\", but D1 now names six sites.** These are five driver classes plus the inline `TheFaultStopsSandboxTest` site. CP4's before-and-after counts should name the same set CP1 measures.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "76147486b4540a484a776854553dc407841052d4e56dc5ce13017707760adeff",
+              "verdict": "APPROVE",
+              "at": "2026-11-19T00:48:47Z"
+            }
+          ]
+        },
+        "F-b25723a7cceb": {
+          "digest": "b25723a7cceb72ee73eab02a2acad23ee3b2efe0431453974dd9abc7265529df",
+          "text": "D1 could restrict capture to the driver’s work item. `protocol_decision.decide` queries with `work_item=None` for `NoWorkItemYet`, which differs from the existing explicit-item row query. Current row-recording drivers do not reach that case, so this is future hardening.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "76147486b4540a484a776854553dc407841052d4e56dc5ce13017707760adeff",
+              "verdict": "APPROVE",
+              "at": "2026-11-19T09:25:40Z"
+            }
+          ]
+        }
       }
     }
   }

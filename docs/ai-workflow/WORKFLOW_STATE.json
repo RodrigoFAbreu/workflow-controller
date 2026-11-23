@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-rr1",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -86083,6 +86083,240 @@
         },
         "evaluated_at": "2026-11-19T22:35:03Z",
         "workflow_release": "2.29.3"
+      }
+    },
+    "workflow-controller-rr1": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-rr1",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_RR1_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-rr1-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-rr1-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 1,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "58b9698f8388cd67d83dde1a25167255f4877b25",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "01e4d4402d69ed8c2d302321d7dd3088390ef22503e1e27c26e629833de569ea",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "01e4d4402d69ed8c2d302321d7dd3088390ef22503e1e27c26e629833de569ea",
+        "approved_review_content_id": "604f21d2764d6207f5e63a48e6f30d2b9620fd51544983dd7f5a7530df48a2d8",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_RR1_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "ff0117ab4f9571a01462374085347aae9acfad73"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-rr1-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "da1d06d2b5c3ea908440d60de483e02e1d8be71f"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-rr1-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "07ed6941bb479faefae8348c0e01319078c14e9b"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-23T18:27:34Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "604f21d2764d6207f5e63a48e6f30d2b9620fd51544983dd7f5a7530df48a2d8",
+            "ledger": {
+              "local": {
+                "bundle_id": "01e4d4402d69ed8c2d302321d7dd3088390ef22503e1e27c26e629833de569ea",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "3cd46e8a8e4b7b8279aae4fd7c906709533f465dc885bad7d2bc479be3c8392b",
+                "ledger_entry_sha256": "c15d194270f96832f9083c42e86b8cee99c6f1244cf3b10e9acac7dff0f841d5",
+                "run_ref": "session:local .ai-review/workflow-controller-rr1/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "01e4d4402d69ed8c2d302321d7dd3088390ef22503e1e27c26e629833de569ea",
+                "verdict": "APPROVE",
+                "round": 1,
+                "verdict_sha256": "588e9be6fb74db3eb6b95cde457006e98f928308c0eaa602e8dd198c43abbb7f",
+                "ledger_entry_sha256": "99f5de6d31664c42be0024c62f63b9d969872eeeb04071913f028a1dee6cb014",
+                "run_ref": "codex:20261123T182413Z-552aaca3",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-23T18:27:34Z",
+          "workflow_release": "2.29.3"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "604f21d2764d6207f5e63a48e6f30d2b9620fd51544983dd7f5a7530df48a2d8",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "01e4d4402d69ed8c2d302321d7dd3088390ef22503e1e27c26e629833de569ea",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-23T18:23:43Z",
+          "verdict_sha256": "3cd46e8a8e4b7b8279aae4fd7c906709533f465dc885bad7d2bc479be3c8392b",
+          "run_ref": "session:local .ai-review/workflow-controller-rr1/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "01e4d4402d69ed8c2d302321d7dd3088390ef22503e1e27c26e629833de569ea",
+          "verdict": "APPROVE",
+          "round": 1,
+          "completed_at": "2026-11-23T18:26:12Z",
+          "verdict_sha256": "588e9be6fb74db3eb6b95cde457006e98f928308c0eaa602e8dd198c43abbb7f",
+          "run_ref": "codex:20261123T182413Z-552aaca3",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 1,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 6,
+      "last_transition": "2026-11-23T18:27:34Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-23T18:20:26Z",
+        "consumed": null,
+        "published": {
+          "review_content_id": "604f21d2764d6207f5e63a48e6f30d2b9620fd51544983dd7f5a7530df48a2d8",
+          "plan_revision": 1
+        },
+        "bound": {
+          "review_content_id": "604f21d2764d6207f5e63a48e6f30d2b9620fd51544983dd7f5a7530df48a2d8",
+          "bundle_id": "01e4d4402d69ed8c2d302321d7dd3088390ef22503e1e27c26e629833de569ea",
+          "plan_revision": 1
+        }
+      },
+      "optional_findings": {
+        "F-bfd321f297bf": {
+          "digest": "bfd321f297bfb36fb0e20b0088db4b8ee24e4941e38087ff9fe1b7814fe930b7",
+          "text": "**O1 (accuracy of \"What exists\").** The plan says `gh release create` makes the tag and the release in one call. That is not true of this repository's own transaction. `release_txn.publish` creates and pushes the tag (`gitrepo.push_tag`), checks it with `remote_tag_commit` (step 3), and only then calls `GhForge.create_release`, which passes `--verify-tag` (`controller/forge.py:497-502`). For a release this transaction published, a release-without-tag read therefore comes from `classify`'s read order (`ls-remote` at `release_txn.py:470`, then `is_ancestor`, `_range_bump` and the base's `view_release`, and only then the tag's `view_release`), or from replica lag on GitHub's side. The cause may differ for a consumer repository whose own workflow runs `gh release create` without `--verify-tag`. Either way D1's whole-function re-read fixes it. But CP2 should not copy \"one call\" onto the pages as the cause: describe it as the tag read being older than the release read.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "604f21d2764d6207f5e63a48e6f30d2b9620fd51544983dd7f5a7530df48a2d8",
+              "verdict": "APPROVE",
+              "at": "2026-11-23T18:23:43Z"
+            }
+          ]
+        },
+        "F-8227b7f1e40b": {
+          "digest": "8227b7f1e40bdf5e24f95ebae6404d6b391f37a80bfea8b4314e027232205a23",
+          "text": "**O2 (a cheaper complement, not a replacement).** For the read-order cause, reading the tag's release before `ls-remote` would close the window with no sleep, because a published release implies a pushed tag here. This does not cover replica lag, so the bounded retry is still the right single mechanism. Mention it only if the implementer finds it free. Otherwise leave it out.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "604f21d2764d6207f5e63a48e6f30d2b9620fd51544983dd7f5a7530df48a2d8",
+              "verdict": "APPROVE",
+              "at": "2026-11-23T18:23:43Z"
+            }
+          ]
+        },
+        "F-1bf0f77b5faa": {
+          "digest": "1bf0f77b5faa10b62f62f049c74f95654ce04be1f3df91edc2516fffbc4f7df2",
+          "text": "**O3 (the release-wait sleep is not `poll_waitable`'s sleep).** D3 builds `rctx` from the module attribute `milestone_branch._sleep`, not from the `sleep=` argument `waiting_preflight`/`poll_waitable` accept. A caller or test that injects `sleep=` (as `WaitingPreflightTest` does with its `_Clock`) without also patching `_sleep` gets real `time.sleep` for the retry, and the retry's seconds do not advance that fake clock. This is correct for the planned tests, which patch `_sleep`. Say so in `_release_wait`'s docstring so the next test author does not expect the `sleep=` argument to cover it. A retry can also overrun the `wait_seconds` budget by up to 60 s within one `again()`. That is acceptable, but worth a phrase on the page.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "604f21d2764d6207f5e63a48e6f30d2b9620fd51544983dd7f5a7530df48a2d8",
+              "verdict": "APPROVE",
+              "at": "2026-11-23T18:23:43Z"
+            }
+          ]
+        },
+        "F-f6b2f3f0f552": {
+          "digest": "f6b2f3f0f5520da6ecacc72cbf55836ef16f387a2cd4b0d6ee0e11d14c6ad0ba",
+          "text": "**O4 (R2's test evidence).** R2 relies on the existing collision tests in `tests/test_release_txn.py` and `tests/test_release_tools.py`, which would still pass, only slower, if `tools/release.py`'s path retried by mistake. Consider having one `release_txn` test assert that the default (`tag_retry` false) calls the injected `sleep` zero times on a collision. The plan's \"`tag_retry` false never sleeps\" bullet covers this if it uses a recording sleep, so make sure it does.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "604f21d2764d6207f5e63a48e6f30d2b9620fd51544983dd7f5a7530df48a2d8",
+              "verdict": "APPROVE",
+              "at": "2026-11-23T18:23:43Z"
+            }
+          ]
+        },
+        "F-3103fb06df25": {
+          "digest": "3103fb06df25dc3287dbf661cceb715d4692621f782fd56d3c96649eb297ed5b",
+          "text": "Clarify the publication explanation in `docs/ai-workflow/CONTROLLER_RR1_PLAN.md:20`: this repository’s `publish` pushes and verifies the tag before `GhForge.create_release` invokes `gh release create --verify-tag`. Describe the race as an older tag read followed by a newer release read, or visibility lag. This clarification does not affect the proposed retry’s correctness.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "604f21d2764d6207f5e63a48e6f30d2b9620fd51544983dd7f5a7530df48a2d8",
+              "verdict": "APPROVE",
+              "at": "2026-11-23T18:26:12Z"
+            }
+          ]
+        }
       }
     }
   }

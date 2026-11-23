@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-rr1",
+  "requirements": {
+    "R1": {
+      "description": "A tag that becomes visible within the bound after the release is never reported as a collision by the release wait, and one that never does still is",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "CI and release-tools still fail a collision at once",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R3": {
+      "description": "The pages and the item record state the retry and its bound",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    }
+  }
+}

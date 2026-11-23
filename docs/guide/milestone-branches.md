@@ -540,6 +540,16 @@ asset, runs a policy command, tags, publishes or re-runs anything):
   run for the squash commit itself was ever reported; a later trunk
   run still working keeps it `release_pending` rather than
   `release_failed`;
+- `COLLISION_RELEASE_WITHOUT_TAG` (a release named for the version exists
+  but its tag is not visible): `gh release create` makes the tag and the
+  release in one call, so a read that sees the release before the tag is
+  a race, not a contradiction. Each of the wait's classifications
+  therefore sleeps and reads again (tags fetched and read, release
+  viewed) up to five times, after 2, 4, 8, 16 and 30 seconds (60 seconds
+  in all, `TAG_VISIBILITY_DELAYS` in `controller/release_txn.py`),
+  stopping at the first other state. A tag that never appears is still
+  `release_failed` with the collision detail, now after about a minute.
+  CI and `release-tools` do not retry and fail a collision at once;
 - any other classification: `release_failed` with its detail.
 
 Runs of other workflows (such as `Workflow conformance`) are never read.

@@ -2,7 +2,7 @@
 
 Item id: `workflow-controller-rr1`.
 
-Not yet planned. Owner request 2026-11-19. Priority: high. Complexity: low.
+Status: implemented on the milestone branch (two checkpoints); plan: [CONTROLLER_RR1_PLAN.md](../ai-workflow/CONTROLLER_RR1_PLAN.md) (revision 1). The release wait re-reads a `COLLISION_RELEASE_WITHOUT_TAG` classification up to five times, after 2, 4, 8, 16 and 30 seconds (60 seconds, `TAG_VISIBILITY_DELAYS`), before accepting it; CI and `release-tools` still fail at once. The item stays `next` until acceptance. Owner request 2026-11-19. Priority: high. Complexity: low.
 
 ## Why
 

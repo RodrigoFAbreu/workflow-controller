@@ -819,7 +819,7 @@ The state then follows from that version, the tags and the releases:
 | `ABANDONED_VERSION` | the version's tag is acknowledged in `abandoned_tags` (today only `v1.1.0`) | success, nothing published |
 | `BASELINE_UNRELEASED` | a lower tag in the history has no published release and is not acknowledged | fail, naming every such tag ([below](#an-unreleased-tag-below-a-new-version-baseline_unreleased)) |
 | `INVALID_TRANSITION` | under `version_change`, a new version that is not higher than the highest tag in the history | fail |
-| `COLLISION_TAG_ELSEWHERE`, `COLLISION_RELEASE_WITHOUT_TAG`, `RELEASE_MISMATCH`, `ABANDONED_TAG_INCONSISTENT` | the tags, releases and policy contradict one another | fail, for a human |
+| `COLLISION_TAG_ELSEWHERE`, `COLLISION_RELEASE_WITHOUT_TAG`, `RELEASE_MISMATCH`, `ABANDONED_TAG_INCONSISTENT` | the tags, releases and policy contradict one another | fail, for a human. `COLLISION_RELEASE_WITHOUT_TAG` fails at once here; the Controller's [release wait](milestone-branches.md#auto-merge-and-the-release-wait) re-reads it for about a minute first, in case the tag is not yet visible |
 
 For `RELEASE_DUE`/`RESUME`, the `build` job checks out exactly the
 target commit and runs the policy's build and verify commands (for this

@@ -86094,7 +86094,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-rr1-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-rr1-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 1,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -86234,12 +86234,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
+          "local": 1,
           "external": 0
         }
       },
-      "state_revision": 11,
-      "last_transition": "2026-11-23T18:49:07Z",
+      "state_revision": 12,
+      "last_transition": "2026-11-23T18:52:34Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -86323,6 +86323,20 @@
               "review_content_id": "604f21d2764d6207f5e63a48e6f30d2b9620fd51544983dd7f5a7530df48a2d8",
               "verdict": "APPROVE",
               "at": "2026-11-23T18:26:12Z"
+            }
+          ]
+        },
+        "F-4ff7ac5399ec": {
+          "digest": "4ff7ac5399ec7c84c736ca1e5bdf63815abe269062192b8cb2807de9c03b1273",
+          "text": "**O1 (`common-problems.md` slightly overclaims).** The new entry says that after the wait \"a tag that was only slow to become visible is no longer the cause: the collision is real\". A tag that takes more than about 60 seconds to become visible would still end there. \"is unlikely to be the cause\" states the bound honestly, and the entry's own advice to look at the tag and the release by hand, then run the Controller again, already covers the rest.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "56ee6230ff5837bc81f46d3e197ccec050ab17e58615f841d28b69a8ffdfdc27",
+              "verdict": "REVISE",
+              "at": "2026-11-23T18:52:34Z"
             }
           ]
         }

@@ -1,6 +1,12 @@
 # Active Milestone
 
-## Latest milestone (UF1)
+## Latest milestone (RR1)
+
+**In progress: implementing.** Plan `docs/ai-workflow/CONTROLLER_RR1_PLAN.md` (revision 1), two checkpoints; the Controller's release wait re-reads before it accepts `COLLISION_RELEASE_WITHOUT_TAG`.
+
+- **CP1 complete (verified state).** `release_txn.classify` gains `tag_retry` (default false) and `TAG_VISIBILITY_DELAYS = (2.0, 4.0, 8.0, 16.0, 30.0)` (D1, D2): on a collision it sleeps and runs the whole former body (now `_classify_once`) again once per delay, stopping at the first other state, and returns the last state unchanged. `ReleaseContext` gains `sleep` (D3); `milestone_branch` builds `rctx` with `sleep=_sleep` (its module patch point, not `waiting_preflight`'s `sleep=` argument) and passes `tag_retry=True` at all three classifications of `_decide_release` (D4). CI and `release-tools` keep the default and fail a collision at once. `tests/test_release_txn.py` adds five retry cases (tag on the second read, on the last read, never, no sleep without a collision, no sleep with `tag_retry` false); `tests/test_pull_request_lifecycle.py` adds the late-tag release wait (settles) and the never-tag release wait (`release_failed` with the collision) and updates the keyword assertion of `test_classify_runs_with_the_preflights_git_runner`. Verified with `tests.test_release_txn`, `tests.test_release_tools`, `tests.test_pull_request_lifecycle`, `tests.test_package_structure` and `tests.test_write_containment` (passing).
+
+## Previous milestone (UF1)
 
 **Complete: accepted by policy (`MILESTONE_COMPLETE`).** Accepted after the functional review passed (PR #386, checks green at the approved head). Plan `docs/ai-workflow/CONTROLLER_UF1_PLAN.md` (revision 8), three checkpoints; `workflow-controller usage --refresh` re-reads the Codex and the Claude limit by one cheap probe each.
 

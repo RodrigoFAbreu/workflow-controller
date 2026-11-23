@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-uf1",
+  "requirements": {
+    "R1": {
+      "description": "usage --refresh re-reads both the Codex and the Claude limit by one cheap probe each and records the readings",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    },
+    "R2": {
+      "description": "A failing probe changes nothing, is named with its cause, and does not skip the other provider",
+      "checkpoint_ids": [
+        "CP1",
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "The output shows what was read and when, including a stored reading whose window has reset",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R4": {
+      "description": "The option is documented where operators look, with the call a watchdog makes before it acts on a hold",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    }
+  }
+}

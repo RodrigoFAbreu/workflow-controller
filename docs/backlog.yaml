@@ -596,7 +596,7 @@ items:
     detail: docs/items/workflow-controller-fx2.md
   - id: workflow-controller-uf1
     title: "A `usage --refresh` that re-reads both the Codex and the Claude limit"
-    status: next
+    status: done
     order: 102
     depends_on: []
     detail: docs/items/workflow-controller-uf1.md

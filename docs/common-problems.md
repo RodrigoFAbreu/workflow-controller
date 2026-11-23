@@ -290,7 +290,7 @@ Whatever the cause, you can run the head's flows by hand and record one `functio
 
 ## The release wait ended with COLLISION_RELEASE_WITHOUT_TAG
 
-`release_failed` with `COLLISION_RELEASE_WITHOUT_TAG: a release named vX.Y.Z exists without the tag`. The release wait already re-read the classification five times over about a minute (2, 4, 8, 16 and 30 seconds) before giving up, so a tag that was only slow to become visible is no longer the cause: the collision is real. Look at the tag and the release on the forge (`git ls-remote --tags origin`, `gh release view vX.Y.Z`), and see [Checking a release by hand](guide/ci-and-releases.md#checking-a-release-by-hand). Release wait: [milestone branches](guide/milestone-branches.md#auto-merge-and-the-release-wait). Controllers before the retry stop at once and can report this when the tag appears a moment later; run the Controller again and it classifies the release as done.
+`release_failed` with `COLLISION_RELEASE_WITHOUT_TAG: a release named vX.Y.Z exists without the tag`. The release wait already re-read the classification five times over about a minute (2, 4, 8, 16 and 30 seconds) before giving up, so a tag that was only slow to become visible is unlikely to be the cause. Look at the tag and the release on the forge (`git ls-remote --tags origin`, `gh release view vX.Y.Z`), and see [Checking a release by hand](guide/ci-and-releases.md#checking-a-release-by-hand). Release wait: [milestone branches](guide/milestone-branches.md#auto-merge-and-the-release-wait). Controllers before the retry stop at once and can report this when the tag appears a moment later; run the Controller again and it classifies the release as done.
 
 ## The milestone stopped at a pull request or release gate
 

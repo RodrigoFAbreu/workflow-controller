@@ -25,7 +25,7 @@ import unittest
 import unittest.mock
 from pathlib import Path
 
-from controller import cli, job, observe, usage
+from controller import cli, job, observe, usage, usage_probe
 from tests import fake_claude, fixtures
 
 FIVE, WEEKLY = usage.FIVE_HOUR, usage.WEEKLY
@@ -870,6 +870,143 @@ class AdmitWithoutReservingTest(unittest.TestCase):
             reserved = usage.admit(root, provider="claude", role=None, model=None, repository=None, run_id=None,
                                    limits=usage.Limits(), now=NOW)
             self.assertIsNotNone(reserved.token)
+
+
+class UsageRefreshTest(_UsageCommandCase):
+    """``usage --refresh`` (UF1 CP2, D1, D4, D5): the probes run before the view; the probe module is
+    replaced by a recorder, so no ``claude`` or ``codex`` is started."""
+
+    def fake_refresh(self, outcomes: dict[str, str], reading_percent: float = 42.0):
+        calls: list[list[str]] = []
+
+        def refresh(providers, *, runtime_root, **_kw):
+            providers = list(providers)
+            calls.append(providers)
+            out = {}
+            for provider in providers:
+                outcome = outcomes.get(provider, usage_probe.OUTCOME_OK)
+                if outcome == usage_probe.OUTCOME_OK:
+                    readings = [usage.make_reading(provider, FIVE, reading_percent, NOW + 3600, self.now, "probe")]
+                    usage.record_reading(runtime_root, readings)
+                    out[provider] = usage_probe.ProbeResult(provider, outcome, readings=readings)
+                else:
+                    out[provider] = usage_probe.ProbeResult(provider, outcome, detail=f"{provider} {outcome} cause")
+            return out
+
+        self.enterContext(unittest.mock.patch.object(usage_probe, "refresh", refresh))
+        return calls
+
+    def test_text_names_the_outcome_and_each_window(self) -> None:
+        self.fake_refresh({})
+        code, out, err = self.run_cmd("usage", "--refresh")
+        self.assertEqual(code, cli.EXIT_OK, err)
+        self.assertEqual(out.count("  refresh: ok"), 2)
+        self.assertIn("stored 42%", out)
+        self.assertIn("from probe", out)
+        self.assertIn("weekly: no reading", out)
+
+    def test_json_carries_the_refresh_block_per_provider(self) -> None:
+        self.fake_refresh({})
+        code, out, _err = self.run_cmd("--json", "usage", "--refresh")
+        self.assertEqual(code, cli.EXIT_OK)
+        for provider, view in json.loads(out)["providers"].items():
+            block = view["refresh"]
+            self.assertEqual((block["outcome"], block["read"]), ("ok", [FIVE]), provider)
+            window = block["windows"][FIVE]
+            self.assertEqual((window["percent"], window["source"], window["reset"]), (42.0, "probe", False))
+            self.assertEqual(set(window), {"percent", "resets_at", "resets_at_local", "observed_at", "source", "reset"})
+            self.assertIsNone(block["windows"][WEEKLY])
+
+    def test_each_refused_combination_exits_2_and_probes_nothing(self) -> None:
+        calls = self.fake_refresh({})
+        for extra in (("--check",), ("--wait",), ("--check", "--reserve"), ("--renew", "t"), ("--release", "t"),
+                      ("--stream", "x"), ("--outcome", "ok"), ("--outcome", "not_started")):
+            with self.subTest(extra=extra), contextlib.redirect_stderr(io.StringIO()), \
+                    self.assertRaises(SystemExit) as ctx:
+                cli.main(["--runtime-dir", str(self.runtime_root), "usage", "--refresh", *extra])
+            self.assertEqual(ctx.exception.code, cli.EXIT_USAGE)
+        self.assertEqual(calls, [])
+
+    def test_outcome_ok_without_refresh_or_release_is_accepted_as_before(self) -> None:
+        calls = self.fake_refresh({})
+        code, _out, err = self.run_cmd("usage", "--outcome", "ok")
+        self.assertEqual((code, calls), (cli.EXIT_OK, []), err)
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as ctx:
+            cli.main(["--runtime-dir", str(self.runtime_root), "usage", "--outcome", "not_started"])
+        self.assertEqual(ctx.exception.code, cli.EXIT_USAGE)
+
+    def test_provider_chooses_one_probe_and_all_chooses_both(self) -> None:
+        calls = self.fake_refresh({})
+        self.run_cmd("usage", "--refresh", "--provider", "codex")
+        self.run_cmd("usage", "--refresh", "--provider", "all")
+        self.run_cmd("usage", "--refresh")
+        self.assertEqual(calls, [["codex"], ["claude", "codex"], ["claude", "codex"]])
+
+    def test_a_failed_probe_exits_1_names_the_cause_and_still_prints_the_view(self) -> None:
+        self.fake_refresh({"claude": usage_probe.OUTCOME_TIMED_OUT})
+        self.reading(10, weekly=1)
+        code, out, _err = self.run_cmd("usage")
+        self.assertEqual(code, cli.EXIT_OK)
+        code, out, _err = self.run_cmd("usage", "--refresh")
+        self.assertEqual(code, 1)
+        self.assertIn("refresh: timed_out: claude timed_out cause", out)
+        self.assertIn("refresh: ok", out)
+        self.assertIn("five-hour: 10%", out)  # the view, from the record as it stands
+        code, out, _err = self.run_cmd("--json", "usage", "--refresh")
+        self.assertEqual(code, 1)
+        claude = json.loads(out)["providers"]["claude"]["refresh"]
+        self.assertEqual((claude["outcome"], claude["detail"], claude["read"]),
+                         ("timed_out", "claude timed_out cause", []))
+
+    def test_a_stored_99_whose_window_passed_is_shown_as_reset(self) -> None:
+        self.fake_refresh({"claude": usage_probe.OUTCOME_NO_READING, "codex": usage_probe.OUTCOME_NO_READING})
+        self.reading(99, five_in=-60)
+        code, out, _err = self.run_cmd("--json", "usage", "--refresh", "--provider", "claude")
+        self.assertEqual(code, 1)
+        view = json.loads(out)["providers"]["claude"]
+        window = view["refresh"]["windows"][FIVE]
+        self.assertEqual((window["percent"], window["reset"]), (99.0, True))
+        self.assertEqual(view["windows"][FIVE]["percent"], 0.0)
+        code, text, _err = self.run_cmd("usage", "--refresh", "--provider", "claude")
+        self.assertIn("stored 99%, window already reset", text)
+
+    def test_a_window_that_reset_while_the_probes_ran_is_shown_as_reset(self) -> None:
+        """The view's clock is read after the probes (UF1 review I1): a probe read 99% resetting 10 s
+        after it started and took 20 s, so the final view must show the window reset and 0% effective."""
+
+        def refresh(providers, *, runtime_root, **_kw):
+            readings = [usage.make_reading("claude", FIVE, 99, NOW + 10, self.now, "probe")]
+            usage.record_reading(runtime_root, readings)
+            self.now = NOW + 20  # the probe's duration
+            return {"claude": usage_probe.ProbeResult("claude", usage_probe.OUTCOME_OK, readings=readings)}
+
+        self.enterContext(unittest.mock.patch.object(usage_probe, "refresh", refresh))
+        code, out, err = self.run_cmd("--json", "usage", "--refresh", "--provider", "claude")
+        self.assertEqual(code, cli.EXIT_OK, err)
+        payload = json.loads(out)
+        view = payload["providers"]["claude"]
+        window = view["refresh"]["windows"][FIVE]
+        self.assertEqual((window["percent"], window["reset"]), (99.0, True))
+        self.assertEqual(view["windows"][FIVE]["percent"], 0.0)
+        self.assertEqual(payload["at"], NOW + 20)
+
+    def test_the_documented_codex_check_holds_while_claude_is_clear(self) -> None:
+        """The watchdog recipe in docs/common-problems.md (UF1 review I2): ``--check`` alone asks Claude."""
+        self.reading(10, weekly=10)
+        self.reading(10, weekly=99, provider="codex")
+        code, out, err = self.run_cmd("usage", "--check")
+        self.assertEqual((code, out.strip()), (cli.EXIT_OK, "go"), err)
+        code, _out, err = self.run_cmd("usage", "--check", "--provider", "codex")
+        self.assertEqual(code, cli.EXIT_USAGE_PAUSED, err)
+        self.assertIn("weekly", err)
+
+    def test_usage_without_refresh_starts_no_probe_and_has_no_block(self) -> None:
+        calls = self.fake_refresh({})
+        code, out, _err = self.run_cmd("--json", "usage")
+        self.assertEqual((code, calls), (cli.EXIT_OK, []))
+        for view in json.loads(out)["providers"].values():
+            self.assertNotIn("refresh", view)
+        self.assertNotIn("refresh:", self.run_cmd("usage")[1])
 
 
 if __name__ == "__main__":

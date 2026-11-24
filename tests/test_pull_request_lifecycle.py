@@ -3024,6 +3024,31 @@ class ReleaseWaitTest(_ReleaseWait):
         self.assertEqual(self.record()["release"]["state"], "ALREADY_RELEASED")
         del run_id
 
+    def test_a_tag_that_shows_late_settles_instead_of_failing(self) -> None:
+        a, m, outcome = self.merge()
+        self.publish("v1.0.0")  # the release is visible, the tag is not yet
+        sleeps: list[float] = []
+
+        def sleep(seconds: float) -> None:
+            sleeps.append(seconds)
+            self.tag("v1.0.0", m)
+
+        with mock.patch.object(mb, "_sleep", sleep):
+            outcome = self.preflight()
+        self.assertEqual(sleeps, [release_txn.TAG_VISIBILITY_DELAYS[0]])
+        self.assertEqual(outcome.action, "closed_out")
+        self.assertEqual(self.record()["release"]["state"], "ALREADY_RELEASED")
+        self.assertEqual(self.events_named("release_failed"), [])
+
+    def test_a_tag_that_never_shows_is_a_failed_release_with_the_collision(self) -> None:
+        a, m, outcome = self.merge()
+        self.publish("v1.0.0")
+        sleeps: list[float] = []
+        with mock.patch.object(mb, "_sleep", sleeps.append):
+            outcome = self.preflight()
+        self.assertEqual(sleeps, list(release_txn.TAG_VISIBILITY_DELAYS))
+        self.assertFailed(outcome, "COLLISION_RELEASE_WITHOUT_TAG")
+
     def test_a_failing_classification_and_a_refusal_fail(self) -> None:
         self.tag("v2.0.0", self.t)
         a, m, outcome = self.merge()
@@ -3051,7 +3076,7 @@ class ReleaseWaitTest(_ReleaseWait):
         self.assertTrue(spy.call_args_list)
         for call in spy.call_args_list:
             self.assertIs(call.args[0].git_runner, self.ctx.runner)
-            self.assertEqual(call.kwargs, {"verify_assets": False})
+            self.assertEqual(call.kwargs, {"verify_assets": False, "tag_retry": True})
 
     def test_the_trunk_side_after_a_manual_switch(self) -> None:
         a, m, outcome = self.merge()

@@ -1531,7 +1531,7 @@ def _decide_release(ctx: Context, record: Mapping[str, Any], rctx: release_txn.R
     failure against a covering tag and the trunk tip's run first."""
     m, trunk, remote = record["merge_commit"], record["trunk"], record["repository"]["remote"]
     forge = rctx.forge
-    found = release_txn.classify(rctx, m, verify_assets=False)
+    found = release_txn.classify(rctx, m, verify_assets=False, tag_retry=True)
     settled = _settled(found)
     if settled is not None:
         return settled
@@ -1547,7 +1547,7 @@ def _decide_release(ctx: Context, record: Mapping[str, Any], rctx: release_txn.R
             return _ReleaseOutcome("pending", detail=(f"{found.tag} is not published yet ({found.state}), and the "
                                                       f"{workflow} run(s) for {m} are "
                                                       + (_runs_text(runs) if runs else "not reported yet")))
-        found = release_txn.classify(rctx, m, verify_assets=False)  # it may have published since
+        found = release_txn.classify(rctx, m, verify_assets=False, tag_retry=True)  # it may have published since
         settled = _settled(found)
         if settled is not None:
             return settled
@@ -1585,7 +1585,7 @@ def _decide_release(ctx: Context, record: Mapping[str, Any], rctx: release_txn.R
                                                   f"release covering {m}: "
                                                   + (_runs_text(runs) if runs else "not reported yet")),
                                reruns=failure.reruns)
-    found = release_txn.classify(rctx, m, verify_assets=False)
+    found = release_txn.classify(rctx, m, verify_assets=False, tag_retry=True)
     settled = _settled(found) or _superseded(rctx, release_txn.covering_tag(rctx, m))
     if settled is not None:
         return settled
@@ -1639,7 +1639,7 @@ def _release_wait(ctx: Context, key: str, record: dict) -> dict | Gate:
         outcome = _ReleaseOutcome("settled", {"state": RELEASE_NONE}, "release_settled")
     else:
         rctx = release_txn.ReleaseContext(ctx.repo_root, policy, ctx.forge(record["repository"]["forge_repository"]),
-                                          git_runner=ctx.runner)
+                                          git_runner=ctx.runner, sleep=_sleep)
         try:
             outcome = _decide_release(ctx, record, rctx, workflow)
         except ReleaseTransactionError as exc:

@@ -32,6 +32,7 @@ import os
 import re
 import subprocess
 import tempfile
+import time
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path, PurePosixPath
 
@@ -107,6 +108,11 @@ class ReleaseContext:
     forge: Forge
     git_runner: gitrepo.Runner | None = None
     command_runner: CommandRunner = run_command
+    #: Sleeps between the re-reads of a ``tag_retry`` classification. The
+    #: Controller's release wait passes ``milestone_branch._sleep`` (its one
+    #: patch point), not the ``sleep=`` argument ``waiting_preflight`` takes,
+    #: so a test that injects only that argument still gets a real sleep here.
+    sleep: Callable[[float], None] = time.sleep
 
     @property
     def release(self) -> repo_policy.Release:
@@ -442,8 +448,36 @@ def _highest_tag(release: repo_policy.Release, tags: Mapping[str, tuple[str, str
     return max(candidates, key=lambda name: release.version_key(tags[name][0]), default=None)
 
 
+#: Seconds slept before each re-read of a classification that found a release
+#: without its tag (RR1): five re-reads, 60 seconds in all. A release the
+#: Controller just saw can be newer than the tag read, or the tag not yet
+#: visible; a tag still missing after the last re-read is a real collision.
+TAG_VISIBILITY_DELAYS: tuple[float, ...] = (2.0, 4.0, 8.0, 16.0, 30.0)
+
+
 def classify(ctx: ReleaseContext, commit: str, *, fetch_tags: bool = True,
-             verify_assets: bool = True) -> Classification:
+             verify_assets: bool = True, tag_retry: bool = False) -> Classification:
+    """:func:`_classify_once`, and with ``tag_retry`` (the Controller's release
+    wait only) a bounded re-read of ``COLLISION_RELEASE_WITHOUT_TAG``: sleep
+    ``ctx.sleep(delay)`` and classify again, whole (tags fetched and read,
+    release viewed), once per entry of :data:`TAG_VISIBILITY_DELAYS`, stopping
+    at the first other state. The state after the last read is returned as is.
+    The retry may overrun a caller's wait budget by up to the sum of the
+    delays within one call. CI and ``release-tools`` leave ``tag_retry`` false
+    and fail a collision at once."""
+    found = _classify_once(ctx, commit, fetch_tags=fetch_tags, verify_assets=verify_assets)
+    if not tag_retry:
+        return found
+    for delay in TAG_VISIBILITY_DELAYS:
+        if found.state != COLLISION_RELEASE_WITHOUT_TAG:
+            break
+        ctx.sleep(delay)
+        found = _classify_once(ctx, commit, fetch_tags=fetch_tags, verify_assets=verify_assets)
+    return found
+
+
+def _classify_once(ctx: ReleaseContext, commit: str, *, fetch_tags: bool = True,
+                   verify_assets: bool = True) -> Classification:
     """Classify trunk commit ``commit`` (first matching row of the plan's
     table). Fetches the trunk and, unless ``fetch_tags`` is false, every
     tag; reads the remote's tags with ``ls-remote``, and each release with

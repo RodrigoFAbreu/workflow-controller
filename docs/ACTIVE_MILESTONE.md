@@ -1,6 +1,15 @@
 # Active Milestone
 
-## Latest milestone (UF1)
+## Latest milestone (RR1)
+
+**Complete: accepted by policy (`MILESTONE_COMPLETE`).** Accepted after the functional review passed (all seven flows passed at the approved content; PR #389, checks green at the approved head). Plan `docs/ai-workflow/CONTROLLER_RR1_PLAN.md` (revision 1), two checkpoints; the Controller's release wait re-reads before it accepts `COLLISION_RELEASE_WITHOUT_TAG`.
+
+- **CP1 complete (verified state).** `release_txn.classify` gains `tag_retry` (default false) and `TAG_VISIBILITY_DELAYS = (2.0, 4.0, 8.0, 16.0, 30.0)` (D1, D2): on a collision it sleeps and runs the whole former body (now `_classify_once`) again once per delay, stopping at the first other state, and returns the last state unchanged. `ReleaseContext` gains `sleep` (D3); `milestone_branch` builds `rctx` with `sleep=_sleep` (its module patch point, not `waiting_preflight`'s `sleep=` argument) and passes `tag_retry=True` at all three classifications of `_decide_release` (D4). CI and `release-tools` keep the default and fail a collision at once. `tests/test_release_txn.py` adds five retry cases (tag on the second read, on the last read, never, no sleep without a collision, no sleep with `tag_retry` false); `tests/test_pull_request_lifecycle.py` adds the late-tag release wait (settles) and the never-tag release wait (`release_failed` with the collision) and updates the keyword assertion of `test_classify_runs_with_the_preflights_git_runner`. Verified with `tests.test_release_txn`, `tests.test_release_tools`, `tests.test_pull_request_lifecycle`, `tests.test_package_structure` and `tests.test_write_containment` (passing).
+- **CP2 complete (verified state).** The retry and its bound are documented: the `COLLISION_RELEASE_WITHOUT_TAG` case of the release wait in `docs/guide/milestone-branches.md`, the outcome-table row in `docs/guide/ci-and-releases.md` (CI fails at once, the Controller's wait re-reads first), a new entry in `docs/common-problems.md`, and the status, plan link and bound on `docs/items/workflow-controller-rr1.md`. `docs/backlog.yaml` and `docs/ROADMAP.md` are unchanged. Verified with `tests.test_docs` and `tests.test_plan_document_consistency` (108 tests, exact coverage, passing), `tools/check_docs.py` (clean), `workflow_backlog.py check` and `preflight-accept workflow-controller-rr1` (ok).
+
+Next action: `/milestone-plan` for `workflow-controller-ci2g` (CI: shard affinity for tests that share a snapshot (#317)), the item `python3 scripts/workflow_backlog.py next` returns.
+
+## Previous milestone (UF1)
 
 **Complete: accepted by policy (`MILESTONE_COMPLETE`).** Accepted after the functional review passed (PR #386, checks green at the approved head). Plan `docs/ai-workflow/CONTROLLER_UF1_PLAN.md` (revision 8), three checkpoints; `workflow-controller usage --refresh` re-reads the Codex and the Claude limit by one cheap probe each.
 
@@ -771,41 +780,41 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-uf1` (UF1: `usage --refresh` re-reads the Codex and the Claude limit), implementation revision 2, plan
-`docs/ai-workflow/CONTROLLER_UF1_PLAN.md` (revision 8), base commit `f4c2fa9`. Three checkpoints, all complete (CP1 the probes in `controller/usage_probe.py`, CP2 the option and its `refresh` block in `controller/cli.py`, CP3 the pages), plus the self-review and review fixes. A `feat:` change, a minor release.
-Every flow runs offline in the tester's sandbox: no network, no real `gh`, `claude`, `codex` or `ssh` (the stand-ins refuse and log), a `PATH` of the sandbox's `bin/` and the system directories, no write inside the read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.` for the test runner; flows write only to the scratch `TMPDIR`. No flow needs a pull request or a forge call, and none runs the full suite. A real probe needs the real binaries and a live account, so it is out of scope here; the fake `claude` and `codex` in the tests stand for them.
+Item `workflow-controller-rr1` (RR1: retry before the false release-without-tag collision gate), implementation revision 2, plan
+`docs/ai-workflow/CONTROLLER_RR1_PLAN.md` (revision 1), base commit `58b9698`. Two checkpoints, both complete (CP1 the retry in `controller/release_txn.py` and `controller/milestone_branch.py`, CP2 the pages and the item record), plus the review fixes. A `fix:` change, a patch release.
+Every flow runs offline in the tester's sandbox: no network, no real `gh`, `claude`, `codex` or `ssh` (the stand-ins refuse and log), a `PATH` of the sandbox's `bin/` and the system directories, no write inside the read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.` for the test runner; flows write only to the scratch `TMPDIR`. No flow needs a pull request or a forge call (the tests use a fake forge and a scratch origin), none needs a namespace, and none runs the full suite. A real release wait needs a real merged pull request and a real release, so it is out of scope here.
 
-Setup: `export TMPDIR=$(mktemp -d); mkdir $TMPDIR/bin $TMPDIR/h; P=$PWD` (the product clone, read-only). Define `run(){ env -i PATH="$TMPDIR/bin:/usr/bin:/bin" HOME=$TMPDIR/h TMPDIR=$TMPDIR PYTHONPATH=$P python3 -B -m controller "$@"; echo "rc=$?"; }`. No data to seed; `$TMPDIR/bin` holds no `claude` or `codex`.
+Setup: `export TMPDIR=$(mktemp -d); P=$PWD` (the product clone, read-only). No data to seed.
 
-**Flow 1: the refused combinations (D1).**
-Run `run usage --refresh --check`, `run usage --refresh --wait`, `run usage --refresh --outcome ok`, `run usage --refresh --stream x`.
-Expected: each prints `usage: --refresh cannot be combined with --check, --wait, --reserve, --renew, --release, --stream or --outcome` and `rc=2`; nothing is probed.
+**Flow 1: the retry in `classify` (D1, D2, D3; R1, R2).**
+Run `python3 -B tools/run_tests.py tests.test_release_txn; echo rc=$?`.
+Expected: `# Test run: PASS`, `rc=0`. The five new cases pass: the tag shows on the second read (one sleep, 2.0 s, state `ALREADY_RELEASED`), on the last read (all five delays), never (the collision after exactly the five delays 2, 4, 8, 16, 30), a non-collision never sleeps, and `tag_retry` false never sleeps.
 
-**Flow 2: a probe that cannot start changes nothing and the view is still printed (D4, D5).**
-Run `run usage --refresh --provider codex`, then `run usage --refresh --provider all --json`.
-Expected: the first prints the codex view and a line `refresh: not_found: the reviewer binary 'codex' cannot be resolved` with both windows `no reading`, `rc=1`. The second prints JSON with `providers.claude.refresh` and `providers.codex.refresh` each `outcome: not_found`, `read: []`, both windows `null`, `rc=1`; the failing claude probe did not skip codex.
+**Flow 2: the bound is the stated one.**
+Run `python3 -B -c "import sys; sys.path.insert(0,'$P'); from controller import release_txn as r; print(r.TAG_VISIBILITY_DELAYS, sum(r.TAG_VISIBILITY_DELAYS))"`.
+Expected: `(2.0, 4.0, 8.0, 16.0, 30.0) 60.0`.
 
-**Flow 3: `--provider` chooses the probe set.**
-Run `run usage --refresh --provider claude --json`.
-Expected: only the claude block carries `refresh` with `not_found`; no codex `refresh` block; `rc=1`.
+**Flow 3: the Controller's release wait retries, CI does not (D3, D4; R1, R2).**
+Run `grep -n "tag_retry" controller/*.py scripts/*.py`.
+Expected: `tag_retry=True` at exactly the three `classify` calls of `_decide_release` in `controller/milestone_branch.py`, and `sleep=_sleep` where its `ReleaseContext` is built; the default `tag_retry: bool = False` in `controller/release_txn.py`; no `tag_retry` in `release-tools` or the release workflow's callers.
 
-**Flow 4: without `--refresh`, `usage` is unchanged (D1).**
-Run `run usage`, `run usage --json`, then `run usage --outcome ok`.
-Expected: no `refresh` line or key, `rc=0` for the first two, nothing probed (no `usage-probe` directory under the runtime root); `usage --outcome ok` (without `--release`) is accepted as before UF1.
+**Flow 4: the release wait settles on a late tag and fails on a missing one (D5; R1).**
+Run `python3 -B tools/run_tests.py tests.test_pull_request_lifecycle tests.test_release_tools; echo rc=$?`.
+Expected: `# Test run: PASS`, `rc=0` (a `namespace: none` line is expected in this sandbox). `test_a_tag_that_shows_late_settles_instead_of_failing` (one sleep, `closed_out`, `ALREADY_RELEASED`, no `release_failed`), `test_a_tag_that_never_shows_is_a_failed_release_with_the_collision` (the five delays, then `release_failed` with `COLLISION_RELEASE_WITHOUT_TAG`) and the `release_tools` collision tests (CI fails at once) all ran.
 
-**Flow 5: the tests of the item.**
-Run `python3 -B tools/run_tests.py tests.test_usage_probe tests.test_usage_command tests.test_usage tests.test_usage_gate tests.test_cli tests.test_package_structure tests.test_write_containment; echo rc=$?`.
-Expected: `# Test run: PASS`, `rc=0` (a `namespace: none` line is expected in this sandbox). They cover the pinned argv, private homes, outcomes, the record only for an `ok` probe, the 300-second sweep, the text and JSON blocks, a stored 99% past its window shown as reset, and an unstartable binary failing one probe without skipping the other.
+**Flow 5: the repository guards.**
+Run `python3 -B tools/run_tests.py tests.test_package_structure tests.test_write_containment; echo rc=$?`.
+Expected: `# Test run: PASS`, `rc=0`.
 
-**Flow 6: the pages (R4).**
-Read the usage section of `docs/guide/commands.md` (around line 300), `docs/guide/runtime.md`, "A pause that should have lifted" in `docs/common-problems.md`, row 1 of `docs/exit-codes.md` and `docs/items/workflow-controller-uf1.md`.
-Expected: the option, `--provider`, the `refresh` block, exit `1` on a failed probe, the refused combinations, the watchdog call (`usage --refresh --provider all`, then `usage --check`), the new-window rule (`WINDOW_JITTER_SECONDS`) and the 300-second probe-layout sweep are all stated; the item page records the status, the plan link and the CP1 live check (claude 2.1.318 five-hour 49% weekly 9%; codex-cli 0.167.0 five-hour 30% weekly 9%, credentials `unchanged`).
+**Flow 6: the pages (R3).**
+Read the `COLLISION_RELEASE_WITHOUT_TAG` case in `docs/guide/milestone-branches.md` (around line 551), the outcome-table row in `docs/guide/ci-and-releases.md` (around line 822), the new entry in `docs/common-problems.md` (around line 293) and `docs/items/workflow-controller-rr1.md`.
+Expected: each states that the Controller's release wait re-reads five times over 60 seconds (`TAG_VISIBILITY_DELAYS`) before it reports the collision, that a collision persisting after the wait is real, and that CI and `release-tools` still fail at once; the item page records the status, the plan link and the bound.
 
 **Flow 7: the docs checks and the backlog.**
-Run `python3 -B tools/check_docs.py; echo rc=$?`, `python3 -B tools/run_tests.py tests.test_docs tests.test_plan_document_consistency; echo rc=$?`, `python3 -B scripts/workflow_backlog.py check; echo rc=$?` and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-uf1; echo rc=$?`.
+Run `python3 -B tools/check_docs.py; echo rc=$?`, `python3 -B tools/run_tests.py tests.test_docs tests.test_plan_document_consistency; echo rc=$?`, `python3 -B scripts/workflow_backlog.py check; echo rc=$?` and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-rr1; echo rc=$?`.
 Expected: every `rc=0`; `# Test run: PASS`; `preflight-accept` `"ok": true`.
 
-**Known limitations / out of scope.** A real `--refresh` costs a few tokens of the owner's allowance and needs real `claude` and `codex` with credentials; it was run once live at the end of CP1 (both `ok`) and is not repeatable in the sandbox. A refresh clears a hold only when the provider reports a new window (`usage.merge_reading` keeps the higher percent inside one window). The operator's own watchdog scripts outside this repository are not changed. The single local full run ended FAIL with 5 failures outside this item's modules (3 in `tests.test_fake_codex_contract`, an environment leak of `~/.codex/config.toml`; 2 in `tests.test_codex_review_role` under load, passing alone); CI's run on the pull request is the full verification.
+**Known limitations / out of scope.** The bound is a constant, not a setting; a tag that never appears still ends `release_failed` with the collision, now after about a minute. One `classify` call can overrun a caller's wait budget by up to the 60 seconds. The retry is not exercised against a real forge (the fake forge's injected sleep creates the tag). The single local full run, if any, is not repeated here; CI's run on the pull request is the full verification.
 
 ## Next action
 

@@ -1,0 +1,12 @@
+{
+  "dispositions": {
+    "F-1bf0f77b5faa": {"disposition": "fixed"},
+    "F-3103fb06df25": {"disposition": "fixed"},
+    "F-4ff7ac5399ec": {"disposition": "fixed"},
+    "F-8227b7f1e40b": {"disposition": "dropped", "reason": "Reading the release before ls-remote does not cover replica lag, and the reviewer said to leave it out unless free; the single bounded retry covers both causes."},
+    "F-bfd321f297bf": {"disposition": "fixed"},
+    "F-f6b2f3f0f552": {"disposition": "fixed"}
+  },
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-rr1"
+}

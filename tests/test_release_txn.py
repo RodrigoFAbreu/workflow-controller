@@ -409,6 +409,52 @@ class ClassificationTest(_ReleaseCase):
         self.seed_release("v1.0.0", self.good_assets("1.0.0", self.base))
         self.assertState(self.base, COLLISION_RELEASE_WITHOUT_TAG)
 
+    def _retry_classify(self, appears_at_sleep: int | None) -> tuple[release_txn.Classification, list[float]]:
+        """``classify(tag_retry=True)`` of a release without its tag; the
+        injected sleep pushes the tag on its ``appears_at_sleep``-th call
+        (never, for ``None``) and records every delay."""
+        self.seed_release("v1.0.0", self.good_assets("1.0.0", self.base))
+        sleeps: list[float] = []
+
+        def sleep(seconds: float) -> None:
+            sleeps.append(seconds)
+            if len(sleeps) == appears_at_sleep:
+                self.tag("v1.0.0", self.base)
+
+        ctx = dataclasses.replace(self.ctx(self.base), sleep=sleep)
+        return release_txn.classify(ctx, self.base, tag_retry=True), sleeps
+
+    def test_a_tag_that_shows_on_the_second_read_is_not_a_collision(self) -> None:
+        found, sleeps = self._retry_classify(1)
+        self.assertEqual(found.state, ALREADY_RELEASED, found.detail)
+        self.assertEqual(sleeps, [release_txn.TAG_VISIBILITY_DELAYS[0]])
+
+    def test_a_tag_that_shows_on_the_last_read_is_not_a_collision(self) -> None:
+        last = len(release_txn.TAG_VISIBILITY_DELAYS)
+        found, sleeps = self._retry_classify(last)
+        self.assertEqual(found.state, ALREADY_RELEASED, found.detail)
+        self.assertEqual(sleeps, list(release_txn.TAG_VISIBILITY_DELAYS))
+
+    def test_a_tag_that_never_shows_is_the_collision_after_every_delay(self) -> None:
+        found, sleeps = self._retry_classify(None)
+        self.assertEqual(found.state, COLLISION_RELEASE_WITHOUT_TAG)
+        self.assertEqual(sleeps, list(release_txn.TAG_VISIBILITY_DELAYS))
+
+    def test_a_classification_that_is_not_a_collision_never_sleeps(self) -> None:
+        self.published("v1.0.0", self.base)
+        sleeps: list[float] = []
+        ctx = dataclasses.replace(self.ctx(self.base), sleep=sleeps.append)
+        found = release_txn.classify(ctx, self.base, tag_retry=True)
+        self.assertEqual(found.state, ALREADY_RELEASED)
+        self.assertEqual(sleeps, [])
+
+    def test_without_tag_retry_a_collision_never_sleeps(self) -> None:
+        self.seed_release("v1.0.0", self.good_assets("1.0.0", self.base))
+        sleeps: list[float] = []
+        ctx = dataclasses.replace(self.ctx(self.base), sleep=sleeps.append)
+        self.assertEqual(release_txn.classify(ctx, self.base).state, COLLISION_RELEASE_WITHOUT_TAG)
+        self.assertEqual(sleeps, [])
+
     def test_a_published_release_with_a_wrong_asset_is_a_mismatch(self) -> None:
         self.tag("v1.0.0", self.base)
         good = self.good_assets("1.0.0", self.base)

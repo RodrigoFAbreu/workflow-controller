@@ -602,7 +602,7 @@ items:
     detail: docs/items/workflow-controller-uf1.md
   - id: workflow-controller-rr1
     title: "Retry before the false release-without-tag collision gate"
-    status: next
+    status: done
     order: 103
     depends_on: []
     detail: docs/items/workflow-controller-rr1.md

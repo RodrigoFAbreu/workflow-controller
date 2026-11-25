@@ -86738,7 +86738,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci2g-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci2g-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "AWAITING_FUNCTIONAL_REVIEW",
       "plan_revision": 2,
       "implementation_revision": 2,
       "functional_review_round": null,
@@ -86855,7 +86855,120 @@
           "workflow_release": "2.29.3"
         }
       },
-      "technical_approval": null,
+      "technical_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "5728d22d827c382e565d87cff9ba6bb236ddfa8683c5b99ac7f8c9d90bfa8f2f",
+        "approved_review_content_id": "a9de1cfbf3ccfa574d9a32b623195315f5ca07d7d5b09988299933b083d5573d",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-ci2g-artifacts.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "9bef179bd9759b7290196c1c1eada98b43e37e54"
+          },
+          {
+            "path": "docs/guide/development.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "3b2c1b0608b0a11ab45d62b59977271006894857"
+          },
+          {
+            "path": "tests/fixtures.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "44f5f0effdde85b797eeb1e364197d74a742b750"
+          },
+          {
+            "path": "tests/test_protocol_lifecycle.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "cfcdff5e385d5530eb415596457c005520a46523"
+          },
+          {
+            "path": "tests/test_shared_snapshot.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f2f267d5557608405e52a8930d178a518de60ac8"
+          },
+          {
+            "path": "tests/test_test_shards.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "c37fdb576b35bc91474ae39fa48783056db2bc76"
+          },
+          {
+            "path": "tools/test_shards.py",
+            "exists": true,
+            "mode": "100644",
+            "blob": "6aa9fe03c03fb5e1562bacaa4d7ebab7059d7e66"
+          }
+        ],
+        "reviewed_content_commit": "bcb76c527e08a2827150586946984c19e3a37a47",
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-25T18:50:03Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "a9de1cfbf3ccfa574d9a32b623195315f5ca07d7d5b09988299933b083d5573d",
+            "ledger": {
+              "local": {
+                "bundle_id": "5728d22d827c382e565d87cff9ba6bb236ddfa8683c5b99ac7f8c9d90bfa8f2f",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "555e836e3a865a92a438220eddafdabe36b4ab3074795d8ccd95c90e337b9e00",
+                "ledger_entry_sha256": "6fe1b3478e8a454ba1565ecf40f8251b7f78ab5fd96e211b6868394748a771a8",
+                "run_ref": "session:local .ai-review/workflow-controller-ci2g/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "5728d22d827c382e565d87cff9ba6bb236ddfa8683c5b99ac7f8c9d90bfa8f2f",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "d3b024e3e2d210549a50437cc9e69e9be9b7eb03c09c6645ad940582bf7f9056",
+                "ledger_entry_sha256": "b82b43cb3ab7d7294bfffb158784be489b459892830355bf7601cd42de11f2d0",
+                "run_ref": "codex:20261125T184532Z-2ae7667b",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-25T18:50:03Z",
+          "workflow_release": "2.29.3"
+        }
+      },
       "technical_review_block_pins": [],
       "plan_review_stages": {
         "review_content_id": "16c0e66b001fccb504bce6ed1b0aa49e982f0a6efaf0dd33f775a7e31edcab9d",
@@ -86886,12 +86999,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 1,
-          "external": 0
+          "local": 2,
+          "external": 1
         }
       },
-      "state_revision": 20,
-      "last_transition": "2026-11-25T18:42:10Z",
+      "state_revision": 23,
+      "last_transition": "2026-11-25T18:50:03Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -87068,6 +87181,41 @@
               "at": "2026-11-25T18:39:39Z"
             }
           ]
+        },
+        "F-9f99f30ca777": {
+          "digest": "9f99f30ca77761e3ac651145e324ede914f8436978ac7dd13e6f8ffc5428dfca",
+          "text": "**O1. The guide's search does not return the measured list.** The guide says to find `<modules>` with `grep -ln \"\\.reach(\\|test_protocol_lifecycle\\|test_review_job\" tests/test_*.py` and then add the modules their tests import a lifecycle from. On this head that grep returns 12 modules. Two of them (`tests.test_shared_snapshot`, `tests.test_functional_lifecycle`) are not among the 21 measured, and about half of the 21 (for example `tests.test_cli`, `tests.test_job`, `tests.test_resume`, `tests.test_trunk_preflight`) come only from the loose second step. The page's explicit list is what makes D6 reproducible, so this does not block. A later refresh would be easier with an exact rule, for example the modules whose tests show up in the report's `users`, or a small script that lists them.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 2,
+              "review_content_id": "a9de1cfbf3ccfa574d9a32b623195315f5ca07d7d5b09988299933b083d5573d",
+              "verdict": "APPROVE",
+              "at": "2026-11-25T18:45:10Z"
+            }
+          ]
+        }
+      },
+      "implementation_review_stages": {
+        "review_content_id": "a9de1cfbf3ccfa574d9a32b623195315f5ca07d7d5b09988299933b083d5573d",
+        "LOCAL_MODEL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "5728d22d827c382e565d87cff9ba6bb236ddfa8683c5b99ac7f8c9d90bfa8f2f",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-25T18:45:10Z",
+          "verdict_sha256": "555e836e3a865a92a438220eddafdabe36b4ab3074795d8ccd95c90e337b9e00",
+          "run_ref": "session:local .ai-review/workflow-controller-ci2g/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_IMPLEMENTATION_REVIEW": {
+          "bundle_id": "5728d22d827c382e565d87cff9ba6bb236ddfa8683c5b99ac7f8c9d90bfa8f2f",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-25T18:48:28Z",
+          "verdict_sha256": "d3b024e3e2d210549a50437cc9e69e9be9b7eb03c09c6645ad940582bf7f9056",
+          "run_ref": "codex:20261125T184532Z-2ae7667b",
+          "reviewer_model": "openai/gpt-6.1-sol"
         }
       }
     }

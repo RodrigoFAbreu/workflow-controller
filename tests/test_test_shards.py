@@ -2648,6 +2648,62 @@ class LeakScanTest(unittest.TestCase):
         self.assertEqual(shards.scan_marked_processes(marker), [])
 
 
+class CommittedSnapshotAffinityTest(unittest.TestCase):
+    """CI2g CP3: the committed ``SNAPSHOT_AFFINITY`` table is kept honest here
+    (D4), not at plan time, and it moves a CI-profile plan without moving its
+    determinism."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.inventory = shards.build_inventory(fixtures.REPO_ROOT)
+        cls.atoms = {atom.key: atom for atom in cls.inventory.atoms}
+
+    def test_the_table_is_not_empty(self) -> None:
+        self.assertTrue(shards.SNAPSHOT_AFFINITY)
+
+    def test_every_member_names_an_atom(self) -> None:
+        stale = [m for g, members in shards.SNAPSHOT_AFFINITY.items() for m in members
+                 if m not in self.atoms]
+        self.assertEqual(stale, [])
+
+    def test_no_member_is_listed_twice_or_in_two_groups(self) -> None:
+        members = [m for group in shards.SNAPSHOT_AFFINITY.values() for m in group]
+        self.assertEqual(sorted(set(m for m in members if members.count(m) > 1)), [])
+
+    def test_every_group_has_at_least_two_members(self) -> None:
+        self.assertEqual([g for g, members in shards.SNAPSHOT_AFFINITY.items() if len(members) < 2], [])
+
+    def test_no_member_is_a_conformance_exclusive_or_out_of_matrix_atom(self) -> None:
+        problems = []
+        for group, members in shards.SNAPSHOT_AFFINITY.items():
+            for key in members:
+                atom = self.atoms.get(key)
+                if atom is None:
+                    continue
+                if atom.family != shards.CONTROLLER:
+                    problems.append((group, key, "not a controller atom"))
+                if key in shards.EXCLUSIVE_ATOMS:
+                    problems.append((group, key, "exclusive"))
+                if atom.module in shards.CI_PLACEMENT:
+                    problems.append((group, key, "placed out of the shard matrix"))
+        self.assertEqual(problems, [])
+
+    def test_the_table_moves_a_ci_plan_and_the_digest_is_stable(self) -> None:
+        timings = shards.timings_for("ci", fixtures.REPO_ROOT, warn=lambda message: None)
+        selection = self.inventory.select(ci_placement=True)
+        parameters = shards.profile_parameters("ci")
+
+        def plan(affinity):
+            return shards.build_plan(selection, parameters, timings, fixtures.REPO_ROOT,
+                                     affinity=affinity)
+
+        with_table = plan(shards.SNAPSHOT_AFFINITY)
+        shards.validate_plan(with_table, selection)
+        self.assertEqual(with_table["plan_digest"], plan(shards.SNAPSHOT_AFFINITY)["plan_digest"])
+        self.assertEqual(with_table["shard_count"], plan({})["shard_count"])
+        self.assertNotEqual(with_table["plan_digest"], plan({})["plan_digest"])
+
+
 class NamespaceLauncherTest(unittest.TestCase):
     """NS1 CP1: the argv builder, the probe, and the leak scan across a PID namespace."""
 

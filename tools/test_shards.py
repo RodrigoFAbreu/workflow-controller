@@ -188,7 +188,58 @@ EXCLUSIVE_ATOMS: dict[str, str] = {}
 #: so the shard drives the row once (CI2g). Advisory like the timings: a member
 #: that names no atom is ignored, and ``tests.test_test_shards`` keeps the table
 #: honest (D4). An atom is in at most one group.
-SNAPSHOT_AFFINITY: dict[str, tuple[str, ...]] = {}
+SNAPSHOT_AFFINITY: dict[str, tuple[str, ...]] = {
+    "to_38e#76299b5276": (
+        "tests.test_protocol_job.AFunctionalRecordIsResumableTest",
+        "tests.test_protocol_job.OutcomesFailureTest",
+        "tests.test_protocol_job.TheFaultStopsRecordTest",
+        "tests.test_protocol_job.TheFaultStopsSandboxTest",
+        "tests.test_protocol_job.ThePreLaunchStopsTest",
+    ),
+    "to_38e#bb58c678ce": (
+        "tests.test_functional_codex_route.CodexRouteTest",
+        "tests.test_functional_codex_route.UsageAndTelemetryTest",
+        "tests.test_functional_select.SelectionTest",
+    ),
+    "to_acceptance#bae3c65c23": (
+        "tests.test_pr_report.DispatchTest",
+        "tests.test_pr_report.ReportRecordTest",
+        "tests.test_pr_report.ReportRefusalTest",
+        "tests.test_pr_report.ReportScopeTest",
+        "tests.test_pr_report.VendoredAgreementTest",
+        "tests.test_pr_report.WaitBudgetTest",
+        "tests.test_pr_report.WaitReportsTest",
+        "tests.test_protocol_lifecycle.SatisfyGateLifecycleApprovalTest",
+    ),
+    "to_manual_plan_review#596d6480e1": (
+        "tests.test_protocol_job.ControllerCodedGateOverARow14DecisionTest",
+        "tests.test_review_independence.MixedLaneJobTest",
+        "tests.test_review_job.CliTest",
+        "tests.test_review_job.ExternalCapTest",
+        "tests.test_review_job.FakeCodexEndToEndTest",
+        "tests.test_review_job.HappyPathTest",
+        "tests.test_review_job.LinkedAgentsJobTest",
+        "tests.test_review_job.NotificationTest",
+        "tests.test_review_job.OutcomeMappingTest",
+        "tests.test_review_job.RecordShapeTest",
+        "tests.test_review_job.ReplayTest",
+        "tests.test_review_job.RetainedReadingsTest",
+        "tests.test_review_job.RoundPromptWiringTest",
+        "tests.test_review_job.UnconfiguredAndRefusalTest",
+        "tests.test_review_job.UsageTest",
+        "tests.test_review_job.VerdictEvidenceTest",
+        "tests.test_review_mode.JobChoiceTest",
+        "tests.test_review_same_provider.ClaudeRecoveryTest",
+        "tests.test_review_same_provider.DefaultPolicyRefusalTest",
+        "tests.test_review_same_provider.DistinctRefusalTest",
+        "tests.test_review_same_provider.ReportTest",
+        "tests.test_review_same_provider.RunTest",
+        "tests.test_review_same_provider.UsageTest",
+        "tests.test_usage_record_job.ClaudeReviewRecordTest",
+        "tests.test_usage_record_job.CodexReviewRecordTest",
+        "tests.test_usage_record_job.FailureBoundaryTest",
+    ),
+}
 
 #: The most of the mean shard load one group may take as one unit (D3).
 AFFINITY_MAX_SHARE = 0.5

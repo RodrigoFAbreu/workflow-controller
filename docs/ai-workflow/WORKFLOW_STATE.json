@@ -86738,7 +86738,7 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci2g-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci2g-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
+      "phase": "APPLYING_REVIEW_FEEDBACK",
       "plan_revision": 2,
       "implementation_revision": 1,
       "functional_review_round": null,
@@ -86886,12 +86886,12 @@
           "external": 1
         },
         "implementation": {
-          "local": 0,
+          "local": 1,
           "external": 0
         }
       },
-      "state_revision": 18,
-      "last_transition": "2026-11-25T18:34:49Z",
+      "state_revision": 19,
+      "last_transition": "2026-11-25T18:39:39Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",
@@ -87052,6 +87052,20 @@
               "review_content_id": "16c0e66b001fccb504bce6ed1b0aa49e982f0a6efaf0dd33f775a7e31edcab9d",
               "verdict": "APPROVE",
               "at": "2026-11-25T17:43:32Z"
+            }
+          ]
+        },
+        "F-c8e67f96d7d8": {
+          "digest": "c8e67f96d7d86f418582095d3ea33f63edcf55c6ddde94abf929f701d5ae1df0",
+          "text": "**O1. The fixed-label test departs from the CP1 wording.** CP1 asks that \"the label is the same in two processes\". `test_the_label_is_the_same_in_every_process` instead checks a fixed value (`row-a#8e3d18580a`), because a second process would need a `LEFTOVER_INVENTORY` row outside this item's declaration. A SHA-256 over `json.dumps(sort_keys=True)` does not depend on the hash seed, so the fixed value is the stronger check, and the self-review states the deviation. No change needed beyond what the summary already says. If the inventory row ever becomes available, a two-process check could be added cheaply.",
+          "raised": [
+            {
+              "stage": "implementation",
+              "role": "LOCAL_MODEL_IMPLEMENTATION_REVIEW",
+              "round": 1,
+              "review_content_id": "7abd677235f79b4fd39381d8f3b257cdd2289c910495c45eb1f145d7792a70e6",
+              "verdict": "REVISE",
+              "at": "2026-11-25T18:39:39Z"
             }
           ]
         }

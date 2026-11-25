@@ -86738,12 +86738,12 @@
       "registry_path": "docs/ai-workflow/registry/workflow-controller-ci2g-registry.json",
       "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci2g-mapping.json",
       "governing_workflow_version": "2.2",
-      "phase": "APPLYING_REVIEW_FEEDBACK",
+      "phase": "AWAITING_LOCAL_IMPLEMENTATION_REVIEW",
       "plan_revision": 2,
-      "implementation_revision": 1,
+      "implementation_revision": 2,
       "functional_review_round": null,
       "base_commit": "861c845384f774aaec5f42b60ab4f4de6d84a05e",
-      "reviewed_implementation_head": "559c89c9a712c64d90652e6655aa4c46b226487b",
+      "reviewed_implementation_head": "bcb76c527e08a2827150586946984c19e3a37a47",
       "current_checkpoint_id": null,
       "last_completed_checkpoint_id": "CP4",
       "checkpoints": {
@@ -86890,8 +86890,8 @@
           "external": 0
         }
       },
-      "state_revision": 19,
-      "last_transition": "2026-11-25T18:39:39Z",
+      "state_revision": 20,
+      "last_transition": "2026-11-25T18:42:10Z",
       "feedback_layout": "scoped",
       "plan_review_binding": {
         "status": "BOUND",

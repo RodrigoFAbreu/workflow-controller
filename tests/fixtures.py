@@ -1017,6 +1017,9 @@ def _snapshot_area() -> Path:
 _SNAPSHOT_COUNTS: dict[str, dict[str, int]] = {}
 _REPORT_VARIABLE = "WFC_SNAPSHOT_REPORT"
 _REPORT_HOOKED = False
+#: key label -> the ids of the tests that reached that key through a drive that can share a snapshot (``CI2g`` D1).
+#: Read only by the report, which a measurement run turns on; no decision reads it.
+_SNAPSHOT_USERS: dict[str, set[str]] = {}
 
 
 def _row_name(key: object) -> str:
@@ -1030,6 +1033,25 @@ def count_snapshot_outcome(key: object, outcome: str) -> None:
     _hook_snapshot_report()
 
 
+def snapshot_key_label(key: object) -> str:
+    """The row name and a short digest of the whole key's canonical text: the same in every process and run (never
+    Python's ``hash()``), and different for two inputs of one row, which share no snapshot (``CI2g`` D1)."""
+    import hashlib
+    canonical = json.dumps(key, sort_keys=True, default=str)
+    return f"{_row_name(key)}#{hashlib.sha256(canonical.encode('utf-8')).hexdigest()[:10]}"
+
+
+def note_snapshot_user(key: object, test_id: str) -> None:
+    """Record that ``test_id`` reached ``key`` (read only by the report)."""
+    _SNAPSHOT_USERS.setdefault(snapshot_key_label(key), set()).add(test_id)
+    _hook_snapshot_report()
+
+
+def snapshot_users() -> dict[str, list[str]]:
+    """A copy of the per-key test ids of this process, sorted."""
+    return {label: sorted(ids) for label, ids in _SNAPSHOT_USERS.items()}
+
+
 def snapshot_counts() -> dict[str, dict[str, int]]:
     """A copy of the per-row outcome counts of this process."""
     return {row: dict(outcomes) for row, outcomes in _SNAPSHOT_COUNTS.items()}
@@ -1039,7 +1061,7 @@ def _write_snapshot_report() -> None:
     target = os.environ.get(_REPORT_VARIABLE)
     if not target or not _SNAPSHOT_COUNTS:
         return
-    line = json.dumps({"pid": os.getpid(), "counts": snapshot_counts()}, sort_keys=True)
+    line = json.dumps({"pid": os.getpid(), "counts": snapshot_counts(), "users": snapshot_users()}, sort_keys=True)
     with open(target, "a", encoding="utf-8") as handle:
         handle.write(line + "\n")
 

@@ -342,6 +342,52 @@ class CountersTest(SnapshotCase):
         fixtures.snapshot_counts()[one]["built"] = 99
         self.assertEqual(self.counts(one)["built"], 1)
 
+    def users(self, name: str) -> dict[str, list[str]]:
+        return {label: ids for label, ids in fixtures.snapshot_users().items() if label.startswith(name + "#")}
+
+    def test_a_test_id_is_recorded_for_the_key_it_reached_and_a_drive_and_a_restore_both_record(self) -> None:
+        name = self.key()
+        first = self.built(name)
+        label = fixtures.snapshot_key_label(first.snapshot_key(name))
+        self.assertEqual(self.users(name), {label: [self.id()]})
+        self.release(first)
+        lifecycle.GateLifecycle(self).reach(name, lambda: self.fail("must restore"))
+        self.assertEqual(self.users(name), {label: [self.id()]})
+        fixtures.note_snapshot_user(first.snapshot_key(name), "tests.other.Case.test_x")
+        self.assertEqual(self.users(name), {label: sorted([self.id(), "tests.other.Case.test_x"])})
+
+    def test_two_inputs_of_one_row_are_two_keys_with_two_labels(self) -> None:
+        name = self.key()
+        one = lifecycle.GateLifecycle(self)
+        two = lifecycle.GateLifecycle(self)
+        two.refused = {"plan"}
+        one.reach(name, lambda: None)
+        two.reach(name, lambda: None)
+        labels = {fixtures.snapshot_key_label(one.snapshot_key(name)), fixtures.snapshot_key_label(two.snapshot_key(name))}
+        self.assertEqual(len(labels), 2)
+        self.assertEqual(set(self.users(name)), labels)
+        self.assertTrue(all(label.startswith(name + "#") for label in labels))
+
+    def test_a_kit_drive_records_no_user(self) -> None:
+        name = self.key()
+        self.stub_dir = "/nonexistent"
+        self.addCleanup(delattr, self, "stub_dir")
+        lifecycle.GateLifecycle(self).reach(name, lambda: None)
+        self.assertEqual(self.users(name), {})
+
+    def test_the_label_is_the_same_in_two_processes(self) -> None:
+        import os
+        import subprocess
+        import sys
+        key = ("row-a", (("release", "2.12.0"), ("report", True)))
+        code = ("import sys; sys.path.insert(0, '.'); from tests import fixtures; "
+                "print(fixtures.snapshot_key_label(('row-a', (('release', '2.12.0'), ('report', True)))))")
+        out = [subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True,
+                              cwd=Path(__file__).resolve().parent.parent,
+                              env={**os.environ, "PYTHONHASHSEED": seed}).stdout.strip() for seed in ("1", "2")]
+        self.assertEqual(out[0], out[1])
+        self.assertEqual(out[0], fixtures.snapshot_key_label(key))
+
     def test_the_report_gets_one_json_line_and_nothing_is_written_with_the_variable_unset(self) -> None:
         import json
         import os
@@ -357,6 +403,8 @@ class CountersTest(SnapshotCase):
             record = json.loads(lines[0])
             self.assertEqual(record["pid"], os.getpid())
             self.assertEqual(record["counts"][name], {"missing": 1, "built": 1})
+            self.assertEqual(set(record), {"pid", "counts", "users"})
+            self.assertIn(self.id(), [i for ids in record["users"].values() for i in ids])
             env = {k: v for k, v in os.environ.items() if k != fixtures._REPORT_VARIABLE}
             with mock.patch.dict(os.environ, env, clear=True):
                 fixtures._write_snapshot_report()

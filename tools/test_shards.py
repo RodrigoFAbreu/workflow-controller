@@ -49,6 +49,12 @@ comes from a local-machine timing file (the first file that records the atom
 is not the committed ``tools/test_timings.json``). A CI-profile fallback
 estimate still counts in the total and in the assignment, but CI seconds are
 not local seconds, so it never sets the local floor (Design J).
+The atoms of a ``SNAPSHOT_AFFINITY`` group that reach one lifecycle snapshot
+key are placed as one unit, so a shard drives that row once: the unit is the
+group's members that fit half the mean shard load (the rest are placed alone),
+the count is still the formula's over the atoms, and a unit is split back,
+smallest first, only where fewer units than shards would leave one empty. An
+empty table gives the plan without it.
 Atoms registered in ``EXCLUSIVE_ATOMS`` are kept out of that assignment and
 placed together, in canonical order, on one final ``exclusive`` shard, which
 the local runner starts only once every other shard has finished. The
@@ -175,6 +181,17 @@ CI_PLACEMENT = {
 #: instead. ``build_inventory`` refuses an entry that names no atom or gives
 #: no reason, and every run summary prints the registry's size.
 EXCLUSIVE_ATOMS: dict[str, str] = {}
+
+#: Atoms that reach one lifecycle snapshot key, keyed by the key's label (its
+#: row name plus a short digest of the whole key, see ``tests/fixtures.py``),
+#: each a tuple of atom keys. The planner prefers to place a group on one shard
+#: so the shard drives the row once (CI2g). Advisory like the timings: a member
+#: that names no atom is ignored, and ``tests.test_test_shards`` keeps the table
+#: honest (D4). An atom is in at most one group.
+SNAPSHOT_AFFINITY: dict[str, tuple[str, ...]] = {}
+
+#: The most of the mean shard load one group may take as one unit (D3).
+AFFINITY_MAX_SHARE = 0.5
 
 #: Result records and timing files.
 #: Version 2 adds the required ``run_attempt``; version 1 records (no
@@ -1046,6 +1063,49 @@ def assign_lanes(estimates_ms: list[int], is_conformance: list[bool],
     return [sorted(shard) for shard in shards]
 
 
+def affinity_units(atoms: list[Atom], estimates_ms: list[int], count: int,
+                   affinity: Mapping[str, Iterable[str]]) -> list[tuple[tuple[int, ...], str]]:
+    """Placement units over ``atoms`` (indices into the given lists): each a
+    ``(members, group name)``, ordered by the canonical index of the first
+    member. A group of the table that the selection holds becomes one unit of
+    the members that fit ``AFFINITY_MAX_SHARE`` of the mean load
+    (``sum(estimates_ms) // count``), walked by ``(-estimate, index)`` so a
+    member that does not fit is skipped and a smaller one still joins; the
+    rest, and a group with fewer than two members that fit, stay single
+    atoms (group name ``""``). Only controller atoms join a unit. While there
+    are fewer units than ``count``, the unit with the smallest estimate (ties
+    by group name) is split back into its atoms, so no shard is left empty.
+    An empty table gives one unit per atom."""
+    by_key = {atom.key: i for i, atom in enumerate(atoms)}
+    bound = int(AFFINITY_MAX_SHARE * (sum(estimates_ms) // max(count, 1)))
+    joined: set[int] = set()
+    units: list[tuple[tuple[int, ...], str]] = []
+    for name in sorted(affinity):
+        present = {by_key[key] for key in affinity[name]
+                   if key in by_key and atoms[by_key[key]].family == CONTROLLER
+                   and by_key[key] not in joined}
+        members: list[int] = []
+        total = 0
+        for i in sorted(present, key=lambda i: (-estimates_ms[i], i)):
+            if total + estimates_ms[i] <= bound:
+                members.append(i)
+                total += estimates_ms[i]
+        if len(members) >= 2:
+            joined.update(members)
+            units.append((tuple(sorted(members)), name))
+    units.extend(((i,), "") for i in range(len(atoms)) if i not in joined)
+    units.sort(key=lambda unit: unit[0][0])
+    while len(units) < count:
+        grouped = [unit for unit in units if len(unit[0]) > 1]
+        if not grouped:
+            break
+        smallest = min(grouped, key=lambda unit: (sum(estimates_ms[i] for i in unit[0]), unit[1]))
+        units.remove(smallest)
+        units.extend(((i,), "") for i in smallest[0])
+        units.sort(key=lambda unit: unit[0][0])
+    return units
+
+
 def canonical_json(value) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True,
                       allow_nan=False).encode("utf-8")
@@ -1060,9 +1120,13 @@ def plan_digest(plan: Mapping) -> str:
 def build_plan(selection: Selection, parameters: PlanParameters,
                timings: Iterable[tuple[Path, TimingProfile]] = (),
                repo_root: Path = REPO_ROOT, *,
-               exclusive: Mapping[str, str] | None = None) -> dict:
+               exclusive: Mapping[str, str] | None = None,
+               affinity: Mapping[str, Iterable[str]] | None = None) -> dict:
     """The plan for ``selection``: its shard count, a deterministic LPT
-    assignment of whole atoms, and the ``plan_digest`` over all of it. Timing
+    assignment of whole atoms, and the ``plan_digest`` over all of it. The
+    groups of ``affinity`` (default ``SNAPSHOT_AFFINITY``) are placed as
+    bounded units by ``affinity_units``; the count is the formula's over the
+    individual atoms. Timing
     data (``timings``, ``(path, profile)`` in priority order) decides only
     where an atom runs (I3). The selected atoms registered in ``exclusive``
     (default ``EXCLUSIVE_ATOMS``) take no part in the count or the
@@ -1098,12 +1162,17 @@ def build_plan(selection: Selection, parameters: PlanParameters,
     if parallel:
         parallel_ms = [estimates_ms[i] for i in parallel]
         count = shard_count(parallel_ms, parameters, floor_ms)
+        units = affinity_units([selection.atoms[i] for i in parallel], parallel_ms, count,
+                               SNAPSHOT_AFFINITY if affinity is None else affinity)
+        unit_ms = [sum(parallel_ms[i] for i in members) for members, _ in units]
         if parameters.conformance_lane:
-            lanes = [selection.atoms[i].family == CONFORMANCE for i in parallel]
-            assigned = assign_lanes(parallel_ms, lanes, count)
+            lanes = [selection.atoms[parallel[members[0]]].family == CONFORMANCE
+                     for members, _ in units]
+            assigned = assign_lanes(unit_ms, lanes, count)
         else:
-            assigned = assign_atoms(parallel_ms, count)
-        groups = [[parallel[i] for i in members] for members in assigned]
+            assigned = assign_atoms(unit_ms, count)
+        groups = [sorted(parallel[i] for u in members for i in units[u][0])
+                  for members in assigned]
     if alone:
         groups.append(alone)
     shards = []

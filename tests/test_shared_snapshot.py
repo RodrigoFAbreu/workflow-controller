@@ -375,18 +375,12 @@ class CountersTest(SnapshotCase):
         lifecycle.GateLifecycle(self).reach(name, lambda: None)
         self.assertEqual(self.users(name), {})
 
-    def test_the_label_is_the_same_in_two_processes(self) -> None:
-        import os
-        import subprocess
-        import sys
+    def test_the_label_is_the_same_in_every_process(self) -> None:
+        # A fixed value, so it cannot depend on the process's hash seed or on anything else of the run: the
+        # committed SNAPSHOT_AFFINITY names its groups by these labels. Checked without starting a process,
+        # which the leftover inventory would have to name.
         key = ("row-a", (("release", "2.12.0"), ("report", True)))
-        code = ("import sys; sys.path.insert(0, '.'); from tests import fixtures; "
-                "print(fixtures.snapshot_key_label(('row-a', (('release', '2.12.0'), ('report', True)))))")
-        out = [subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True,
-                              cwd=Path(__file__).resolve().parent.parent,
-                              env={**os.environ, "PYTHONHASHSEED": seed}).stdout.strip() for seed in ("1", "2")]
-        self.assertEqual(out[0], out[1])
-        self.assertEqual(out[0], fixtures.snapshot_key_label(key))
+        self.assertEqual(fixtures.snapshot_key_label(key), "row-a#8e3d18580a")
 
     def test_the_report_gets_one_json_line_and_nothing_is_written_with_the_variable_unset(self) -> None:
         import json

@@ -39,7 +39,7 @@ The 21 modules that reach a row, CI-profile plan, 3 shards, 1204 tests, on the l
 
 `restored` went from 208 to 213. The planner's estimates are the same before and after (1327.398, 1327.398 and 1327.397 s per shard); measured wall time went from 499.2 s to 492.2 s and the balance ratio from 1.05 to 1.10. These are local figures from one run each, not a runner's: the saving in CI depends on runner contention (see [the CI2 page](workflow-controller-ci2.md)) and is not claimed here. The owner's estimate was about one minute of pull request time; the local wall-time drop is about 7 s, within run-to-run noise, so no pull request saving is claimed.
 
-Commands, the same before and after (the table emptied by passing it empty for the first run):
+Commands, the same before and after (for the first run `SNAPSHOT_AFFINITY` in `tools/test_shards.py` was emptied, then restored; the runner has no option to turn the table off):
 
 ```
 python3 tools/run_tests.py plan --profile ci --ci-placement --output plan.json <modules>

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "active_work_item_id": null,
+  "active_work_item_id": "workflow-controller-ci2g",
   "work_items": {
     "workflow-controller-generation-1": {
       "work_item_type": "product",
@@ -86727,6 +86727,317 @@
         },
         "evaluated_at": "2026-11-23T19:57:31Z",
         "workflow_release": "2.29.3"
+      }
+    },
+    "workflow-controller-ci2g": {
+      "work_item_type": "product",
+      "work_item_kind": "product",
+      "work_item_id": "workflow-controller-ci2g",
+      "parent_work_item_id": null,
+      "plan_path": "docs/ai-workflow/CONTROLLER_CI2G_PLAN.md",
+      "registry_path": "docs/ai-workflow/registry/workflow-controller-ci2g-registry.json",
+      "mapping_path": "docs/ai-workflow/requirements/workflow-controller-ci2g-mapping.json",
+      "governing_workflow_version": "2.2",
+      "phase": "IMPLEMENTING",
+      "plan_revision": 2,
+      "implementation_revision": null,
+      "functional_review_round": null,
+      "base_commit": "861c845384f774aaec5f42b60ab4f4de6d84a05e",
+      "reviewed_implementation_head": null,
+      "current_checkpoint_id": null,
+      "last_completed_checkpoint_id": null,
+      "checkpoints": {},
+      "current_bundle_id": "e1283b993a99f0911a7e837108fcbc7931894e7eb97fabaced46f1b30010a80a",
+      "plan_approval": {
+        "status": "CURRENT",
+        "basis": "POLICY_SATISFIED",
+        "reviewed_bundle_id": "e1283b993a99f0911a7e837108fcbc7931894e7eb97fabaced46f1b30010a80a",
+        "approved_review_content_id": "16c0e66b001fccb504bce6ed1b0aa49e982f0a6efaf0dd33f775a7e31edcab9d",
+        "review_content_manifest": [
+          {
+            "path": "docs/ai-workflow/CONTROLLER_CI2G_PLAN.md",
+            "exists": true,
+            "mode": "100644",
+            "blob": "eeffa7fa2e3211ca0c7bb3eb64a34121d9357983"
+          },
+          {
+            "path": "docs/ai-workflow/registry/workflow-controller-ci2g-registry.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "f86941e6362d78b47b9428b80b2bc8e96fc7dc4d"
+          },
+          {
+            "path": "docs/ai-workflow/requirements/workflow-controller-ci2g-mapping.json",
+            "exists": true,
+            "mode": "100644",
+            "blob": "75419f923eaacf9096ce9bc6134e3cff2d079743"
+          }
+        ],
+        "reviewed_content_commit": null,
+        "legacy_evidence": null,
+        "user_confirmation": "policy:bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+        "waived_guarantees": [],
+        "recorded_at": "2026-11-25T17:45:39Z",
+        "policy_evidence": {
+          "policy_digest": "bae758b4f4ce132042f656ca8ff42d47634c2abae3b005efbb3aa2c9513e56a3",
+          "policy_source": "default",
+          "file_digest": null,
+          "adopted_digest": null,
+          "adopted_at": null,
+          "requirements": [
+            {
+              "id": "gate_reachable",
+              "met": true,
+              "detail": "the approval gate is reachable"
+            },
+            {
+              "id": "verdict_approve_bound",
+              "met": true,
+              "detail": "the latest verdict is APPROVE and names the current bundle"
+            },
+            {
+              "id": "distinct_reviewer_models",
+              "met": true,
+              "detail": "families 'anthropic' and 'openai' differ"
+            },
+            {
+              "id": "review_evidence_audited",
+              "met": true,
+              "detail": "both stages carry the audit keys"
+            }
+          ],
+          "inputs": {
+            "review_content_id": "16c0e66b001fccb504bce6ed1b0aa49e982f0a6efaf0dd33f775a7e31edcab9d",
+            "ledger": {
+              "local": {
+                "bundle_id": "e1283b993a99f0911a7e837108fcbc7931894e7eb97fabaced46f1b30010a80a",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "b5c215b1b2eb78614391b7620118892f1c1d51c489ca6166a619dd4eac67c862",
+                "ledger_entry_sha256": "d4ce06fee18a773a0904f63aac866bd1ec73a00f91a7e0852d53ff031a95c292",
+                "run_ref": "session:local .ai-review/workflow-controller-ci2g/feedback/REVIEW_FEEDBACK.md",
+                "reviewer_model": "anthropic/claude-opus-5-5"
+              },
+              "manual": {
+                "bundle_id": "e1283b993a99f0911a7e837108fcbc7931894e7eb97fabaced46f1b30010a80a",
+                "verdict": "APPROVE",
+                "round": 2,
+                "verdict_sha256": "a3321232fb02a5230e319fb81537868f874ec8ee4b898a0de9e29731b8ed94fa",
+                "ledger_entry_sha256": "aa9ab4e5e08b73f48cc6e4f26b023fadd79b3e9ed20541cd60483d748985db70",
+                "run_ref": "codex:20261125T174147Z-9652dfe7",
+                "reviewer_model": "openai/gpt-6.1-sol"
+              }
+            },
+            "gate_status_digest": "208019226c6b1f204dc9cf40421b18bfb7dcdd87f3fee052ed0d7e6aa156165f"
+          },
+          "floor_digest": null,
+          "trust": {
+            "review_verdicts": "orchestrator"
+          },
+          "evaluated_at": "2026-11-25T17:45:39Z",
+          "workflow_release": "2.29.3"
+        }
+      },
+      "technical_approval": null,
+      "technical_review_block_pins": [],
+      "plan_review_stages": {
+        "review_content_id": "16c0e66b001fccb504bce6ed1b0aa49e982f0a6efaf0dd33f775a7e31edcab9d",
+        "LOCAL_MODEL_PLAN_REVIEW": {
+          "bundle_id": "e1283b993a99f0911a7e837108fcbc7931894e7eb97fabaced46f1b30010a80a",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-25T17:40:51Z",
+          "verdict_sha256": "b5c215b1b2eb78614391b7620118892f1c1d51c489ca6166a619dd4eac67c862",
+          "run_ref": "session:local .ai-review/workflow-controller-ci2g/feedback/REVIEW_FEEDBACK.md",
+          "reviewer_model": "anthropic/claude-opus-5-5"
+        },
+        "MANUAL_EXTERNAL_PLAN_REVIEW": {
+          "bundle_id": "e1283b993a99f0911a7e837108fcbc7931894e7eb97fabaced46f1b30010a80a",
+          "verdict": "APPROVE",
+          "round": 2,
+          "completed_at": "2026-11-25T17:43:32Z",
+          "verdict_sha256": "a3321232fb02a5230e319fb81537868f874ec8ee4b898a0de9e29731b8ed94fa",
+          "run_ref": "codex:20261125T174147Z-9652dfe7",
+          "reviewer_model": "openai/gpt-6.1-sol"
+        }
+      },
+      "functional_acceptance_status": null,
+      "blocking_decisions": [],
+      "review_round_counts": {
+        "plan": {
+          "local": 2,
+          "external": 1
+        },
+        "implementation": {
+          "local": 0,
+          "external": 0
+        }
+      },
+      "state_revision": 9,
+      "last_transition": "2026-11-25T17:45:39Z",
+      "feedback_layout": "scoped",
+      "plan_review_binding": {
+        "status": "BOUND",
+        "at": "2026-11-25T17:38:13Z",
+        "consumed": {
+          "review_content_id": "8e1f3eb59b4ac1fb423e8f0a333e21712ab4e566d7b65a3c99bcfdaafce127c7",
+          "plan_revision": 1,
+          "legacy": false
+        },
+        "published": {
+          "review_content_id": "16c0e66b001fccb504bce6ed1b0aa49e982f0a6efaf0dd33f775a7e31edcab9d",
+          "plan_revision": 2
+        },
+        "bound": {
+          "review_content_id": "16c0e66b001fccb504bce6ed1b0aa49e982f0a6efaf0dd33f775a7e31edcab9d",
+          "bundle_id": "e1283b993a99f0911a7e837108fcbc7931894e7eb97fabaced46f1b30010a80a",
+          "plan_revision": 2
+        }
+      },
+      "consumed_plan_review_content_ids": [
+        "8e1f3eb59b4ac1fb423e8f0a333e21712ab4e566d7b65a3c99bcfdaafce127c7"
+      ],
+      "optional_findings": {
+        "F-049aae4de6f4": {
+          "digest": "049aae4de6f4b442cab052611d8d47a56080955e3e999c80a0779bc0b067e512",
+          "text": "**O1. Kit drives are recorded but never share a snapshot.** CP1 records kit drives too (`Lifecycle._reach` neither restores nor keeps a snapshot under the scenario kit, when `stub_dir` is set). A class that reaches a row only under the kit gains nothing from co-location, yet it would use up the group's share bound. D2 or CP3 could leave kit-only users out of a group.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "8e1f3eb59b4ac1fb423e8f0a333e21712ab4e566d7b65a3c99bcfdaafce127c7",
+              "verdict": "REVISE",
+              "at": "2026-11-25T17:36:37Z"
+            }
+          ]
+        },
+        "F-1291215eb4a1": {
+          "digest": "1291215eb4a1d5679a3e4116c300dfad4eefc2b1b287b321ab4afce18c605e1c",
+          "text": "**O2. The prefix rule stops at the largest member.** The bounded prefix is taken by `(-estimate, canonical index)`, so a group whose largest member alone exceeds the bound forms no unit at all. That contradicts \"an oversized group still keeps its biggest members together\". Either say so, or skip members that do not fit and keep adding the ones that still fit.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "8e1f3eb59b4ac1fb423e8f0a333e21712ab4e566d7b65a3c99bcfdaafce127c7",
+              "verdict": "REVISE",
+              "at": "2026-11-25T17:36:37Z"
+            }
+          ]
+        },
+        "F-5e311f4af439": {
+          "digest": "5e311f4af4397020b28b85244475408bb0a3b867af4ff215048b9881792762d3",
+          "text": "**O3. The unit order for the LPT tie-break is unstated.** `assign_atoms` and `assign_lanes` break ties by index. D3 could state which index a unit carries (for example its first member's canonical index), so the plan stays specified and not only deterministic by implementation.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "8e1f3eb59b4ac1fb423e8f0a333e21712ab4e566d7b65a3c99bcfdaafce127c7",
+              "verdict": "REVISE",
+              "at": "2026-11-25T17:36:37Z"
+            }
+          ]
+        },
+        "F-96e3ce174ef9": {
+          "digest": "96e3ce174ef9f7725d269c8accdad6f8930a463dea00aeed20655b403036c94f",
+          "text": "**O4. The table guard does not exclude exclusive atoms.** D4's guard does not list an atom registered in `EXCLUSIVE_ATOMS`, and D3 says exclusive atoms are untouched. Add \"no exclusive atom\" to the guard (the registry is empty today).",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "8e1f3eb59b4ac1fb423e8f0a333e21712ab4e566d7b65a3c99bcfdaafce127c7",
+              "verdict": "REVISE",
+              "at": "2026-11-25T17:36:37Z"
+            }
+          ]
+        },
+        "F-8b0979ffc3db": {
+          "digest": "8b0979ffc3db35f21a38e621f12b6085913499d8f28866041ef9ff01d089a837",
+          "text": "**O5. D6's measurement command is not exact.** A default `python3 tools/run_tests.py` run plans the local profile, while D6 asks for \"a CI-profile plan\". Name the exact commands (for example `plan --profile ci --ci-placement` with `exec-shard` per shard, or the run options that produce a CI-profile plan) so that the before and after figures can be reproduced.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 1,
+              "review_content_id": "8e1f3eb59b4ac1fb423e8f0a333e21712ab4e566d7b65a3c99bcfdaafce127c7",
+              "verdict": "REVISE",
+              "at": "2026-11-25T17:36:37Z"
+            }
+          ]
+        },
+        "F-c6d248f56c9c": {
+          "digest": "c6d248f56c9c15c6efb14df2c12562a309d031222dbfb8c57a4eb2b346653e48",
+          "text": "**O1. The planner does not say where an exclusive group member goes.** D3 forms a unit from \"the atoms of a group that the selection holds\". `build_plan` takes both `exclusive` and the table as keywords, and the table guard (D4) runs in CI, not at plan time. So a caller can pass a registry that names a group member. D3 could say that units are formed only from the non-exclusive (`parallel`) atoms, so that such a member stays on the exclusive shard and `validate_plan`'s exclusive-shard check still holds. CP2's \"the exclusive atoms are untouched\" case then tests a stated rule.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "16c0e66b001fccb504bce6ed1b0aa49e982f0a6efaf0dd33f775a7e31edcab9d",
+              "verdict": "APPROVE",
+              "at": "2026-11-25T17:40:51Z"
+            }
+          ]
+        },
+        "F-e2674309accc": {
+          "digest": "e2674309accc1b09b7a3c359d730c7bd0df356ab5897e2ae5f1d0e006b880236",
+          "text": "**O2. CP3's \"moves the plan\" case depends on the committed timings.** Whether the committed table moves a CI-profile plan depends on `tools/test_timings.json`. That file is refreshed by later pull requests (CI1b, CI2, CI2e), and the bound or the split-back could then dissolve a group. The case would be sturdier if it asserted the property itself: every unit that forms has its atoms on one shard, and at least one unit forms under the committed timings. Alternatively, the page could say that a timings refresh may need the case revisited.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "16c0e66b001fccb504bce6ed1b0aa49e982f0a6efaf0dd33f775a7e31edcab9d",
+              "verdict": "APPROVE",
+              "at": "2026-11-25T17:40:51Z"
+            }
+          ]
+        },
+        "F-015d32daec4a": {
+          "digest": "015d32daec4accae6ba893b47173f8347021bdb9348f71eedbc02f711467de6b",
+          "text": "**O3. The measurement selection is not spelled out.** CP3 and D6 say \"the modules that subclass its case\". Today those are `tests.test_review_independence`, `tests.test_review_mode`, `tests.test_review_same_provider`, `tests.test_usage_record_job` and `tests.test_protocol_job`. Naming them, or naming the grep that finds them, on the item page would make the before and after runs reproducible exactly, as D6 intends.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "16c0e66b001fccb504bce6ed1b0aa49e982f0a6efaf0dd33f775a7e31edcab9d",
+              "verdict": "APPROVE",
+              "at": "2026-11-25T17:40:51Z"
+            }
+          ]
+        },
+        "F-adb61cc715e7": {
+          "digest": "adb61cc715e76bc05d9ff0ce08292250c3a6e4de21e6be1ffe72908c8a55d5f7",
+          "text": "**O4. A subset selection plans with a different bound.** D6 plans only the snapshot-reaching modules. Their total is much smaller than the full CI selection's, so the mean shard load, and with it the `AFFINITY_MAX_SHARE` bound, is smaller than in a real pull request plan. Groups may then be split more, or less, than in CI. CI2c's 14-builds figure came from a full run. The item page could note this, or count `built` over a full CI-profile plan as well.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "LOCAL_MODEL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "16c0e66b001fccb504bce6ed1b0aa49e982f0a6efaf0dd33f775a7e31edcab9d",
+              "verdict": "APPROVE",
+              "at": "2026-11-25T17:40:51Z"
+            }
+          ]
+        },
+        "F-a2a3d89938c2": {
+          "digest": "a2a3d89938c2bdf07c15d7c6d057f19997fa18026a2a3724086b51d0ee680db1",
+          "text": "**O1. Measure placement under the full CI selection too.** D6 selects only snapshot-reaching modules, which changes D3’s mean-load bound and can change which groups form. A full-selection measurement would better establish the expected CI saving; otherwise, document that the subset figures measure a different placement.",
+          "raised": [
+            {
+              "stage": "plan",
+              "role": "MANUAL_EXTERNAL_PLAN_REVIEW",
+              "round": 2,
+              "review_content_id": "16c0e66b001fccb504bce6ed1b0aa49e982f0a6efaf0dd33f775a7e31edcab9d",
+              "verdict": "APPROVE",
+              "at": "2026-11-25T17:43:32Z"
+            }
+          ]
+        }
       }
     }
   }

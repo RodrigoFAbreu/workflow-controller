@@ -39,9 +39,9 @@ The 21 modules that reach a row, CI-profile plan, 3 shards, 1204 tests, on the l
 
 `restored` went from 208 to 213. The planner's estimates are the same before and after (1327.398, 1327.398 and 1327.397 s per shard); measured wall time went from 499.2 s to 492.2 s and the balance ratio from 1.05 to 1.10. These are local figures from one run each, not a runner's: the saving in CI depends on runner contention (see [the CI2 page](workflow-controller-ci2.md)) and is not claimed here. The owner's estimate was about one minute of pull request time; the local wall-time drop is about 7 s, within run-to-run noise, so no pull request saving is claimed.
 
-Commands, the same before and after (for the first run `SNAPSHOT_AFFINITY` in `tools/test_shards.py` was emptied, then restored; the runner has no option to turn the table off):
+The 21 modules are the plan's input (the modules found by the search on the [guide](../guide/development.md#placing-the-classes-that-share-a-snapshot); ten of them have tests in the report's `users`). Commands, the same before and after (for the first run `SNAPSHOT_AFFINITY` in `tools/test_shards.py` was emptied, then restored; the runner has no option to turn the table off):
 
 ```
-python3 tools/run_tests.py plan --profile ci --ci-placement --output plan.json <modules>
+python3 tools/run_tests.py plan --profile ci --ci-placement --output plan.json tests.test_cli tests.test_functional_codex_route tests.test_functional_select tests.test_job tests.test_lifecycle_orchestration tests.test_observation_equivalence tests.test_pr_report tests.test_protocol_decision tests.test_protocol_job tests.test_protocol_lifecycle tests.test_pull_request_lifecycle tests.test_resume tests.test_review_independence tests.test_review_job tests.test_review_mode tests.test_review_round_lifecycle tests.test_review_same_provider tests.test_step_cost tests.test_trunk_orchestration_e2e tests.test_trunk_preflight tests.test_usage_record_job
 WFC_SNAPSHOT_REPORT=report.jsonl python3 tools/run_tests.py --replay plan.json --jobs 3 --results-dir res
 ```

@@ -706,7 +706,11 @@ shard drives the row once and restores it for the rest.
   not at plan time. A stale table costs only the saving.
 - **Measure and refresh.** Plan the modules that reach a row, then run the plan
   with the report on, and read the `users` object of each report line (the test
-  ids per key label); map the ids to atoms and group them as above:
+  ids per key label); map the ids to atoms and group them as above. `<modules>`
+  is every module that calls `reach` or subclasses a class that does (find them
+  with `grep -ln "\.reach(\|test_protocol_lifecycle\|test_review_job" tests/test_*.py`,
+  then add the modules their tests import a lifecycle from); the 21 that
+  CI2g measured are listed on [its page](../items/workflow-controller-ci2g.md#measured):
 
   ```
   python3 tools/run_tests.py plan --profile ci --ci-placement --output plan.json <modules>

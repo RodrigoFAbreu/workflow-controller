@@ -608,7 +608,7 @@ items:
     detail: docs/items/workflow-controller-rr1.md
   - id: workflow-controller-ci2g
     title: "CI: shard affinity for tests that share a snapshot (#317)"
-    status: next
+    status: done
     order: 104
     depends_on: [workflow-controller-ci2c]
     detail: docs/items/workflow-controller-ci2g.md

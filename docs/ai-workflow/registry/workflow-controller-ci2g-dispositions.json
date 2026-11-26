@@ -1,0 +1,54 @@
+{
+  "dispositions": {
+    "F-015d32daec4a": {
+      "disposition": "fixed",
+      "note": "CP3 of plan revision 2 names the measured modules and the item page lists the 21 (anchor 'measured')."
+    },
+    "F-049aae4de6f4": {
+      "disposition": "fixed",
+      "note": "Plan revision 2 D2 says a class that reaches a key only under the scenario kit is in no group."
+    },
+    "F-1291215eb4a1": {
+      "disposition": "fixed",
+      "note": "Plan revision 2 D3 skips a member that does not fit the bound and lets a smaller one still join; CP2 tests it."
+    },
+    "F-5e311f4af439": {
+      "disposition": "fixed",
+      "note": "Plan revision 2 D3 and CP2 state that a unit carries its first member's canonical index for the tie-break."
+    },
+    "F-8b0979ffc3db": {
+      "disposition": "fixed",
+      "note": "Plan revision 2 CP3 and docs/guide/development.md name the exact commands (plan --profile ci --ci-placement, then --replay)."
+    },
+    "F-96e3ce174ef9": {
+      "disposition": "fixed",
+      "note": "Plan revision 2 D2 and D4 and the committed table guard exclude atoms registered in EXCLUSIVE_ATOMS."
+    },
+    "F-9f99f30ca777": {
+      "disposition": "fixed",
+      "note": "Commit bcb76c5: docs/guide/development.md names the 21 measured modules (item page anchor 'measured') and how to find them."
+    },
+    "F-a2a3d89938c2": {
+      "disposition": "dropped",
+      "reason": "The table is advisory and the item page claims no pull-request saving; the effect under the full CI selection is for CI's own run to show. A full-selection measurement is about 8 minutes locally per run and would not change a committed table that a guard keeps honest."
+    },
+    "F-adb61cc715e7": {
+      "disposition": "dropped",
+      "reason": "Same as the full-selection finding: the bound is advisory, the planner estimates are equal before and after, and the item page states the local-versus-runner caveat; no saving is claimed."
+    },
+    "F-c6d248f56c9c": {
+      "disposition": "fixed",
+      "note": "Plan revision 2 D2/D3/D4: an exclusive atom is never a group member (guarded) and the planner leaves exclusive atoms untouched."
+    },
+    "F-c8e67f96d7d8": {
+      "disposition": "dropped",
+      "reason": "A fixed label value cannot vary with a hash seed or a run, so it proves what 'same in two processes' asks, and a second process would break the leftover inventory of tests.process_fixtures (fixed in the self-review)."
+    },
+    "F-e2674309accc": {
+      "disposition": "dropped",
+      "reason": "The case only needs the table to move a CI-profile plan; if a later timings refresh changes that, the test fails in CI on that pull request and the table is refreshed there. The table is advisory and no saving is claimed."
+    }
+  },
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ci2g"
+}

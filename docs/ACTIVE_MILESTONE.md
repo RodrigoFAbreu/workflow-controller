@@ -2,7 +2,7 @@
 
 ## Latest milestone (CI2g)
 
-**In progress: implementing.** Plan `docs/ai-workflow/CONTROLLER_CI2G_PLAN.md` (revision 2), four checkpoints; the planner prefers to put the test classes that reach one lifecycle snapshot key on one shard.
+**Complete: accepted by policy (`MILESTONE_COMPLETE`).** Accepted after the functional review passed (PR #390, checks green at the approved head; flow 1 was rerun on the host after the sandbox's environmental failure). Plan `docs/ai-workflow/CONTROLLER_CI2G_PLAN.md` (revision 2), four checkpoints; the planner prefers to put the test classes that reach one lifecycle snapshot key on one shard.
 
 - **CP1 complete (verified state).** `tests/fixtures.py` keeps, per snapshot key, the ids of the tests that reached it (D1): `snapshot_key_label` (row name plus the first ten hex digits of a SHA-256 of the key's canonical JSON, the same in every process), `note_snapshot_user` and `snapshot_users`; the `WFC_SNAPSHOT_REPORT` line gains a `users` object and no other key changes, and `snapshot_counts()` is unchanged. `Lifecycle._reach` records `self.test.id()` before it restores or drives, and not under the scenario kit. `tests/test_shared_snapshot.py` adds four `CountersTest` cases (a drive and a restore both record; two inputs of one row stay apart; a kit drive records nothing; the label is equal under two hash seeds) and the report case now checks the `users` key. Verified with `tests.test_shared_snapshot`, `tests.test_protocol_lifecycle`, `tests.test_package_structure` and `tests.test_write_containment` (75 planned tests, exact coverage, passing).
 
@@ -831,4 +831,4 @@ Expected: every `rc=0`; `# Test run: PASS`; `preflight-accept` `"ok": true`.
 
 ## Next action
 
-`/milestone-plan` for `workflow-controller-ci2g` (CI: shard affinity for tests that share a snapshot (#317)), the item `python3 scripts/workflow_backlog.py next` returns, ready for `PLANNING`.
+`/milestone-plan` for `workflow-controller-ci2h` (CI: split the after-merge determinism check (#317)), the item `python3 scripts/workflow_backlog.py next` returns, ready for `PLANNING`.

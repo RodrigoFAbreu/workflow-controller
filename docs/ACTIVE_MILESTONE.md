@@ -1,6 +1,20 @@
 # Active Milestone
 
-## Latest milestone (RR1)
+## Latest milestone (CI2g)
+
+**Complete: accepted by policy (`MILESTONE_COMPLETE`).** Accepted after the functional review passed (PR #390, checks green at the approved head; flow 1 was rerun on the host after the sandbox's environmental failure). Plan `docs/ai-workflow/CONTROLLER_CI2G_PLAN.md` (revision 2), four checkpoints; the planner prefers to put the test classes that reach one lifecycle snapshot key on one shard.
+
+- **CP1 complete (verified state).** `tests/fixtures.py` keeps, per snapshot key, the ids of the tests that reached it (D1): `snapshot_key_label` (row name plus the first ten hex digits of a SHA-256 of the key's canonical JSON, the same in every process), `note_snapshot_user` and `snapshot_users`; the `WFC_SNAPSHOT_REPORT` line gains a `users` object and no other key changes, and `snapshot_counts()` is unchanged. `Lifecycle._reach` records `self.test.id()` before it restores or drives, and not under the scenario kit. `tests/test_shared_snapshot.py` adds four `CountersTest` cases (a drive and a restore both record; two inputs of one row stay apart; a kit drive records nothing; the label is equal under two hash seeds) and the report case now checks the `users` key. Verified with `tests.test_shared_snapshot`, `tests.test_protocol_lifecycle`, `tests.test_package_structure` and `tests.test_write_containment` (75 planned tests, exact coverage, passing).
+
+- **CP2 complete (verified state).** `tools/test_shards.py` places a group as one bounded unit (D3-D5) with an empty `SNAPSHOT_AFFINITY` and `AFFINITY_MAX_SHARE = 0.5`: `affinity_units` forms, per group, one unit of the controller members that fit half the mean shard load (largest first, a member that does not fit is skipped and a smaller one still joins), leaves the rest alone, and splits the smallest unit back (ties by group name) while there are fewer units than shards; `build_plan` takes `affinity=` (default the table), keeps the count of the formula over the atoms and expands each unit in canonical order. An empty table gives today's plan digest. `tests/test_test_shards.py` adds `SnapshotAffinityTest` (13 cases). Verified with `tests.test_test_shards`, `tests.test_run_tests`, `tests.test_ci_workflows`, `tests.test_package_structure` and `tests.test_write_containment` (453 tests, exact coverage, passing).
+
+- **CP3 complete (verified state).** `SNAPSHOT_AFFINITY` is committed in `tools/test_shards.py` from a measurement run (`WFC_SNAPSHOT_REPORT`) of the 21 modules that reach a row, CI-profile plan, 3 shards, 1204 tests, local machine, one run each. Four groups (D2: each class in the key most of its test ids reached, ties by lower label): `to_38e#76299b5276` (5 `tests.test_protocol_job` classes), `to_38e#bb58c678ce` (3 classes of `test_functional_codex_route` and `test_functional_select`), `to_acceptance#bae3c65c23` (7 `test_pr_report` classes and `SatisfyGateLifecycleApprovalTest`), `to_manual_plan_review#596d6480e1` (26 classes across the review modules). D6 counts summed over the shard processes, table empty then filled: `built` 34 -> 28 (`to_38e` 12 -> 8, `to_acceptance` 10 -> 9, `to_refused_acceptance` 7 -> 6, `to_manual_plan_review` 4 and `to_plan_gate` 1 unchanged); `restored` 208 -> 213. Planner estimates are the same before and after (1327.398, 1327.398, 1327.397 s per shard); measured wall 499.2 s -> 492.2 s, balance ratio 1.05 -> 1.10. Local figures, not a runner, one run each. Commands: `python3 tools/run_tests.py plan --profile ci --ci-placement --output plan.json <modules>`, then `WFC_SNAPSHOT_REPORT=report.jsonl python3 tools/run_tests.py --replay plan.json --jobs 3 --results-dir res`. `tests/test_test_shards.py` adds `CommittedSnapshotAffinityTest` (stale, duplicate, group-of-one, conformance, exclusive and out-of-matrix guards; the table moves the CI plan, digest stable, count unchanged). Verified with `tests.test_test_shards`, `tests.test_run_tests`, `tests.test_ci_workflows`, `tests.test_shared_snapshot`, `tests.test_package_structure`, `tests.test_write_containment` (passing). `tools/test_timings.json` not edited.
+
+- **CP4 complete (verified state).** `docs/guide/development.md` has "Placing the classes that share a snapshot" (the table, the bound, advisory, how to measure and refresh with `WFC_SNAPSHOT_REPORT`, what a new class does); `docs/items/workflow-controller-ci2g.md` records the status, the plan link, the four groups and sizes, the D6 counts and estimates with the local-versus-runner caveat and the commands; `docs/items/workflow-controller-ci2.md` marks the slice implemented. `docs/backlog.yaml` and `docs/ROADMAP.md` are unchanged. Verified with `tests.test_docs`, `tests.test_plan_document_consistency` (108 tests, exact coverage), `tools/check_docs.py`, `workflow_backlog.py check` and `preflight-accept workflow-controller-ci2g` (`ok: true`).
+
+- **Self-review (2026-11-25).** One defect and one wording fix. (1) CP1's `CountersTest.test_the_label_is_the_same_in_two_processes` started two `python -c` probes, a process start that `tests/process_fixtures.py`'s leftover inventory does not name, so `tests.test_fake_claude_contract.OrphanWatchdogTest.test_the_bounds_cannot_regress_and_the_inventory_is_complete` failed in the full run (CP1's selection did not hold that module). `tests/process_fixtures.py` is outside this item's artifact declaration at both stages, so the test was changed instead: `test_the_label_is_the_same_in_every_process` checks the label against its fixed value (`row-a#8e3d18580a`), which no hash seed or run can change, and starts no process. (2) The item page now says the "before" table was emptied in the source; the runner has no option for it.
+
+## Previous milestone (RR1)
 
 **Complete: accepted by policy (`MILESTONE_COMPLETE`).** Accepted after the functional review passed (all seven flows passed at the approved content; PR #389, checks green at the approved head). Plan `docs/ai-workflow/CONTROLLER_RR1_PLAN.md` (revision 1), two checkpoints; the Controller's release wait re-reads before it accepts `COLLISION_RELEASE_WITHOUT_TAG`.
 
@@ -780,42 +794,41 @@ roadmap. Nothing calls `run_tester`; the change is a `chore:` with no release.
 
 ## Functional review checklist
 
-Item `workflow-controller-rr1` (RR1: retry before the false release-without-tag collision gate), implementation revision 2, plan
-`docs/ai-workflow/CONTROLLER_RR1_PLAN.md` (revision 1), base commit `58b9698`. Two checkpoints, both complete (CP1 the retry in `controller/release_txn.py` and `controller/milestone_branch.py`, CP2 the pages and the item record), plus the review fixes. A `fix:` change, a patch release.
-Every flow runs offline in the tester's sandbox: no network, no real `gh`, `claude`, `codex` or `ssh` (the stand-ins refuse and log), a `PATH` of the sandbox's `bin/` and the system directories, no write inside the read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.` for the test runner; flows write only to the scratch `TMPDIR`. No flow needs a pull request or a forge call (the tests use a fake forge and a scratch origin), none needs a namespace, and none runs the full suite. A real release wait needs a real merged pull request and a real release, so it is out of scope here.
+Item `workflow-controller-ci2g` (CI2g: shard affinity for tests that share a snapshot, [#317](https://github.com/RodrigoFAbreu/workflow-controller/issues/317)), implementation revision 2, plan `docs/ai-workflow/CONTROLLER_CI2G_PLAN.md` (revision 2), base commit `861c845`. Four checkpoints, all complete (CP1 the per-key user record in `tests/fixtures.py`, CP2 the bounded affinity unit in `tools/test_shards.py`, CP3 the measured `SNAPSHOT_AFFINITY` table, CP4 the pages), plus the self-review and review fixes. A `ci:` change; it publishes no release.
+Every flow runs offline in the tester's sandbox: no network, no real `gh`, `claude`, `codex` or `ssh` (the stand-ins refuse and log), a `PATH` of the sandbox's `bin/` and the system directories, no write inside the read-only product clone. Run from the product clone with `python3 -B` and no `PYTHONPATH=.` for the test runner; flows write only to the scratch `TMPDIR`. No flow needs a pull request or a forge call, none needs a namespace (a `namespace: none` line is expected in this sandbox and is not a failure here), and none runs the full suite. The before/after measurement of CP3 (a three-process replay of 21 modules, about 8 minutes) is out of scope; its figures are on the item page and are local, one run each.
 
 Setup: `export TMPDIR=$(mktemp -d); P=$PWD` (the product clone, read-only). No data to seed.
 
-**Flow 1: the retry in `classify` (D1, D2, D3; R1, R2).**
-Run `python3 -B tools/run_tests.py tests.test_release_txn; echo rc=$?`.
-Expected: `# Test run: PASS`, `rc=0`. The five new cases pass: the tag shows on the second read (one sleep, 2.0 s, state `ALREADY_RELEASED`), on the last read (all five delays), never (the collision after exactly the five delays 2, 4, 8, 16, 30), a non-collision never sleeps, and `tag_retry` false never sleeps.
+**Flow 1: the snapshot users are recorded (CP1; D1).**
+Run `python3 -B tools/run_tests.py tests.test_shared_snapshot tests.test_protocol_lifecycle; echo rc=$?`.
+Expected: `# Test run: PASS`, `rc=0`. The `CountersTest` cases pass: a drive and a restore both record the test id, two inputs of one row keep apart, a scenario-kit drive records nothing, the label of a key is the fixed `row-a#8e3d18580a` in every process, and the report line carries a `users` object.
 
-**Flow 2: the bound is the stated one.**
-Run `python3 -B -c "import sys; sys.path.insert(0,'$P'); from controller import release_txn as r; print(r.TAG_VISIBILITY_DELAYS, sum(r.TAG_VISIBILITY_DELAYS))"`.
-Expected: `(2.0, 4.0, 8.0, 16.0, 30.0) 60.0`.
+**Flow 2: the planner places a group as one bounded unit (CP2; D3-D5).**
+Run `python3 -B tools/run_tests.py tests.test_test_shards tests.test_run_tests tests.test_ci_workflows; echo rc=$?`.
+Expected: `# Test run: PASS`, `rc=0`. `SnapshotAffinityTest` (13 cases) passes: a group of members that fit half the mean shard load becomes one unit, a member that does not fit is left alone and a smaller one still joins, the smallest unit splits back while there are fewer units than shards, the shard count is the formula's, and an empty table gives the plan digest it gave before.
 
-**Flow 3: the Controller's release wait retries, CI does not (D3, D4; R1, R2).**
-Run `grep -n "tag_retry" controller/*.py scripts/*.py`.
-Expected: `tag_retry=True` at exactly the three `classify` calls of `_decide_release` in `controller/milestone_branch.py`, and `sleep=_sleep` where its `ReleaseContext` is built; the default `tag_retry: bool = False` in `controller/release_txn.py`; no `tag_retry` in `release-tools` or the release workflow's callers.
+**Flow 3: the committed table is the declared one (CP3; D2, D6).**
+Run `python3 -B -c "import sys; sys.path.insert(0,'$P/tools'); import test_shards as t; print(t.AFFINITY_MAX_SHARE); [print(k, len(v)) for k,v in sorted(t.SNAPSHOT_AFFINITY.items())]"`.
+Expected: `0.5`, then four groups with these sizes: `to_38e#76299b5276` 5, `to_38e#bb58c678ce` 3, `to_acceptance#bae3c65c23` 8, `to_manual_plan_review#596d6480e1` 26.
 
-**Flow 4: the release wait settles on a late tag and fails on a missing one (D5; R1).**
-Run `python3 -B tools/run_tests.py tests.test_pull_request_lifecycle tests.test_release_tools; echo rc=$?`.
-Expected: `# Test run: PASS`, `rc=0` (a `namespace: none` line is expected in this sandbox). `test_a_tag_that_shows_late_settles_instead_of_failing` (one sleep, `closed_out`, `ALREADY_RELEASED`, no `release_failed`), `test_a_tag_that_never_shows_is_a_failed_release_with_the_collision` (the five delays, then `release_failed` with `COLLISION_RELEASE_WITHOUT_TAG`) and the `release_tools` collision tests (CI fails at once) all ran.
+**Flow 4: the table guards.**
+Run `python3 -B tools/run_tests.py tests.test_test_shards; echo rc=$?` and read the names `CommittedSnapshotAffinityTest` reports (or run it with `-v` if the runner offers it).
+Expected: `rc=0`; the stale, duplicate, group-of-one, conformance, exclusive and out-of-matrix guards pass, and the table moves the CI plan while the plan digest stays stable and the shard count is unchanged.
 
 **Flow 5: the repository guards.**
-Run `python3 -B tools/run_tests.py tests.test_package_structure tests.test_write_containment; echo rc=$?`.
-Expected: `# Test run: PASS`, `rc=0`.
+Run `python3 -B tools/run_tests.py tests.test_package_structure tests.test_write_containment tests.test_fake_claude_contract; echo rc=$?`.
+Expected: `# Test run: PASS`, `rc=0`. `tests.test_fake_claude_contract` includes the leftover-inventory test that the self-review fixed (the label test starts no process).
 
-**Flow 6: the pages (R3).**
-Read the `COLLISION_RELEASE_WITHOUT_TAG` case in `docs/guide/milestone-branches.md` (around line 551), the outcome-table row in `docs/guide/ci-and-releases.md` (around line 822), the new entry in `docs/common-problems.md` (around line 293) and `docs/items/workflow-controller-rr1.md`.
-Expected: each states that the Controller's release wait re-reads five times over 60 seconds (`TAG_VISIBILITY_DELAYS`) before it reports the collision, that a collision persisting after the wait is real, and that CI and `release-tools` still fail at once; the item page records the status, the plan link and the bound.
+**Flow 6: the pages (CP4).**
+Read `docs/guide/development.md` "Placing the classes that share a snapshot" (around line 679), `docs/items/workflow-controller-ci2g.md` and the CI2g line of `docs/items/workflow-controller-ci2.md`.
+Expected: the guide states the table, the half-mean bound, that the placement is advisory, how to measure and refresh with `WFC_SNAPSHOT_REPORT`, how to find the 21 modules, and what a new class does; the item page records the status, the plan link, the four groups, the `built` counts (34 to 28), `restored` (208 to 213), the equal planner estimates, and says the local wall-time change is within noise and no pull request saving is claimed; the CI2 page marks the slice implemented.
 
 **Flow 7: the docs checks and the backlog.**
-Run `python3 -B tools/check_docs.py; echo rc=$?`, `python3 -B tools/run_tests.py tests.test_docs tests.test_plan_document_consistency; echo rc=$?`, `python3 -B scripts/workflow_backlog.py check; echo rc=$?` and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-rr1; echo rc=$?`.
+Run `python3 -B tools/check_docs.py; echo rc=$?`, `python3 -B tools/run_tests.py tests.test_docs tests.test_plan_document_consistency; echo rc=$?`, `python3 -B scripts/workflow_backlog.py check; echo rc=$?` and `python3 -B scripts/workflow_backlog.py preflight-accept workflow-controller-ci2g; echo rc=$?`.
 Expected: every `rc=0`; `# Test run: PASS`; `preflight-accept` `"ok": true`.
 
-**Known limitations / out of scope.** The bound is a constant, not a setting; a tag that never appears still ends `release_failed` with the collision, now after about a minute. One `classify` call can overrun a caller's wait budget by up to the 60 seconds. The retry is not exercised against a real forge (the fake forge's injected sleep creates the tag). The single local full run, if any, is not repeated here; CI's run on the pull request is the full verification.
+**Known limitations / out of scope.** The table is advisory: a stale entry is guarded by a test, not by the planner. The saving is small and local: `built` falls from 34 to 28 and measured wall time from 499.2 s to 492.2 s (one run each, within noise), the balance ratio worsens from 1.05 to 1.10, and no pull request time saving is claimed; the effect on a runner is for CI's run to show. `tools/test_timings.json` is not edited. The single local full run, if any, is not repeated here; CI's run on the pull request is the full verification.
 
 ## Next action
 
-`/milestone-plan` for `workflow-controller-ci2g` (CI: shard affinity for tests that share a snapshot (#317)), the item `python3 scripts/workflow_backlog.py next` returns, ready for `PLANNING`.
+`/milestone-plan` for `workflow-controller-ci2h` (CI: split the after-merge determinism check (#317)), the item `python3 scripts/workflow_backlog.py next` returns, ready for `PLANNING`.

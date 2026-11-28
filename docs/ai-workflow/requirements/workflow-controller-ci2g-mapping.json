@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "work_item_id": "workflow-controller-ci2g",
+  "requirements": {
+    "R1": {
+      "description": "A measurement run names the test classes that reach each snapshot key, without changing any decision or the counts",
+      "checkpoint_ids": [
+        "CP1"
+      ]
+    },
+    "R2": {
+      "description": "The planner places a declared group of classes on one shard within a share bound, leaves the shard count (pinned and raised counts included, no shard empty), the exclusive atoms and the plan's shape unchanged, and an empty table gives today's plan",
+      "checkpoint_ids": [
+        "CP2"
+      ]
+    },
+    "R3": {
+      "description": "The committed table is measured, guarded against stale, duplicate and out-of-matrix members, and shown to move the plan without moving its determinism",
+      "checkpoint_ids": [
+        "CP3"
+      ]
+    },
+    "R4": {
+      "description": "The pages and item records state the mechanism, the bound, the measured counts and the local-versus-runner caveat",
+      "checkpoint_ids": [
+        "CP4"
+      ]
+    }
+  }
+}

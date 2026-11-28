@@ -107,7 +107,7 @@
 | 101 | [Fix the flaky functional-sandbox test (#206)](items/workflow-controller-fx2.md) `workflow-controller-fx2` | Done | - | - |
 | 102 | [A \`usage --refresh\` that re-reads both the Codex and the Claude limit](items/workflow-controller-uf1.md) `workflow-controller-uf1` | Done | - | - |
 | 103 | [Retry before the false release-without-tag collision gate](items/workflow-controller-rr1.md) `workflow-controller-rr1` | Done | - | - |
-| 104 | [CI: shard affinity for tests that share a snapshot (#317)](items/workflow-controller-ci2g.md) `workflow-controller-ci2g` | Next | - | workflow-controller-ci2c |
+| 104 | [CI: shard affinity for tests that share a snapshot (#317)](items/workflow-controller-ci2g.md) `workflow-controller-ci2g` | Done | - | workflow-controller-ci2c |
 | 105 | [CI: split the after-merge determinism check (#317)](items/workflow-controller-ci2h.md) `workflow-controller-ci2h` | Next | - | workflow-controller-ci2d |
 | 106 | [Owner-requested backlog and docs changes run through the Controller](items/workflow-controller-bl1.md) `workflow-controller-bl1` | Next | - | - |
 | 107 | [A short form for a disabled release: release {enabled: false}](items/workflow-controller-rf1.md) `workflow-controller-rf1` | Next | - | - |

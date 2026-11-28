@@ -676,6 +676,55 @@ row in one test must drive. The counts are per process, so a row is built once
 on every shard that reaches it; the scenario kit always drives and counts
 `kit_drove`, which is 0 in a full run.
 
+### Placing the classes that share a snapshot
+
+A snapshot is kept per test process, so a row is driven once on every shard
+that runs a test reaching it. The planner (`tools/test_shards.py`) therefore
+prefers to put the classes that reach one snapshot key on one shard, so that
+shard drives the row once and restores it for the rest.
+
+- **The table.** `SNAPSHOT_AFFINITY` maps a group name to a tuple of atom keys.
+  A group is one snapshot *key*, not a row: the name is the key's label, the
+  row name plus the first ten hex digits of a SHA-256 of the key's canonical
+  JSON (`fixtures.snapshot_key_label`, the same in every process), so two
+  inputs of one row are two groups. An atom is in at most one group: a class
+  that reaches several keys is declared under the key most of its test ids
+  reached, ties by the lower label.
+- **The bound.** A group is placed as one unit of the members that fit
+  `AFFINITY_MAX_SHARE` (0.5) of the mean shard load, walked largest first; a
+  member that does not fit is skipped, a smaller one still joins, and the rest
+  are placed alone. So one group never takes more than half an even shard. The
+  shard count is still the formula's over the atoms, and while there are fewer
+  units than shards the smallest unit is split back, so no shard is empty.
+  Only controller atoms join a unit. An empty table gives today's plan.
+- **Advisory.** The table decides where a class runs, never whether it runs. A
+  member that no longer names an atom is ignored by the planner; a rename or a
+  deletion never refuses a plan or a run. `tests.test_test_shards`
+  (`CommittedSnapshotAffinityTest`) fails on a stale or duplicated member, an
+  atom in two groups, a group of one, a conformance or exclusive atom, and a
+  module placed out of the shard matrix, so the table is kept honest in CI and
+  not at plan time. A stale table costs only the saving.
+- **Measure and refresh.** Plan the modules that reach a row, then run the plan
+  with the report on, and read the `users` object of each report line (the test
+  ids per key label); map the ids to atoms and group them as above. `<modules>`
+  is every module that calls `reach` or subclasses a class that does (find them
+  with `grep -ln "\.reach(\|test_protocol_lifecycle\|test_review_job" tests/test_*.py`,
+  then add the modules their tests import a lifecycle from); the 21 that
+  CI2g measured are listed on [its page](../items/workflow-controller-ci2g.md#measured):
+
+  ```
+  python3 tools/run_tests.py plan --profile ci --ci-placement --output plan.json <modules>
+  WFC_SNAPSHOT_REPORT=report.jsonl python3 tools/run_tests.py --replay plan.json --jobs 3 --results-dir res
+  ```
+
+  Sum `built` per row over the lines for the saving; run it once with the
+  table emptied and once filled to compare. The figures are local, not a
+  runner's.
+- **A new snapshot-reaching class.** Nothing is required: it runs, and without
+  a group it only costs a build per shard that runs it. To get the saving,
+  measure as above and add it to the group of the key it reached most; the
+  guard test names a wrong entry.
+
 ## Process starts per lifecycle step
 
 A lifecycle step in the tests starts many processes: each protocol query is

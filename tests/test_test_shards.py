@@ -1437,6 +1437,133 @@ class ExclusiveAtomsTest(unittest.TestCase):
             shards.validate_plan(plan, selection, exclusive={})
 
 
+class SnapshotAffinityTest(unittest.TestCase):
+    """CI2g CP2: a group of atoms that reach one snapshot key is placed as
+    one bounded unit; the count, the exclusive shard and an empty table are
+    unchanged."""
+
+    ATOMS = {name: _atom(f"tests.t_{name}.{name.upper()}Test", 1) for name in "abcdefgh"}
+
+    def atom(self, name: str):
+        return self.ATOMS[name]
+
+    def key(self, name: str) -> str:
+        return self.atom(name).key
+
+    def table(self, **groups) -> dict:
+        return {g: tuple(self.key(n) for n in names) for g, names in groups.items()}
+
+    def plan(self, seconds: dict, affinity, exclusive=None, **overrides) -> dict:
+        seconds = {self.atom(n): s for n, s in seconds.items()}
+        plan = shards.build_plan(_selection(*seconds), _params(**overrides), _timed(seconds),
+                                 exclusive={} if exclusive is None else exclusive,
+                                 affinity=affinity)
+        shards.validate_plan(plan, _selection(*seconds), exclusive=exclusive or {})
+        return plan
+
+    def shard_of(self, plan: dict, name: str) -> int:
+        return next(s["index"] for s in plan["shards"] if self.key(name) in s["atoms"])
+
+    def units(self, ests: dict, count: int, table: dict):
+        names = list(ests)
+        atoms = [self.atom(n) for n in names]
+        found = shards.affinity_units(atoms, [ests[n] for n in names], count, table)
+        return [(tuple(names[i] for i in members), group) for members, group in found]
+
+    SIX = {"a": 10, "b": 10, "c": 10, "d": 10, "e": 2, "f": 2}
+
+    def test_a_group_lands_on_one_shard(self) -> None:
+        # total 44 s, target 10 s: 5 shards (6 atoms), bound 4.4 s
+        table = self.table(g=("e", "f"))
+        plan = self.plan(self.SIX, table)
+        self.assertEqual(self.shard_of(plan, "e"), self.shard_of(plan, "f"))
+        self.assertEqual(plan["shard_count"], self.plan(self.SIX, {})["shard_count"])
+
+    def test_the_bound_keeps_the_largest_and_places_the_rest_alone(self) -> None:
+        ests = {"a": 4000, "b": 3000, "c": 2000, "d": 1000}
+        # count 1: mean 10 s, bound 5 s: a joins (4), b (7) and c (6) do not, d (5) does
+        self.assertEqual(self.units(ests, 1, {"g": tuple(map(self.key, "abcd"))}),
+                         [(("a", "d"), "g"), (("b",), ""), (("c",), "")])
+
+    def test_a_member_too_large_is_skipped_and_a_smaller_one_still_joins(self) -> None:
+        ests = {"a": 9000, "b": 2000, "c": 1000, "d": 1000}
+        found = self.units(ests, 1, {"g": tuple(map(self.key, "abcd"))})
+        # bound 6.5 s: a (9) does not fit, the three smaller ones do
+        self.assertEqual(found, [(("a",), ""), (("b", "c", "d"), "g")])
+
+    def test_a_group_of_one_and_a_stale_member_form_no_unit(self) -> None:
+        ests = {"a": 1000, "b": 1000, "c": 1000}
+        table = {"one": (self.key("a"), "tests.gone.GoneTest"), "stale": ("tests.gone.X",)}
+        self.assertEqual(self.units(ests, 1, table),
+                         [(("a",), ""), (("b",), ""), (("c",), "")])
+
+    def test_a_selection_holding_part_of_a_group_places_only_that_part(self) -> None:
+        table = self.table(g=("e", "f", "g"))
+        plan = self.plan(self.SIX, table)  # g is not selected: e and f still join
+        self.assertEqual(self.shard_of(plan, "e"), self.shard_of(plan, "f"))
+        self.assertNotIn(self.key("g"), [k for s in plan["shards"] for k in s["atoms"]])
+
+    def test_a_conformance_member_never_joins(self) -> None:
+        suite = _atom("conformance:x_test.py", 1, family="conformance")
+        atoms = [self.atom("a"), suite, self.atom("b")]
+        found = shards.affinity_units(atoms, [500, 1000, 500], 1,
+                                      {"g": (suite.key, self.key("a"), self.key("b"))})
+        self.assertEqual(found, [((0, 2), "g"), ((1,), "")])
+
+    def test_the_exclusive_atoms_are_untouched(self) -> None:
+        table = self.table(g=("e", "f"))
+        plan = self.plan(self.SIX, table, exclusive={self.key("f"): "why"})
+        self.assertTrue(plan["shards"][-1].get("exclusive"))
+        self.assertEqual(plan["shards"][-1]["atoms"], [self.key("f")])
+        self.assertEqual(plan["shard_count"],
+                         self.plan(self.SIX, {}, exclusive={self.key("f"): "why"})["shard_count"])
+
+    def test_an_empty_table_gives_todays_plan(self) -> None:
+        self.assertEqual(self.plan(self.SIX, {})["plan_digest"],
+                         self.plan(self.SIX, {"g": ("tests.gone.X",)})["plan_digest"])
+        seconds = {self.atom(n): s for n, s in self.SIX.items()}
+        default = shards.build_plan(_selection(*seconds), _params(), _timed(seconds))
+        self.assertEqual(default["plan_digest"], self.plan(self.SIX, {})["plan_digest"])
+
+    def test_the_plan_is_deterministic(self) -> None:
+        table = self.table(g=("e", "f"))
+        self.assertEqual(self.plan(self.SIX, table), self.plan(self.SIX, table))
+
+    def test_both_profiles_apply_it(self) -> None:
+        table = self.table(g=("e", "f"))
+        for profile in ("ci", "local"):
+            with self.subTest(profile=profile):
+                plan = self.plan(self.SIX, table, profile=profile)
+                self.assertEqual(self.shard_of(plan, "e"), self.shard_of(plan, "f"))
+                self.assertEqual(plan["shard_count"],
+                                 self.plan(self.SIX, {}, profile=profile)["shard_count"])
+
+    def test_a_unit_is_ordered_by_its_first_member(self) -> None:
+        ests = {"a": 1000, "b": 1000, "c": 1000, "d": 1000}
+        found = self.units(ests, 1, {"g": (self.key("c"), self.key("b"))})
+        self.assertEqual(found, [(("a",), ""), (("b", "c"), "g"), (("d",), "")])
+
+    def test_a_pinned_count_equal_to_the_atoms_leaves_no_shard_empty(self) -> None:
+        seconds = {"a": 10, "b": 1, "c": 1}
+        table = self.table(g=("b", "c"))
+        for overrides in ({"shards": 3}, {"min_shards": 3}):
+            with self.subTest(overrides=overrides):
+                plan = self.plan(seconds, table, **overrides)
+                self.assertEqual(plan["shard_count"], 3)
+                self.assertTrue(all(s["atoms"] for s in plan["shards"]))
+
+    def test_the_split_back_goes_smallest_first_then_by_name(self) -> None:
+        # total 24.4 s, count 4: bound 3.05 s; both groups join (3 units), one split back
+        ests = {"a": 1200, "b": 1200, "c": 1000, "d": 1000, "e": 20000}
+        table = self.table(a_big=("a", "b"), z_small=("c", "d"))
+        self.assertEqual(self.units(ests, 4, table),
+                         [(("a", "b"), "a_big"), (("c",), ""), (("d",), ""), (("e",), "")])
+        self.assertEqual([g for _, g in self.units(ests, 5, table)], [""] * 5)
+        ests["a"] = ests["b"] = 1000
+        tie = self.units(ests, 4, self.table(m=("a", "b"), k=("c", "d")))
+        self.assertEqual(tie, [(("a", "b"), "m"), (("c",), ""), (("d",), ""), (("e",), "")])
+
+
 class EquivalencePropertyTest(unittest.TestCase):
     """I1 over 500 seeded random cases of the real inventory: random name
     subsets (modules, classes, methods, conformance), with and without the CI
@@ -2519,6 +2646,62 @@ class LeakScanTest(unittest.TestCase):
         shards.kill_processes(found)
         self.assertEqual(process.wait(timeout=10), -9)
         self.assertEqual(shards.scan_marked_processes(marker), [])
+
+
+class CommittedSnapshotAffinityTest(unittest.TestCase):
+    """CI2g CP3: the committed ``SNAPSHOT_AFFINITY`` table is kept honest here
+    (D4), not at plan time, and it moves a CI-profile plan without moving its
+    determinism."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.inventory = shards.build_inventory(fixtures.REPO_ROOT)
+        cls.atoms = {atom.key: atom for atom in cls.inventory.atoms}
+
+    def test_the_table_is_not_empty(self) -> None:
+        self.assertTrue(shards.SNAPSHOT_AFFINITY)
+
+    def test_every_member_names_an_atom(self) -> None:
+        stale = [m for g, members in shards.SNAPSHOT_AFFINITY.items() for m in members
+                 if m not in self.atoms]
+        self.assertEqual(stale, [])
+
+    def test_no_member_is_listed_twice_or_in_two_groups(self) -> None:
+        members = [m for group in shards.SNAPSHOT_AFFINITY.values() for m in group]
+        self.assertEqual(sorted(set(m for m in members if members.count(m) > 1)), [])
+
+    def test_every_group_has_at_least_two_members(self) -> None:
+        self.assertEqual([g for g, members in shards.SNAPSHOT_AFFINITY.items() if len(members) < 2], [])
+
+    def test_no_member_is_a_conformance_exclusive_or_out_of_matrix_atom(self) -> None:
+        problems = []
+        for group, members in shards.SNAPSHOT_AFFINITY.items():
+            for key in members:
+                atom = self.atoms.get(key)
+                if atom is None:
+                    continue
+                if atom.family != shards.CONTROLLER:
+                    problems.append((group, key, "not a controller atom"))
+                if key in shards.EXCLUSIVE_ATOMS:
+                    problems.append((group, key, "exclusive"))
+                if atom.module in shards.CI_PLACEMENT:
+                    problems.append((group, key, "placed out of the shard matrix"))
+        self.assertEqual(problems, [])
+
+    def test_the_table_moves_a_ci_plan_and_the_digest_is_stable(self) -> None:
+        timings = shards.timings_for("ci", fixtures.REPO_ROOT, warn=lambda message: None)
+        selection = self.inventory.select(ci_placement=True)
+        parameters = shards.profile_parameters("ci")
+
+        def plan(affinity):
+            return shards.build_plan(selection, parameters, timings, fixtures.REPO_ROOT,
+                                     affinity=affinity)
+
+        with_table = plan(shards.SNAPSHOT_AFFINITY)
+        shards.validate_plan(with_table, selection)
+        self.assertEqual(with_table["plan_digest"], plan(shards.SNAPSHOT_AFFINITY)["plan_digest"])
+        self.assertEqual(with_table["shard_count"], plan({})["shard_count"])
+        self.assertNotEqual(with_table["plan_digest"], plan({})["plan_digest"])
 
 
 class NamespaceLauncherTest(unittest.TestCase):
